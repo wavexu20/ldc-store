@@ -62,12 +62,7 @@ Discord Developer Portal 的 OAuth2 Redirect URI：
 https://game3dtech.com/api/auth/callback/discord
 ```
 
-Steam 使用 OpenID 2.0，Web API Key 配置为 `STEAM_WEB_API_KEY`。生产 Realm 和 Return URL：
-
-```text
-https://game3dtech.com/
-https://game3dtech.com/api/auth/steam/callback
-```
+Steam 登录使用 OpenID 2.0 Provider Discovery（`https://steamcommunity.com/openid`）。Web API Key 仅在 OpenID 验签通过后读取玩家公开资料，配置为 `STEAM_WEB_API_KEY`。
 
 ```bash
 pnpm wrangler secret put PAYMENT_GATEWAY_API_KEY

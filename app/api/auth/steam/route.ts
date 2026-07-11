@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
-import { createSteamAuthorizationUrl, sanitizeSteamCallbackUrl, STEAM_STATE_COOKIE } from "@/lib/auth/steam";
+import {
+  createSteamAuthorizationUrl,
+  sanitizeSteamCallbackUrl,
+  STEAM_CALLBACK_COOKIE,
+  STEAM_STATE_COOKIE,
+} from "@/lib/auth/steam";
 
 export async function GET(request: Request) {
   if (!process.env.STEAM_WEB_API_KEY) {
@@ -8,14 +13,19 @@ export async function GET(request: Request) {
   const requestUrl = new URL(request.url);
   const state = crypto.randomUUID();
   const callbackUrl = sanitizeSteamCallbackUrl(requestUrl.searchParams.get("callbackUrl"));
-  const response = NextResponse.redirect(createSteamAuthorizationUrl(requestUrl.origin, state, callbackUrl));
-  response.cookies.set(STEAM_STATE_COOKIE, state, {
-    httpOnly: true,
-    secure: true,
-    sameSite: "lax",
-    // Cookies with the __Host- prefix must use Path=/ or browsers reject them.
-    path: "/",
-    maxAge: 10 * 60,
-  });
+  const authorizationUrl = await createSteamAuthorizationUrl(requestUrl.origin, state);
+  const response = NextResponse.redirect(authorizationUrl);
+  for (const [name, value] of [
+    [STEAM_STATE_COOKIE, state],
+    [STEAM_CALLBACK_COOKIE, callbackUrl],
+  ] as const) {
+    response.cookies.set(name, value, {
+      httpOnly: true,
+      secure: true,
+      sameSite: "lax",
+      path: "/",
+      maxAge: 10 * 60,
+    });
+  }
   return response;
 }

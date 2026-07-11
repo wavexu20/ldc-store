@@ -1,18 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
-  createSteamAuthorizationUrl,
   createSteamTicket,
+  getSteamReturnTo,
   sanitizeSteamCallbackUrl,
   verifySteamTicket,
 } from "@/lib/auth/steam";
 
 describe("Steam authentication", () => {
-  it("builds a Steam OpenID authorization URL for the production origin", () => {
-    const url = createSteamAuthorizationUrl("https://game3dtech.com", "state-1", "/account/wallet");
-    expect(url.origin + url.pathname).toBe("https://steamcommunity.com/openid/login");
-    expect(url.searchParams.get("openid.realm")).toBe("https://game3dtech.com/");
-    expect(url.searchParams.get("openid.return_to")).toBe(
-      "https://game3dtech.com/api/auth/steam/callback?state=state-1&callbackUrl=%2Faccount%2Fwallet",
+  it("uses a query-free one-time callback path", () => {
+    expect(getSteamReturnTo("https://game3dtech.com", "state-1")).toBe(
+      "https://game3dtech.com/api/auth/steam/callback/state-1",
     );
   });
 
@@ -26,7 +23,7 @@ describe("Steam authentication", () => {
     const ticket = await createSteamTicket({
       steamId: "76561198000000000",
       name: "Player",
-      image: "https://example.com/avatar.jpg",
+      image: null,
     }, "test-secret");
     await expect(verifySteamTicket(ticket, "test-secret")).resolves.toMatchObject({
       steamId: "76561198000000000",
