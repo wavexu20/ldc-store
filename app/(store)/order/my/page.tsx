@@ -302,7 +302,7 @@ export default function MyOrdersPage() {
                         <div className="flex items-center justify-between mb-2">
                           <span className="text-sm font-medium flex items-center gap-1.5">
                             <Package className="h-4 w-4" />
-                            卡密 ({order.cards.length})
+                            {t("deliveryInfo")} ({order.cards.length})
                           </span>
                           <Button
                             variant="ghost"
@@ -314,7 +314,7 @@ export default function MyOrdersPage() {
                             }}
                           >
                             <Copy className="h-3 w-3 mr-1" />
-                            复制全部
+                            {t("copyAll")}
                           </Button>
                         </div>
                         <div className="space-y-1">
@@ -353,7 +353,7 @@ export default function MyOrdersPage() {
                     {/* Pending Notice */}
                     {order.status === "pending" && (
                       <div className="mt-3 p-2 rounded bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 text-xs">
-                        订单待支付，请尽快完成支付
+                        {t("orderPendingHint")}
                       </div>
                     )}
 
@@ -370,7 +370,7 @@ export default function MyOrdersPage() {
                           }}
                         >
                           <RotateCcw className="h-3 w-3 mr-1" />
-                          申请退款
+                          {t("requestRefund")}
                         </Button>
                       </div>
                     )}
@@ -378,14 +378,14 @@ export default function MyOrdersPage() {
                     {/* Refund Pending Notice */}
                     {order.status === "refund_pending" && (
                       <div className="mt-3 p-2 rounded bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 text-xs">
-                        退款申请已提交，正在等待审核
+                        {t("refundSubmitted")}
                       </div>
                     )}
 
                     {/* Refund Rejected Notice */}
                     {order.status === "refund_rejected" && (
                       <div className="mt-3 p-2 rounded bg-red-50 dark:bg-red-950/50 text-red-700 dark:text-red-300 text-xs">
-                        退款申请已被拒绝
+                        {t("refundRejected")}
                       </div>
                     )}
                   </div>
@@ -408,17 +408,17 @@ export default function MyOrdersPage() {
       <Dialog open={refundDialogOpen} onOpenChange={setRefundDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>申请退款</DialogTitle>
+            <DialogTitle>{t("requestRefund")}</DialogTitle>
             <DialogDescription>
-              请填写退款原因，提交后将由管理员审核
+              {t("refundDialogHint")}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="refund-reason">退款原因</Label>
+              <Label htmlFor="refund-reason">{t("refundReason")}</Label>
               <Textarea
                 id="refund-reason"
-                placeholder="请详细描述退款原因（至少5个字符）"
+                placeholder={t("refundReasonPlaceholder")}
                 value={refundReason}
                 onChange={(e) => setRefundReason(e.target.value)}
                 rows={4}
@@ -431,14 +431,14 @@ export default function MyOrdersPage() {
               onClick={() => setRefundDialogOpen(false)}
               disabled={isPending}
             >
-              取消
+              {t("cancel")}
             </Button>
             <Button
               onClick={handleRefundSubmit}
               disabled={isPending || refundReason.trim().length < 5}
             >
               {isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              提交申请
+              {t("submitRequest")}
             </Button>
           </DialogFooter>
         </DialogContent>

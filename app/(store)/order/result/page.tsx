@@ -309,9 +309,9 @@ export default function OrderResultPage({ searchParams }: OrderResultPageProps) 
   const statusMeta = (() => {
     if (isPaid) {
       return {
-        label: order.status === "completed" ? "已完成" : "已支付",
-        title: "支付成功",
-        description: hasCards ? "卡密已发放，请及时保存" : "订单已支付，卡密发放中…",
+        label: t(order.status === "completed" ? "completed" : "paid"),
+        title: t("paymentSuccess"),
+        description: t(hasCards ? "deliveryReady" : "deliveryPreparing"),
         icon: <CheckCircle2 className="h-5 w-5" />,
         iconClassName:
           "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
@@ -323,11 +323,11 @@ export default function OrderResultPage({ searchParams }: OrderResultPageProps) 
     switch (order.status) {
       case "pending":
         return {
-          label: "待支付",
-          title: isPolling ? "正在确认支付状态" : "等待支付完成",
+          label: t("pending"),
+          title: t(isPolling ? "confirmingPayment" : "awaitingPayment"),
           description: isPolling
-            ? "通常会在 30 秒内自动更新，请稍候…"
-            : "如果你已完成支付，可点击刷新或稍后查看“我的订单”。",
+            ? t("autoUpdateHint")
+            : t("manualRefreshHint"),
           icon: isPolling ? (
             <Loader2 className="h-5 w-5 animate-spin" />
           ) : (
@@ -340,18 +340,18 @@ export default function OrderResultPage({ searchParams }: OrderResultPageProps) 
         };
       case "expired":
         return {
-          label: "已过期",
-          title: "订单已过期",
-          description: "该订单未在有效期内完成支付。",
+          label: t("expired"),
+          title: t("orderExpired"),
+          description: t("orderExpiredHint"),
           icon: <XCircle className="h-5 w-5" />,
           iconClassName: "bg-muted text-muted-foreground",
           badgeClassName: "bg-muted text-muted-foreground hover:bg-muted",
         };
       case "refund_pending":
         return {
-          label: "退款审核中",
-          title: "退款处理中",
-          description: "你的退款申请已提交，正在等待审核。",
+          label: t("refundPending"),
+          title: t("refundProcessing"),
+          description: t("refundSubmitted"),
           icon: <Clock className="h-5 w-5" />,
           iconClassName:
             "bg-amber-500/10 text-amber-700 dark:text-amber-300",
@@ -360,18 +360,18 @@ export default function OrderResultPage({ searchParams }: OrderResultPageProps) 
         };
       case "refund_rejected":
         return {
-          label: "退款已拒绝",
-          title: "退款已拒绝",
-          description: "如有疑问，请联系管理员或查看订单备注。",
+          label: t("refundRejected"),
+          title: t("refundRejected"),
+          description: t("refundRejectedHint"),
           icon: <XCircle className="h-5 w-5" />,
           iconClassName: "bg-muted text-muted-foreground",
           badgeClassName: "bg-muted text-muted-foreground hover:bg-muted",
         };
       case "refunded":
         return {
-          label: "已退款",
-          title: "订单已退款",
-          description: "该订单已完成退款。",
+          label: t("refunded"),
+          title: t("orderRefunded"),
+          description: t("orderRefundedHint"),
           icon: <XCircle className="h-5 w-5" />,
           iconClassName: "bg-muted text-muted-foreground",
           badgeClassName: "bg-muted text-muted-foreground hover:bg-muted",
@@ -379,8 +379,8 @@ export default function OrderResultPage({ searchParams }: OrderResultPageProps) 
       default:
         return {
           label: order.status,
-          title: "订单状态更新中",
-          description: "请稍后刷新或前往“我的订单”查看最新状态。",
+          title: t("statusUpdating"),
+          description: t("statusUpdatingHint"),
           icon: <Clock className="h-5 w-5" />,
           iconClassName: "bg-muted text-muted-foreground",
           badgeClassName: "bg-muted text-muted-foreground hover:bg-muted",
@@ -463,8 +463,8 @@ export default function OrderResultPage({ searchParams }: OrderResultPageProps) 
               className="h-9 w-9 shrink-0"
               onClick={refreshOrder}
               disabled={isRefreshing}
-              aria-label="刷新订单状态"
-              title="刷新订单状态"
+              aria-label={t("refreshStatus")}
+              title={t("refreshStatus")}
             >
               <RefreshCw className={cn("h-4 w-4", isRefreshing ? "animate-spin" : "")} />
             </Button>
@@ -490,8 +490,8 @@ export default function OrderResultPage({ searchParams }: OrderResultPageProps) 
                     size="icon"
                     className="h-8 w-8 shrink-0"
                     onClick={copyOrderNo}
-                    aria-label="复制订单号"
-                    title="复制订单号"
+                    aria-label={`${t("copy")} ${t("orderNo")}`}
+                    title={`${t("copy")} ${t("orderNo")}`}
                   >
                     {isOrderNoCopied ? (
                       <CheckCircle2 className="h-4 w-4 text-emerald-600" />
@@ -542,7 +542,7 @@ export default function OrderResultPage({ searchParams }: OrderResultPageProps) 
                 </div>
 
                 <div className="mt-2 text-xs text-muted-foreground">
-                  卡密属于敏感信息，复制/截图后请注意粘贴范围与聊天记录留存。
+                  {t("sensitiveDeliveryHint")}
                 </div>
 
                 <div className="mt-3 space-y-2">
@@ -559,8 +559,8 @@ export default function OrderResultPage({ searchParams }: OrderResultPageProps) 
                         size="icon"
                         className="h-8 w-8 shrink-0"
                         onClick={() => copyToClipboard(card, index)}
-                        aria-label="复制卡密"
-                        title="复制卡密"
+                        aria-label={`${t("copy")} ${t("deliveryInfo")}`}
+                        title={`${t("copy")} ${t("deliveryInfo")}`}
                       >
                         {copiedIndex === index ? (
                           <CheckCircle2 className="h-4 w-4 text-emerald-600" />
@@ -574,7 +574,7 @@ export default function OrderResultPage({ searchParams }: OrderResultPageProps) 
               </div>
             ) : (
               <div className="rounded-2xl border bg-muted/30 p-4 text-sm text-muted-foreground">
-                卡密发放中，请稍后点击右上角刷新，或前往“我的订单”查看。
+                {t("preparingDeliveryHint")}
               </div>
             )
           ) : null}
