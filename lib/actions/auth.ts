@@ -92,6 +92,7 @@ export async function registerWithEmail(input: {
     const [created] = await db.insert(users).values({
       id,
       name: parsed.data.name,
+      nameSource: "custom",
       email: parsed.data.email,
       passwordHash,
       memberNo: createMemberNo(id),

@@ -1,11 +1,13 @@
 "use server";
 
 import { and, eq, isNull, ne } from "drizzle-orm";
+import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { db, emailVerificationTokens, getD1Binding, oauthAccounts, users } from "@/lib/db";
 import { isPlaceholderEmail, normalizeEmail } from "@/lib/email-address";
 import { findValidVerificationToken, hashVerificationCode, issueEmailVerification } from "@/lib/email/verification";
+import { avatarKeyFromUrl, avatarUrlForKey, getAvatarBucket } from "@/lib/avatar-storage";
 
 const emailSchema = z.string().trim().email("请输入有效的邮箱地址").transform(normalizeEmail)
   .refine((email) => !isPlaceholderEmail(email), "请输入可接收邮件的真实邮箱");
@@ -14,6 +16,64 @@ async function currentUserId() {
   const session = await auth();
   const id = session?.user?.id;
   return id && id !== "admin" ? id : null;
+}
+
+const profileNameSchema = z.string().trim().min(2, "昵称至少 2 个字符").max(50, "昵称不能超过 50 个字符");
+const avatarMimeTypes = new Map([
+  ["image/jpeg", "jpg"],
+  ["image/png", "png"],
+  ["image/webp", "webp"],
+]);
+const maxAvatarBytes = 2 * 1024 * 1024;
+
+function hasExpectedImageSignature(bytes: Uint8Array, type: string) {
+  if (type === "image/jpeg") return bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+  if (type === "image/png") return bytes.length >= 8 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47 && bytes[4] === 0x0d && bytes[5] === 0x0a && bytes[6] === 0x1a && bytes[7] === 0x0a;
+  return bytes.length >= 12 && bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 && bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50;
+}
+
+export async function updateProfile(formData: FormData) {
+  const userId = await currentUserId();
+  if (!userId) return { success: false, message: "请先登录" };
+  const name = profileNameSchema.safeParse(formData.get("name"));
+  if (!name.success) return { success: false, message: name.error.issues[0].message };
+  const user = await db.query.users.findFirst({ where: eq(users.id, userId) });
+  if (!user) return { success: false, message: "账号不存在" };
+
+  const candidate = formData.get("avatar");
+  const avatar = candidate instanceof File && candidate.size > 0 ? candidate : null;
+  let image = user.image;
+  let avatarSource = user.avatarSource;
+  let uploadedKey: string | null = null;
+
+  if (avatar) {
+    const extension = avatarMimeTypes.get(avatar.type);
+    if (!extension) return { success: false, message: "头像仅支持 JPG、PNG 或 WebP 图片" };
+    if (avatar.size > maxAvatarBytes) return { success: false, message: "头像文件不能超过 2 MB" };
+    const content = new Uint8Array(await avatar.arrayBuffer());
+    if (!hasExpectedImageSignature(content, avatar.type)) return { success: false, message: "头像文件格式无效" };
+    uploadedKey = `avatars/${userId}/${crypto.randomUUID()}.${extension}`;
+    try {
+      await getAvatarBucket().put(uploadedKey, content, { httpMetadata: { contentType: avatar.type } });
+    } catch {
+      return { success: false, message: "头像上传失败，请稍后重试" };
+    }
+    image = avatarUrlForKey(uploadedKey);
+    avatarSource = "custom";
+  }
+
+  try {
+    await db.update(users).set({ name: name.data, nameSource: "custom", image, avatarSource, updatedAt: new Date() }).where(eq(users.id, userId));
+  } catch {
+    if (uploadedKey) await getAvatarBucket().delete(uploadedKey);
+    return { success: false, message: "资料保存失败，请稍后重试" };
+  }
+
+  const previousAvatarKey = uploadedKey && user.avatarSource === "custom" ? avatarKeyFromUrl(user.image) : null;
+  if (previousAvatarKey) await getAvatarBucket().delete(previousAvatarKey).catch(() => undefined);
+  revalidatePath("/");
+  revalidatePath("/account/profile");
+  return { success: true, message: "个人资料已保存", name: name.data, image };
 }
 
 export async function getAccountEmailStatus() {

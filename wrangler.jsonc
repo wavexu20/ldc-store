@@ -27,6 +27,12 @@
       "migrations_dir": "lib/db/d1-migrations"
     }
   ],
+  "r2_buckets": [
+    {
+      "binding": "AVATARS",
+      "bucket_name": "ldc-store-avatars"
+    }
+  ],
   "ai": {
     "binding": "AI"
   },

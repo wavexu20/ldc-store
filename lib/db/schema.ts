@@ -80,6 +80,8 @@ export const users = sqliteTable("users", {
   email: text("email").notNull().unique(),
   name: text("name"),
   image: text("image"),
+  nameSource: text("name_source", { enum: ["oauth", "custom"] }).default("oauth").notNull(),
+  avatarSource: text("avatar_source", { enum: ["oauth", "custom"] }).default("oauth").notNull(),
   passwordHash: text("password_hash"),
   role: text("role", { enum: userRoleValues }).default("user").notNull(),
   status: text("status", { enum: userStatusValues }).default("active").notNull(),

@@ -16,6 +16,7 @@ import {
   Shield,
   Zap,
   TrendingUp,
+  UserRoundPen,
   type LucideIcon,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -252,6 +253,12 @@ export function Header({ siteName = "LDC Store", siteIcon, siteIconUrl }: Header
                   <p className="text-xs text-muted-foreground">@{user?.username}</p>
                 </div>
                 <DropdownMenuSeparator />
+                {user?.id !== "admin" && <DropdownMenuItem asChild>
+                  <Link href="/account/profile" className="cursor-pointer">
+                    <UserRoundPen className="mr-2 h-4 w-4" />
+                    个人资料
+                  </Link>
+                </DropdownMenuItem>}
                 <DropdownMenuItem asChild>
                   <Link href="/order/my" className="cursor-pointer">
                     <Package className="mr-2 h-4 w-4" />

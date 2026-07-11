@@ -92,9 +92,13 @@ export async function resolveOAuthUser(
       ? await db.query.users.findFirst({ where: eq(users.email, providerEmail), columns: { id: true } })
       : null;
     const mayAdoptEmail = Boolean(providerEmail && isPlaceholderEmail(existingAccount.user.email) && (!emailOwner || emailOwner.id === existingAccount.user.id));
+    const shouldSyncName = existingAccount.user.nameSource !== "custom";
+    const shouldSyncAvatar = existingAccount.user.avatarSource !== "custom";
     await db.update(users).set({
-      name: user.name || existingAccount.user.name,
-      image: user.image || existingAccount.user.image,
+      name: shouldSyncName ? user.name || existingAccount.user.name : existingAccount.user.name,
+      image: shouldSyncAvatar ? user.image || existingAccount.user.image : existingAccount.user.image,
+      nameSource: shouldSyncName && user.name ? "oauth" : existingAccount.user.nameSource,
+      avatarSource: shouldSyncAvatar && user.image ? "oauth" : existingAccount.user.avatarSource,
       ...(mayAdoptEmail ? { email: providerEmail!, emailVerifiedAt: new Date() } : {}),
       updatedAt: new Date(),
     }).where(eq(users.id, existingAccount.user.id));
@@ -112,6 +116,8 @@ export async function resolveOAuthUser(
       email,
       name: user.name,
       image: user.image,
+      nameSource: "oauth",
+      avatarSource: "oauth",
       memberNo: createMemberNo(id),
       emailVerifiedAt: providerEmail ? new Date() : null,
     }).onConflictDoNothing({ target: users.email }).returning();
@@ -248,9 +254,10 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       }
       if (trigger === "update" && token.id && token.id !== "admin") {
         const current = await db.query.users.findFirst({ where: eq(users.id, token.id as string) });
-        if (current) {
-          token.email = current.email;
-          token.name = current.name;
+      if (current) {
+        token.email = current.email;
+        token.name = current.name;
+        token.picture = current.image;
         }
       }
       return token;

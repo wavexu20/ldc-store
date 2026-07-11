@@ -5,11 +5,30 @@ import { SupportChatRoom } from "./workers/support-chat-room";
 
 type WorkerEnv = {
   SUPPORT_CHAT: DurableObjectNamespace<SupportChatRoom>;
+  AVATARS: R2Bucket;
 };
+
+const avatarKeyPattern = /^avatars\/[0-9a-f-]{36}\/[0-9a-f-]{36}\.(?:jpg|png|webp)$/;
+
+async function serveAvatar(request: Request, env: WorkerEnv, objectKey: string): Promise<Response> {
+  if (request.method !== "GET" && request.method !== "HEAD") return new Response("Method Not Allowed", { status: 405 });
+  if (!avatarKeyPattern.test(objectKey)) return new Response("Not Found", { status: 404 });
+  const object = await env.AVATARS.get(objectKey);
+  if (!object) return new Response("Not Found", { status: 404 });
+  const headers = new Headers({
+    "Cache-Control": "public, max-age=31536000, immutable",
+    "Content-Type": object.httpMetadata?.contentType || "application/octet-stream",
+  });
+  if (object.size) headers.set("Content-Length", String(object.size));
+  return new Response(request.method === "HEAD" ? null : object.body, { headers });
+}
 
 export default {
   async fetch(request: Request, env: WorkerEnv, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
+    if (url.pathname.startsWith("/api/avatars/")) {
+      return serveAvatar(request, env, url.pathname.slice("/api/avatars/".length));
+    }
     if (url.pathname === "/api/support/ws") {
       const room = env.SUPPORT_CHAT.get(env.SUPPORT_CHAT.idFromName("global"));
       return room.fetch(request);
