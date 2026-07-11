@@ -125,7 +125,12 @@ export function SupportInbox() {
               <Avatar className="size-10"><AvatarFallback><UserRound className="size-4" /></AvatarFallback></Avatar>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center justify-between gap-2">
-                  <div className="truncate text-sm font-medium">{item.visitorName || item.visitorEmail || "访客"}</div>
+                  <div className="flex min-w-0 items-center gap-2">
+                    <div className="truncate text-sm font-medium">{item.visitorName || item.visitorEmail || "访客"}</div>
+                    <Badge variant="outline" className="h-5 shrink-0 px-1.5 text-[10px]">
+                      {item.identityType === "account" ? "账号" : "临时访客"}
+                    </Badge>
+                  </div>
                   {item.unreadAdmin > 0 ? <Badge className="h-5 min-w-5 justify-center px-1.5">{item.unreadAdmin}</Badge> : null}
                 </div>
                 <div className="mt-1 truncate text-xs text-muted-foreground">{item.lastMessage || "新会话"}</div>
@@ -140,7 +145,13 @@ export function SupportInbox() {
           <>
             <header className="flex items-center justify-between border-b px-5 py-3">
               <div>
-                <div className="font-semibold">{selected.visitorName || selected.visitorEmail || "访客"}</div>
+                <div className="flex items-center gap-2">
+                  <div className="font-semibold">{selected.visitorName || selected.visitorEmail || "访客"}</div>
+                  <Badge variant="secondary">{selected.identityType === "account" ? "已绑定账号" : "临时访客"}</Badge>
+                </div>
+                {selected.identityType === "account" && selected.accountId ? (
+                  <div className="mt-0.5 font-mono text-[11px] text-muted-foreground">ID: {selected.accountId}</div>
+                ) : null}
                 <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
                   <span className={cn("size-2 rounded-full", connected ? "bg-emerald-500" : "bg-amber-500")} />
                   {connected ? "实时连接" : "连接中"}

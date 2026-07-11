@@ -9,6 +9,9 @@ export type SupportMessageDto = {
 
 export type SupportConversationDto = {
   id: string;
+  userId?: string | null;
+  identityType?: "account" | "guest";
+  accountId?: string | null;
   visitorName: string | null;
   visitorEmail: string | null;
   status: "open" | "closed";

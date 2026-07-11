@@ -96,13 +96,20 @@ export class SupportChatRoom extends DurableObject<SupportEnv> {
     ]);
 
     const conversationRow = await this.env.DB.prepare(
-      "SELECT id, visitor_name AS visitorName, visitor_email AS visitorEmail, status, last_message AS lastMessage, unread_admin AS unreadAdmin, unread_visitor AS unreadVisitor, created_at AS createdAt, updated_at AS updatedAt FROM support_conversations WHERE id = ?"
+      "SELECT id, visitor_key AS visitorKey, user_id AS userId, visitor_name AS visitorName, visitor_email AS visitorEmail, status, last_message AS lastMessage, unread_admin AS unreadAdmin, unread_visitor AS unreadVisitor, created_at AS createdAt, updated_at AS updatedAt FROM support_conversations WHERE id = ?"
     ).bind(attachment.conversationId).first();
-    const conversation = conversationRow ? {
-      ...conversationRow,
-      createdAt: new Date(Number(conversationRow.createdAt) * 1000).toISOString(),
-      updatedAt: new Date(Number(conversationRow.updatedAt) * 1000).toISOString(),
-    } : undefined;
+    const conversation = conversationRow ? (() => {
+      const visitorKey = String(conversationRow.visitorKey || "");
+      const { visitorKey: _visitorKey, ...publicConversation } = conversationRow;
+      void _visitorKey;
+      return {
+        ...publicConversation,
+        identityType: visitorKey.startsWith("user:") ? "account" : "guest",
+        accountId: visitorKey.startsWith("user:") ? visitorKey.slice(5) : null,
+        createdAt: new Date(Number(conversationRow.createdAt) * 1000).toISOString(),
+        updatedAt: new Date(Number(conversationRow.updatedAt) * 1000).toISOString(),
+      };
+    })() : undefined;
 
     this.broadcast(attachment, {
       type: "message",

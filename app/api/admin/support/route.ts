@@ -23,10 +23,15 @@ export async function GET(request: Request) {
 
   const url = new URL(request.url);
   const conversationId = url.searchParams.get("conversationId");
-  const conversations = await db.query.supportConversations.findMany({
+  const conversationRows = await db.query.supportConversations.findMany({
     orderBy: [desc(supportConversations.updatedAt)],
     limit: 100,
   });
+  const conversations = conversationRows.map(({ visitorKey, ...conversation }) => ({
+    ...conversation,
+    identityType: visitorKey.startsWith("user:") ? "account" as const : "guest" as const,
+    accountId: visitorKey.startsWith("user:") ? visitorKey.slice(5) : null,
+  }));
   const selected = conversationId || conversations[0]?.id || "admin-inbox";
   const messages = conversationId
     ? await db.query.supportMessages.findMany({

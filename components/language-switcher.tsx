@@ -11,7 +11,15 @@ function Flag({ code }: { code: string }) {
   if (code === "RU") return <span className={`${common} bg-[linear-gradient(#fff_0_33%,#1c57a7_33%_66%,#d52b1e_66%)]`} />;
   if (code === "DE") return <span className={`${common} bg-[linear-gradient(#000_0_33%,#dd0000_33%_66%,#ffce00_66%)]`} />;
   if (code === "ID") return <span className={`${common} bg-[linear-gradient(#e70011_0_50%,#fff_50%)]`} />;
-  if (code === "CN") return <span className={`${common} relative bg-[#ee1c25]`}><span className="absolute left-1.5 top-0.5 text-[12px] text-yellow-300">★</span></span>;
+  if (code === "CN") return (
+    <span className={common}>
+      <svg viewBox="0 0 30 20" className="h-full w-full" role="img" aria-label="中华人民共和国国旗">
+        <rect width="30" height="20" fill="#ee1c25" />
+        <path fill="#ffde00" d="M5 2 5.8 4.4h2.5L6.2 5.9 7 8.3 5 6.8 3 8.3l.8-2.4-2.1-1.5h2.5Z" />
+        <path fill="#ffde00" d="m10.2 1.8.28.86h.9l-.73.53.28.86-.73-.53-.73.53.28-.86-.73-.53h.9Zm2.2 2.25.28.86h.9l-.73.53.28.86-.73-.53-.73.53.28-.86-.73-.53h.9Zm0 3.15.28.86h.9l-.73.53.28.86-.73-.53-.73.53.28-.86-.73-.53h.9Zm-2.2 2.15.28.86h.9l-.73.53.28.86-.73-.53-.73.53.28-.86-.73-.53h.9Z" />
+      </svg>
+    </span>
+  );
   if (code === "IN") return <span className={`${common} relative bg-[linear-gradient(#ff8f1c_0_33%,#fff_33%_66%,#138808_66%)]`}><span className="absolute inset-0 m-auto size-2 rounded-full border border-blue-700" /></span>;
   if (code === "KR") return <span className={`${common} relative bg-white`}><span className="absolute inset-0 m-auto size-3 rounded-full bg-[linear-gradient(135deg,#cd2e3a_0_50%,#0047a0_50%)]" /></span>;
   return <span className={`${common} relative bg-[#21468b]`}><span className="absolute left-1/2 top-0 h-full w-2 -translate-x-1/2 bg-white"/><span className="absolute left-0 top-1/2 h-2 w-full -translate-y-1/2 bg-white"/><span className="absolute left-1/2 top-0 h-full w-1 -translate-x-1/2 bg-[#cf142b]"/><span className="absolute left-0 top-1/2 h-1 w-full -translate-y-1/2 bg-[#cf142b]"/></span>;
@@ -33,7 +41,7 @@ export function LanguageSwitcher() {
     router.refresh();
   }
   return (
-    <div ref={rootRef} className="fixed bottom-5 left-4 z-[70] flex flex-col items-start gap-2 sm:bottom-8 sm:left-6">
+    <div ref={rootRef} className="fixed bottom-24 right-4 z-[70] flex flex-col items-end gap-2 sm:bottom-28 sm:right-6">
       {open ? (
         <div role="menu" aria-label={t("language")} className="flex max-h-[min(70vh,480px)] flex-col gap-1.5 overflow-y-auto rounded-[1.35rem] border bg-background/95 p-2.5 shadow-2xl backdrop-blur-xl">
           {locales.map((item) => (
