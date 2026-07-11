@@ -16,7 +16,7 @@ export default async function CompleteProfilePage({ searchParams }: { searchPara
   const { callbackUrl } = await searchParams;
   if (user && hasVerifiedRealEmail(user)) redirect(callbackUrl?.startsWith("/") ? callbackUrl : "/");
   return <main className="flex min-h-screen items-center justify-center bg-muted/30 px-4 py-10">
-    <Card className="w-full max-w-md shadow-lg"><CardHeader><CardTitle>完成账号资料</CardTitle><CardDescription>绑定并验证一个可接收通知的邮箱后，即可继续使用商城。</CardDescription></CardHeader><CardContent><EmailBindingForm callbackUrl={callbackUrl} /></CardContent></Card>
+    <Card className="w-full max-w-md shadow-lg"><CardHeader><CardTitle>绑定邮箱</CardTitle><CardDescription>用于接收订单与安全通知</CardDescription></CardHeader><CardContent><EmailBindingForm callbackUrl={callbackUrl} /></CardContent></Card>
     <Toaster position="top-center" richColors />
   </main>;
 }
