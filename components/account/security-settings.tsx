@@ -2,16 +2,18 @@
 
 import { useState, useTransition } from "react";
 import { QRCodeSVG } from "qrcode.react";
-import { KeyRound, Loader2, ShieldCheck, Smartphone } from "lucide-react";
+import { Check, KeyRound, Loader2, ShieldCheck, Smartphone } from "lucide-react";
 import { toast } from "sonner";
 import { beginTwoFactorSetup, disableTwoFactor, enableTwoFactor, setAccountPassword } from "@/lib/actions/security";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { countPasswordCharacterClasses, PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, passwordContainsIdentity } from "@/lib/validations/password";
 
 export type SecurityOverview = {
   email: string;
+  name: string;
   hasPassword: boolean;
   twoFactorEnabled: boolean;
   recoveryCodesRemaining: number;
@@ -27,6 +29,12 @@ export function SecuritySettings({ overview }: { overview: SecurityOverview }) {
   const [recoveryCodes, setRecoveryCodes] = useState<string[] | null>(null);
   const [disableCode, setDisableCode] = useState("");
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(overview.twoFactorEnabled);
+  const passwordRules = [
+    { label: `长度 ${PASSWORD_MIN_LENGTH}–${PASSWORD_MAX_LENGTH} 位`, met: newPassword.length >= PASSWORD_MIN_LENGTH && newPassword.length <= PASSWORD_MAX_LENGTH },
+    { label: "至少包含 3 类字符", met: countPasswordCharacterClasses(newPassword) >= 3 },
+    { label: "不包含邮箱或昵称", met: newPassword.length > 0 && !passwordContainsIdentity(newPassword, { email: overview.email, name: overview.name }) },
+  ];
+  const passwordReady = passwordRules.every((rule) => rule.met) && newPassword === confirmPassword && (!overview.hasPassword || Boolean(currentPassword));
 
   function savePassword(event: React.FormEvent) {
     event.preventDefault();
@@ -76,9 +84,9 @@ export function SecuritySettings({ overview }: { overview: SecurityOverview }) {
     <Card><CardHeader><CardTitle className="flex items-center gap-2 text-lg"><KeyRound className="size-5" />密码</CardTitle><CardDescription>{overview.hasPassword ? "设置强密码并定期更新" : "为第三方登录账号设置本地密码"}</CardDescription></CardHeader><CardContent>
       <form className="space-y-4" onSubmit={savePassword}>
         {overview.hasPassword && <div className="space-y-2"><Label htmlFor="current-password">当前密码</Label><Input id="current-password" type="password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} required /></div>}
-        <div className="space-y-2"><Label htmlFor="new-password">新密码</Label><Input id="new-password" type="password" minLength={10} autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} required /><p className="text-xs text-muted-foreground">至少 10 位，且包含大写、小写、数字、特殊字符中的至少 3 类。</p></div>
-        <div className="space-y-2"><Label htmlFor="confirm-password">确认新密码</Label><Input id="confirm-password" type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} required /></div>
-        <Button disabled={pending} type="submit">{pending ? <Loader2 className="animate-spin" /> : <KeyRound />}{overview.hasPassword ? "更新密码" : "设置密码"}</Button>
+        <div className="space-y-2"><Label htmlFor="new-password">新密码</Label><Input id="new-password" type="password" minLength={PASSWORD_MIN_LENGTH} maxLength={PASSWORD_MAX_LENGTH} autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} required /><ul className="space-y-1 text-xs">{passwordRules.map((rule) => <li className={rule.met ? "flex items-center gap-1 text-emerald-600" : "flex items-center gap-1 text-muted-foreground"} key={rule.label}><Check className="size-3" />{rule.label}</li>)}</ul></div>
+        <div className="space-y-2"><Label htmlFor="confirm-password">确认新密码</Label><Input id="confirm-password" type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} required />{confirmPassword && confirmPassword !== newPassword ? <p className="text-xs text-destructive">两次输入的密码不一致</p> : null}</div>
+        <Button disabled={pending || !passwordReady} type="submit">{pending ? <Loader2 className="animate-spin" /> : <KeyRound />}{overview.hasPassword ? "更新密码" : "设置密码"}</Button>
       </form>
     </CardContent></Card>
 

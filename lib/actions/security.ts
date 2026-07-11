@@ -38,6 +38,7 @@ export async function getSecurityOverview() {
   return {
     success: true as const,
     email: user.email,
+    name: user.name || "",
     hasPassword: Boolean(user.passwordHash),
     twoFactorEnabled: Boolean(user.twoFactorEnabledAt),
     recoveryCodesRemaining: remainingRecoveryCodes.length,
