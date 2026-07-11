@@ -200,6 +200,7 @@ Visit `/admin`:
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | ❌ | - | Google OAuth credentials |
 | `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | ❌ | - | GitHub OAuth credentials |
 | `DISCORD_CLIENT_ID` / `DISCORD_CLIENT_SECRET` | ❌ | - | Discord OAuth credentials |
+| `STEAM_WEB_API_KEY` | ❌ | - | Steam OpenID profile API key |
 | `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | ✅ | - | Public Turnstile widget key |
 | `TURNSTILE_SECRET_KEY` | ✅ | - | Turnstile server-side secret |
 | `EMAIL_FROM` | ✅ | - | Sender onboarded in Cloudflare Email Service |

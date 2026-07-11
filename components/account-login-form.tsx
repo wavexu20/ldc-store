@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { Github, Loader2, Mail, Store } from "lucide-react";
-import { SiDiscord } from "@icons-pack/react-simple-icons";
+import { SiDiscord, SiSteam } from "@icons-pack/react-simple-icons";
 import { toast } from "sonner";
 import { registerWithEmail, resendEmailVerification, verifyEmailCode } from "@/lib/actions/auth";
 import { LinuxDoLogo } from "@/components/icons/linuxdo-logo";
@@ -23,7 +23,7 @@ import {
 } from "@/lib/validations/password";
 
 export function AccountLoginForm({ providers, turnstileSiteKey }: {
-  providers: Array<"discord" | "google" | "github" | "linux-do">;
+  providers: Array<"discord" | "google" | "github" | "linux-do" | "steam">;
   turnstileSiteKey: string;
 }) {
   const searchParams = useSearchParams();
@@ -41,6 +41,11 @@ export function AccountLoginForm({ providers, turnstileSiteKey }: {
   async function oauth(provider: "discord" | "google" | "github" | "linux-do") {
     setLoading(provider);
     await signIn(provider, { callbackUrl });
+  }
+
+  function steamLogin() {
+    setLoading("steam");
+    window.location.assign(`/api/auth/steam?callbackUrl=${encodeURIComponent(callbackUrl)}`);
   }
 
   async function emailLogin(event: React.FormEvent) {
@@ -182,6 +187,10 @@ export function AccountLoginForm({ providers, turnstileSiteKey }: {
           <Button className={!providers.includes("linux-do") ? "hidden" : ""} variant="outline" disabled={!!loading} onClick={() => oauth("linux-do")}>
             {loading === "linux-do" ? <Loader2 className="animate-spin" /> : <LinuxDoLogo />}
             LinuxDo
+          </Button>
+          <Button className={!providers.includes("steam") ? "hidden" : ""} variant="outline" disabled={!!loading} onClick={steamLogin}>
+            {loading === "steam" ? <Loader2 className="animate-spin" /> : <SiSteam />}
+            Steam
           </Button>
         </div>
 

@@ -7,6 +7,7 @@ import { compare } from "bcryptjs";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db, oauthAccounts, users } from "@/lib/db";
+import { verifySteamTicket } from "@/lib/auth/steam";
 
 const adminLoginSchema = z.object({ password: z.string().min(1) });
 const emailLoginSchema = z.object({
@@ -69,7 +70,7 @@ type AuthUser = {
   silenced?: boolean;
 };
 
-async function resolveOAuthUser(
+export async function resolveOAuthUser(
   user: AuthUser,
   provider: string,
   providerAccountId: string
@@ -128,6 +129,33 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       ? [GitHub({ clientId: process.env.GITHUB_CLIENT_ID, clientSecret: process.env.GITHUB_CLIENT_SECRET })]
       : []),
     ...(process.env.LINUXDO_CLIENT_ID && process.env.LINUXDO_CLIENT_SECRET ? [LinuxDoProvider] : []),
+    ...(process.env.STEAM_WEB_API_KEY && process.env.AUTH_SECRET
+      ? [Credentials({
+          id: "steam",
+          name: "Steam",
+          credentials: { ticket: { label: "Steam ticket", type: "text" } },
+          async authorize(credentials) {
+            const ticket = typeof credentials.ticket === "string"
+              ? await verifySteamTicket(credentials.ticket, process.env.AUTH_SECRET || "")
+              : null;
+            if (!ticket) return null;
+            const localUser = await resolveOAuthUser({
+              name: ticket.name,
+              image: ticket.image,
+              username: ticket.name,
+            }, "steam", ticket.steamId);
+            if (localUser.status !== "active") return null;
+            return {
+              id: localUser.id,
+              email: localUser.email,
+              name: localUser.name,
+              image: localUser.image,
+              role: localUser.role,
+              provider: "steam",
+            };
+          },
+        })]
+      : []),
     Credentials({
       id: "email-password",
       name: "Email",
