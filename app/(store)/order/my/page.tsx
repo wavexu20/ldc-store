@@ -249,7 +249,7 @@ export default function MyOrdersPage() {
                     <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
                       <span>{formatShortTime(order.createdAt)}</span>
                       <span>×{order.quantity}</span>
-                      <span className="font-medium text-foreground">{order.totalAmount} LDC</span>
+                      <span className="font-medium text-foreground">¥{order.totalAmount}</span>
                     </div>
                   </div>
                   <Badge variant={status.variant} className={`shrink-0 text-xs ${status.className || ""}`}>

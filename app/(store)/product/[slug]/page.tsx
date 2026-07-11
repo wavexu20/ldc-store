@@ -89,10 +89,10 @@ export default async function ProductPage({ params }: ProductPageProps) {
       {/* Price & Stock */}
       <div className="mb-6 flex items-baseline justify-between rounded-lg border bg-muted/30 p-4">
         <div className="flex items-baseline gap-2">
-          <span className="text-2xl font-bold">{product.price} LDC</span>
+          <span className="text-2xl font-bold">¥{product.price}</span>
           {hasDiscount && (
             <span className="text-sm text-muted-foreground line-through">
-              {product.originalPrice} LDC
+              ¥{product.originalPrice}
             </span>
           )}
         </div>

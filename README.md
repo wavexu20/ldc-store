@@ -27,7 +27,7 @@ A virtual goods automated card delivery platform built on Next.js 16, supporting
 - **Session Management** - JWT session strategy based on NextAuth v5
 
 ### 💳 Automated Card Delivery
-- Supports Linux DO Credit payments
+- Uses the self-hosted Game3DTech Pay checkout (Stripe, ZPAY and NowPayments)
 - Automatic card key delivery upon successful payment
 - Auto-release of locked inventory on order timeout (lazy load + throttle strategy)
 - Idempotent payment callback handling to prevent duplicate deliveries
@@ -81,7 +81,7 @@ A virtual goods automated card delivery platform built on Next.js 16, supporting
 - **ORM:** Drizzle ORM
 - **UI:** Shadcn/UI + Tailwind CSS
 - **Auth:** NextAuth.js v5
-- **Payment:** Linux DO Credit
+- **Payment:** Game3DTech Pay hosted checkout
 
 ## 🚀 Deploy to Cloudflare Workers
 
@@ -121,10 +121,10 @@ ADMIN_PASSWORD="your-admin-password"
 # Admin username whitelist (optional, comma-separated; grants admin role on match)
 ADMIN_USERNAMES="admin1,admin2"
 
-# Linux DO Credit payment
-LDC_CLIENT_ID="your_client_id"
-LDC_CLIENT_SECRET="your_client_secret"
-LDC_GATEWAY="https://credit.linux.do/epay"
+# Game3DTech Pay
+PAYMENT_GATEWAY_URL="https://pay.game3dtech.com"
+PAYMENT_GATEWAY_APP_ID="game3dtech"
+PAYMENT_GATEWAY_API_KEY="your_app_api_key"
 
 # Linux DO OAuth2 login (required for user orders/queries)
 LINUXDO_CLIENT_ID="your_linuxdo_client_id"
@@ -186,8 +186,11 @@ Visit `/admin`:
 | `AUTH_SECRET` | ✅ | - | NextAuth encryption key (run `openssl rand -base64 32`) |
 | `AUTH_TRUST_HOST` | ✅ | `true` | Trust host header (must be true for Vercel) |
 | `ADMIN_PASSWORD` | ✅ | - | Admin login password |
-| `LDC_CLIENT_ID` | ✅ | - | Linux DO Credit Client ID |
-| `LDC_CLIENT_SECRET` | ✅ | - | Linux DO Credit Client Secret |
+| `PAYMENT_GATEWAY_URL` | ✅ | `https://pay.game3dtech.com` | Hosted payment gateway URL |
+| `PAYMENT_GATEWAY_APP_ID` | ✅ | `game3dtech` | Dedicated gateway application ID |
+| `PAYMENT_GATEWAY_API_KEY` | ✅ | - | Dedicated gateway application secret |
+| `LDC_CLIENT_ID` | ❌ | - | Legacy Linux DO Credit Client ID |
+| `LDC_CLIENT_SECRET` | ❌ | - | Legacy Linux DO Credit Client Secret |
 | `LDC_GATEWAY` | ❌ | `https://credit.linux.do/epay` | Payment gateway URL |
 | `LDC_REFUND_MODE` | ❌ | `client` | Refund mode: `client` / `proxy` / `disabled` |
 | `LDC_PROXY_URL` | ❌ | - | LDC API proxy URL (proxy mode, bypasses Cloudflare) |

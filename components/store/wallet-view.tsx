@@ -23,6 +23,14 @@ export function WalletView({ data }: { data: WalletData }) {
         toast.error(result.message);
         return;
       }
+      if (result.paymentForm.redirectUrl) {
+        window.location.assign(result.paymentForm.redirectUrl);
+        return;
+      }
+      if (!result.paymentForm.actionUrl || !result.paymentForm.params) {
+        toast.error("支付链接无效");
+        return;
+      }
       const form = document.createElement("form");
       form.method = "POST";
       form.action = result.paymentForm.actionUrl;
@@ -41,7 +49,7 @@ export function WalletView({ data }: { data: WalletData }) {
   return (
     <div className="mx-auto max-w-3xl space-y-6 px-4 py-8">
       <Card className="overflow-hidden border-0 bg-gradient-to-br from-violet-600 to-indigo-700 text-white shadow-xl">
-        <CardHeader><CardDescription className="text-white/70">可用余额</CardDescription><CardTitle className="text-4xl">{(data.user.balanceCents / 100).toFixed(2)} LDC</CardTitle></CardHeader>
+        <CardHeader><CardDescription className="text-white/70">可用余额</CardDescription><CardTitle className="text-4xl">¥{(data.user.balanceCents / 100).toFixed(2)}</CardTitle></CardHeader>
         <CardContent className="flex items-end gap-3">
           <div className="flex-1 space-y-2"><Label htmlFor="amount">充值金额</Label><Input id="amount" className="bg-white text-slate-950" type="number" min="1" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} /></div>
           <Button variant="secondary" disabled={pending} onClick={recharge}>{pending ? <Loader2 className="animate-spin" /> : <WalletCards />}立即充值</Button>

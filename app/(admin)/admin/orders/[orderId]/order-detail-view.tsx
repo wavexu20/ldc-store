@@ -198,7 +198,7 @@ function OrderHeader({ order }: { order: OrderDetailData }) {
             <span className="inline-flex items-center gap-2">
               <span className="text-xs">金额</span>
               <span className="font-semibold text-foreground">
-                {order.totalAmount} LDC
+                ¥{order.totalAmount}
               </span>
             </span>
           </div>
@@ -233,7 +233,7 @@ function OrderSummary({ order }: { order: OrderDetailData }) {
         icon={<Coins className="h-4 w-4 text-emerald-700 dark:text-emerald-300" />}
         iconClassName="bg-emerald-100 dark:bg-emerald-950/40"
         title="订单金额"
-        value={`${order.totalAmount} LDC`}
+        value={`¥${order.totalAmount}`}
         description={
           <span>
             单价 {order.productPrice} · 数量 {order.quantity}
@@ -367,8 +367,8 @@ function OrderInfoCard({ order }: { order: OrderDetailData }) {
         </Field>
         <Field label="商品">{order.productName}</Field>
         <Field label="数量">{order.quantity}</Field>
-        <Field label="单价">{order.productPrice} LDC</Field>
-        <Field label="金额">{order.totalAmount} LDC</Field>
+        <Field label="单价">¥{order.productPrice}</Field>
+        <Field label="金额">¥{order.totalAmount}</Field>
       </CardContent>
     </Card>
   );

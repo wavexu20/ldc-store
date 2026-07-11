@@ -503,7 +503,7 @@ export default function OrderResultPage({ searchParams }: OrderResultPageProps) 
                 label="金额"
                 value={
                   <span className="font-semibold tabular-nums">
-                    {order.totalAmount} LDC
+                    ¥{order.totalAmount}
                   </span>
                 }
               />

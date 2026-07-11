@@ -147,11 +147,11 @@ export function ProductCard({
           <div className="shrink-0 text-right">
             <div className="inline-flex items-baseline gap-1 rounded-full border border-border/50 bg-background/70 px-2.5 py-1 text-xs font-semibold tabular-nums backdrop-blur-sm">
               <span className="text-sm font-bold text-foreground">{price}</span>
-              <span className="text-xs font-medium text-muted-foreground">LDC</span>
+              <span className="text-xs font-medium text-muted-foreground">CNY</span>
             </div>
             {hasDiscount && (
               <div className="mt-1 text-[11px] tabular-nums text-muted-foreground line-through">
-                {originalPrice} LDC
+                ¥{originalPrice}
               </div>
             )}
           </div>

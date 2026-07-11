@@ -4,7 +4,7 @@ import { z } from "zod";
 export const createOrderSchema = z.object({
   productId: z.string().uuid("无效的商品ID"),
   quantity: z.number().int().min(1, "数量至少为1").max(100, "数量不能超过100"),
-  paymentMethod: z.enum(["ldc", "balance", "alipay", "wechat", "usdt"]).default("ldc"),
+  paymentMethod: z.enum(["gateway", "ldc", "balance", "alipay", "wechat", "usdt"]).default("gateway"),
 });
 
 // 管理员更新订单状态验证

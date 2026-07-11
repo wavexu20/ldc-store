@@ -54,17 +54,29 @@ pnpm wrangler secret put ADMIN_PASSWORD
 pnpm wrangler secret put TURNSTILE_SECRET_KEY
 ```
 
-支付与充值启用时再配置 `LDC_CLIENT_ID`、`LDC_CLIENT_SECRET`；OAuth 按需配置 `GOOGLE_*`、`GITHUB_*`、`LINUXDO_*`。所有 Secret 只能放在 Worker Secrets，不能在后台页面或 Git 仓库中保存。
+自有支付网关启用时配置 `PAYMENT_GATEWAY_API_KEY`；OAuth 按需配置 `GOOGLE_*`、`GITHUB_*`、`LINUXDO_*`。所有 Secret 只能放在 Worker Secrets，不能在后台页面或 Git 仓库中保存。
+
+```bash
+pnpm wrangler secret put PAYMENT_GATEWAY_API_KEY
+```
+
+网关项目配置：
+
+```text
+app_id: game3dtech
+notify_url: https://game3dtech.com/api/payments/webhook/gateway
+allowed_return_hosts: ["game3dtech.com"]
+```
 
 ## 5. 支付与充值回调
 
-Linux DO Credit Notify URL：
+Game3DTech Pay Webhook：
 
 ```text
-https://game3dtech.com/api/payment/notify
+https://game3dtech.com/api/payments/webhook/gateway
 ```
 
-商品订单号使用 `LD` 前缀，余额充值单使用 `RC` 前缀。回调会校验商户号、金额与签名，并通过唯一幂等键防止重复入账。
+商品订单号使用 `LD` 前缀，余额充值单使用 `RC` 前缀。回调校验 HMAC、五分钟时间窗、app、订单号与金额，并通过订单状态和唯一账本键防止重复发货或入账。旧的 Linux DO Credit 回调继续保留用于历史订单兼容。
 
 ## 6. 验证与部署
 

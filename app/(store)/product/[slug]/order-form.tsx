@@ -37,7 +37,7 @@ export function OrderForm({
   maxQuantity,
 }: OrderFormProps) {
   const [isPending, startTransition] = useTransition();
-  const [paymentMethod, setPaymentMethod] = useState<"ldc" | "balance">("ldc");
+  const [paymentMethod, setPaymentMethod] = useState<"gateway" | "balance">("gateway");
   const router = useRouter();
   const { data: session, status } = useSession();
   const effectiveMax = Math.min(maxQuantity, stock);
@@ -89,6 +89,13 @@ export function OrderForm({
         localStorage.setItem("ldc_last_order_no", result.orderNo!);
 
         if (result.paymentForm) {
+          if (result.paymentForm.redirectUrl) {
+            window.location.assign(result.paymentForm.redirectUrl);
+            return;
+          }
+          if (!result.paymentForm.actionUrl || !result.paymentForm.params) {
+            throw new Error("支付链接无效");
+          }
           const form = document.createElement("form");
           form.method = "POST";
           form.action = result.paymentForm.actionUrl;
@@ -153,7 +160,7 @@ export function OrderForm({
       <div className="space-y-2">
         <Label>支付方式</Label>
         <div className="grid grid-cols-2 gap-2">
-          <Button type="button" variant={paymentMethod === "ldc" ? "default" : "outline"} onClick={() => setPaymentMethod("ldc")}>Linux DO Credit</Button>
+          <Button type="button" variant={paymentMethod === "gateway" ? "default" : "outline"} onClick={() => setPaymentMethod("gateway")}>在线支付</Button>
           <Button type="button" variant={paymentMethod === "balance" ? "default" : "outline"} onClick={() => setPaymentMethod("balance")}><WalletCards />账户余额</Button>
         </div>
       </div>
@@ -205,7 +212,7 @@ export function OrderForm({
       <div className="flex items-center justify-between pt-2">
         <div>
           <span className="text-sm text-muted-foreground">{productName} × {quantity}</span>
-          <div className="text-xl font-bold">{totalPrice} LDC</div>
+          <div className="text-xl font-bold">¥{totalPrice}</div>
         </div>
         <Button type="submit" disabled={isPending}>
           {isPending ? (

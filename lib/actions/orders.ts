@@ -11,7 +11,7 @@
  */
 
 import { db, getD1Binding, orders, cards, products } from "@/lib/db";
-import { eq, and, sql, desc, inArray, lt } from "drizzle-orm";
+import { eq, and, desc, inArray, lt } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { headers } from "next/headers";
 import { after } from "next/server";
@@ -23,10 +23,11 @@ import {
   getRefundMode,
   getClientRefundParams,
   queryPaymentOrder,
-  type PaymentFormData,
   type RefundMode,
   type ClientRefundParams,
 } from "@/lib/payment/ldc";
+import type { PaymentLaunchData } from "@/lib/payment/types";
+import { createGatewayPayment, queryGatewayPayment } from "@/lib/payment/gateway";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { requireAdmin } from "@/lib/auth-utils";
@@ -68,7 +69,7 @@ export interface CreateOrderResult {
   success: boolean;
   message: string;
   orderNo?: string;
-  paymentForm?: PaymentFormData;
+  paymentForm?: PaymentLaunchData;
 }
 
 /**
@@ -232,17 +233,22 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     revalidatePath("/");
     revalidatePath(`/product/${product.slug}`);
 
-    // 5. 调用支付接口（如果是 LDC 支付）
-    let paymentForm: PaymentFormData | undefined;
-    if (paymentMethod === "ldc") {
+    // 5. 为外部支付创建托管收银台链接。
+    let paymentForm: PaymentLaunchData | undefined;
+    if (paymentMethod === "gateway" || paymentMethod === "ldc") {
       try {
         const siteUrl = await getSiteUrl();
-        paymentForm = createPayment(
-          result.order.orderNo,
-          result.totalAmount,
-          product.name,
-          siteUrl
-        );
+        paymentForm = paymentMethod === "gateway"
+          ? await createGatewayPayment({
+              orderId: result.order.orderNo,
+              amount: result.totalAmount,
+              productName: product.name,
+              productDescription: product.description || undefined,
+              siteUrl,
+              successPath: `/order/result?out_trade_no=${encodeURIComponent(result.order.orderNo)}`,
+              cancelPath: `/order/result?out_trade_no=${encodeURIComponent(result.order.orderNo)}&cancelled=1`,
+            })
+          : createPayment(result.order.orderNo, result.totalAmount, product.name, siteUrl);
       } catch (error) {
         // 支付接口调用失败，但订单已创建
         log.error(
@@ -605,8 +611,25 @@ export async function getOrderByNo(orderNo: string) {
     }
 
     // notify 可能因为网络/平台重试失败而迟迟未到；这里做一次“按需补偿查询”。
-    // 重要：只对待支付 + LDC 支付的订单尝试，且必须校验金额一致后才允许发货。
-    if (order.status === "pending" && order.paymentMethod === "ldc") {
+    // 回调延迟时主动查单补偿，仍会校验订单号与金额后才允许发货。
+    if (order.status === "pending" && order.paymentMethod === "gateway") {
+      try {
+        const gatewayOrder = await queryGatewayPayment(order.orderNo);
+        if (
+          gatewayOrder?.status === "paid" &&
+          gatewayOrder.client_order_id === order.orderNo &&
+          Math.round(gatewayOrder.amount_cny * 100) === Math.round(Number(order.totalAmount) * 100)
+        ) {
+          await handlePaymentSuccess(order.orderNo, gatewayOrder.payment_id);
+          order = await db.query.orders.findFirst({
+            where: eq(orders.orderNo, orderNo),
+            with: { cards: true },
+          }) ?? order;
+        }
+      } catch (error) {
+        log.warn({ err: error }, "自有支付网关补偿查单失败");
+      }
+    } else if (order.status === "pending" && order.paymentMethod === "ldc") {
       try {
         const remote = await queryPaymentOrder({ outTradeNo: order.orderNo });
         if (remote && Number(remote.status) === 1) {
@@ -930,6 +953,13 @@ export async function approveRefund(
       revalidatePath("/account/wallet");
       log.info({ orderNo: order.orderNo }, "余额退款成功");
       return { success: true, message: "退款已退回用户余额" };
+    }
+
+    if (order.paymentMethod === "gateway") {
+      return {
+        success: false,
+        message: "自有支付网关暂未提供自动退款接口，请先在支付平台后台完成原路退款，再处理该申请",
+      };
     }
 
     // 外部支付退款才依赖 LDC 退款模式；余额退款始终可以在本地完成。

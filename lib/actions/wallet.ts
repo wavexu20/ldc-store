@@ -6,7 +6,8 @@ import { nanoid } from "nanoid";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { db, rechargeOrders, users, walletTransactions } from "@/lib/db";
-import { createPayment, type PaymentFormData } from "@/lib/payment/ldc";
+import type { PaymentLaunchData } from "@/lib/payment/types";
+import { createGatewayPayment } from "@/lib/payment/gateway";
 
 const rechargeSchema = z.number().int().min(100, "最低充值 1.00").max(10_000_000, "单笔充值不能超过 100,000.00");
 
@@ -41,7 +42,7 @@ export async function createRecharge(amountCents: number): Promise<{
   success: boolean;
   message: string;
   rechargeNo?: string;
-  paymentForm?: PaymentFormData;
+  paymentForm?: PaymentLaunchData;
 }> {
   const session = await auth();
   if (!session?.user?.id || session.user.id === "admin") return { success: false, message: "请先登录" };
@@ -53,13 +54,18 @@ export async function createRecharge(amountCents: number): Promise<{
     rechargeNo,
     userId: session.user.id,
     amountCents: parsed.data,
+    provider: "gateway",
     expiredAt: new Date(Date.now() + 30 * 60 * 1000),
   });
-  const paymentForm = createPayment(
-    rechargeNo,
-    parsed.data / 100,
-    "账户余额充值",
-    await getSiteUrl()
-  );
+  const siteUrl = await getSiteUrl();
+  const paymentForm = await createGatewayPayment({
+    orderId: rechargeNo,
+    amount: parsed.data / 100,
+    productName: "账户余额充值",
+    productDescription: "Game3DTech 商城账户余额充值",
+    siteUrl,
+    successPath: `/account/wallet?recharge=${encodeURIComponent(rechargeNo)}&status=success`,
+    cancelPath: `/account/wallet?recharge=${encodeURIComponent(rechargeNo)}&status=cancelled`,
+  });
   return { success: true, message: "充值单已创建", rechargeNo, paymentForm };
 }

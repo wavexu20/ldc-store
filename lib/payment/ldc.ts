@@ -4,6 +4,7 @@
  */
 
 import crypto from "crypto";
+import type { PaymentFormData } from "@/lib/payment/types";
 
 /**
  * 退款模式
@@ -169,10 +170,7 @@ export function verifySign(params: NotifyParams, secret: string): boolean {
   return sign === expectedSign;
 }
 
-export interface PaymentFormData {
-  actionUrl: string;
-  params: Record<string, string>;
-}
+export type { PaymentFormData } from "@/lib/payment/types";
 
 /**
  * 创建支付订单

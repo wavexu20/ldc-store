@@ -100,7 +100,7 @@ export function CustomersTable({
                   {row.orderCount}
                 </TableCell>
                 <TableCell className="text-right tabular-nums">
-                  {formatAmount(row.totalSpent)} LDC
+                  ¥{formatAmount(row.totalSpent)}
                 </TableCell>
                 <TableCell className="hidden lg:table-cell">
                   <LocalTime value={row.firstPaidAt} />

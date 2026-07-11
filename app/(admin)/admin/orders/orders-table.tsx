@@ -294,7 +294,7 @@ function OrdersTableView({
                 </TableCell>
                 <TableCell className="text-center">{order.quantity}</TableCell>
                 <TableCell className="text-right font-medium">
-                  {order.totalAmount} LDC
+                  ¥{order.totalAmount}
                 </TableCell>
                 <TableCell>
                   {paymentMethodLabels[order.paymentMethod] || order.paymentMethod}
