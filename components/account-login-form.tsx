@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { Github, Loader2, Mail, Store } from "lucide-react";
-import { SiDiscord, SiSteam } from "@icons-pack/react-simple-icons";
+import { SiDiscord, SiHuggingface, SiSteam } from "@icons-pack/react-simple-icons";
 import { toast } from "sonner";
 import { registerWithEmail, resendEmailVerification, verifyEmailCode } from "@/lib/actions/auth";
 import { LinuxDoLogo } from "@/components/icons/linuxdo-logo";
@@ -23,7 +23,7 @@ import {
 } from "@/lib/validations/password";
 
 export function AccountLoginForm({ providers, turnstileSiteKey }: {
-  providers: Array<"discord" | "google" | "github" | "linux-do" | "steam">;
+  providers: Array<"discord" | "google" | "github" | "huggingface" | "linux-do" | "steam">;
   turnstileSiteKey: string;
 }) {
   const searchParams = useSearchParams();
@@ -38,7 +38,7 @@ export function AccountLoginForm({ providers, turnstileSiteKey }: {
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [turnstileKey, setTurnstileKey] = useState(0);
 
-  async function oauth(provider: "discord" | "google" | "github" | "linux-do") {
+  async function oauth(provider: "discord" | "google" | "github" | "huggingface" | "linux-do") {
     setLoading(provider);
     await signIn(provider, { callbackUrl });
   }
@@ -183,6 +183,10 @@ export function AccountLoginForm({ providers, turnstileSiteKey }: {
           <Button className={!providers.includes("github") ? "hidden" : ""} variant="outline" disabled={!!loading} onClick={() => oauth("github")}>
             {loading === "github" ? <Loader2 className="animate-spin" /> : <Github />}
             GitHub
+          </Button>
+          <Button className={!providers.includes("huggingface") ? "hidden" : ""} variant="outline" disabled={!!loading} onClick={() => oauth("huggingface")}>
+            {loading === "huggingface" ? <Loader2 className="animate-spin" /> : <SiHuggingface />}
+            Hugging Face
           </Button>
           <Button className={!providers.includes("linux-do") ? "hidden" : ""} variant="outline" disabled={!!loading} onClick={() => oauth("linux-do")}>
             {loading === "linux-do" ? <Loader2 className="animate-spin" /> : <LinuxDoLogo />}

@@ -3,6 +3,7 @@ import Credentials from "next-auth/providers/credentials";
 import Discord from "next-auth/providers/discord";
 import GitHub from "next-auth/providers/github";
 import Google from "next-auth/providers/google";
+import HuggingFace from "next-auth/providers/huggingface";
 import { compare } from "bcryptjs";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
@@ -127,6 +128,13 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       : []),
     ...(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET
       ? [GitHub({ clientId: process.env.GITHUB_CLIENT_ID, clientSecret: process.env.GITHUB_CLIENT_SECRET })]
+      : []),
+    ...(process.env.HUGGINGFACE_CLIENT_ID && process.env.HUGGINGFACE_CLIENT_SECRET
+      ? [HuggingFace({
+          clientId: process.env.HUGGINGFACE_CLIENT_ID,
+          clientSecret: process.env.HUGGINGFACE_CLIENT_SECRET,
+          authorization: { params: { scope: "openid profile email" } },
+        })]
       : []),
     ...(process.env.LINUXDO_CLIENT_ID && process.env.LINUXDO_CLIENT_SECRET ? [LinuxDoProvider] : []),
     ...(process.env.STEAM_WEB_API_KEY && process.env.AUTH_SECRET
