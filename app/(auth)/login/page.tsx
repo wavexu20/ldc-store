@@ -2,7 +2,8 @@ import { Suspense } from "react";
 import { AccountLoginForm } from "@/components/account-login-form";
 
 export default function LoginPage() {
-  const providers: Array<"google" | "github" | "linux-do"> = [];
+  const providers: Array<"discord" | "google" | "github" | "linux-do"> = [];
+  if (process.env.DISCORD_CLIENT_ID && process.env.DISCORD_CLIENT_SECRET) providers.push("discord");
   if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) providers.push("google");
   if (process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET) providers.push("github");
   if (process.env.LINUXDO_CLIENT_ID && process.env.LINUXDO_CLIENT_SECRET) providers.push("linux-do");

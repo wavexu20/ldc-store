@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { Github, Loader2, Mail, Store } from "lucide-react";
+import { SiDiscord } from "@icons-pack/react-simple-icons";
 import { toast } from "sonner";
 import { registerWithEmail, resendEmailVerification, verifyEmailCode } from "@/lib/actions/auth";
 import { LinuxDoLogo } from "@/components/icons/linuxdo-logo";
@@ -22,7 +23,7 @@ import {
 } from "@/lib/validations/password";
 
 export function AccountLoginForm({ providers, turnstileSiteKey }: {
-  providers: Array<"google" | "github" | "linux-do">;
+  providers: Array<"discord" | "google" | "github" | "linux-do">;
   turnstileSiteKey: string;
 }) {
   const searchParams = useSearchParams();
@@ -37,7 +38,7 @@ export function AccountLoginForm({ providers, turnstileSiteKey }: {
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [turnstileKey, setTurnstileKey] = useState(0);
 
-  async function oauth(provider: "google" | "github" | "linux-do") {
+  async function oauth(provider: "discord" | "google" | "github" | "linux-do") {
     setLoading(provider);
     await signIn(provider, { callbackUrl });
   }
@@ -165,7 +166,11 @@ export function AccountLoginForm({ providers, turnstileSiteKey }: {
           </form>
         ) : (
           <>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-2 gap-2">
+          <Button className={!providers.includes("discord") ? "hidden" : ""} variant="outline" disabled={!!loading} onClick={() => oauth("discord")}>
+            {loading === "discord" ? <Loader2 className="animate-spin" /> : <SiDiscord />}
+            Discord
+          </Button>
           <Button className={!providers.includes("google") ? "hidden" : ""} variant="outline" disabled={!!loading} onClick={() => oauth("google")}>
             {loading === "google" ? <Loader2 className="animate-spin" /> : <span className="font-bold">G</span>}
             Google
