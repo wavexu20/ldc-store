@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { useSession } from "next-auth/react";
+import { signOut, useSession } from "next-auth/react";
 import { Loader2, MailCheck } from "lucide-react";
 import { toast } from "sonner";
 import { sendBindingEmail, verifyBindingEmail } from "@/lib/actions/account";
@@ -34,6 +34,10 @@ export function EmailBindingForm({ callbackUrl = "/" }: { callbackUrl?: string }
         return;
       }
       toast.success(result.message);
+      if (result.reloginRequired) {
+        await signOut({ redirectTo: "/login?callbackUrl=/" });
+        return;
+      }
       await update();
       router.replace(safeCallback);
       router.refresh();
