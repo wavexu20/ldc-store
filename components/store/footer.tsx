@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Github, Hammer } from "lucide-react";
+import { Github } from "lucide-react";
 
 interface FooterProps {
   siteName?: string;
@@ -24,7 +24,8 @@ export function Footer({ siteName = "LDC Store" }: FooterProps) {
             <span>GitHub</span>
           </Link>
           <span className="text-xs">
-            ({process.env.NEXT_PUBLIC_COMMIT_SHA?.slice(0, 7) || "dev"})
+            ({process.env.NEXT_PUBLIC_COMMIT_SHA?.slice(0, 7) ||
+              (process.env.NODE_ENV === "production" ? "cloudflare" : "dev")})
           </span>
         </div>
 
