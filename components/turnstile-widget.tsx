@@ -22,9 +22,11 @@ declare global {
 
 export function TurnstileWidget({
   siteKey,
+  label = "Cloudflare 人机验证",
   onVerify,
 }: {
   siteKey: string;
+  label?: string;
   onVerify(token: string | null): void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -66,7 +68,7 @@ export function TurnstileWidget({
         strategy="afterInteractive"
         onLoad={renderWidget}
       />
-      <div ref={containerRef} className="min-h-[65px] w-full" aria-label="Cloudflare 人机验证" />
+      <div ref={containerRef} className="min-h-[65px] w-full" aria-label={label} />
     </>
   );
 }

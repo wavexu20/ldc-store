@@ -1,9 +1,17 @@
 import { Suspense } from "react";
+import { cookies, headers } from "next/headers";
 import { AccountLoginForm } from "@/components/account-login-form";
+import { LOGIN_LOCALE_COOKIE, type LoginLocale } from "@/lib/i18n/login";
 
 export const dynamic = "force-dynamic";
 
-export default function LoginPage() {
+export default async function LoginPage() {
+  const cookieStore = await cookies();
+  const headersList = await headers();
+  const savedLocale = cookieStore.get(LOGIN_LOCALE_COOKIE)?.value;
+  const initialLocale: LoginLocale = savedLocale === "zh" || savedLocale === "en"
+    ? savedLocale
+    : headersList.get("accept-language")?.toLowerCase().startsWith("zh") ? "zh" : "en";
   const providers: Array<"discord" | "google" | "github" | "huggingface" | "linux-do" | "steam"> = [];
   if (process.env.DISCORD_CLIENT_ID && process.env.DISCORD_CLIENT_SECRET) providers.push("discord");
   if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) providers.push("google");
@@ -17,6 +25,8 @@ export default function LoginPage() {
         <AccountLoginForm
           providers={providers}
           turnstileSiteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || ""}
+          siteName={process.env.NEXT_PUBLIC_SITE_NAME || "Game3DTech"}
+          initialLocale={initialLocale}
         />
       </Suspense>
     </main>
