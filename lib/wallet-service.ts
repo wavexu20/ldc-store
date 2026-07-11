@@ -43,7 +43,7 @@ export async function handleRechargePaymentSuccess(
       ON CONFLICT(idempotency_key) DO NOTHING
     `).bind(
       crypto.randomUUID(), recharge.amountCents, recharge.id, idempotencyKey,
-      "Linux DO Credit 充值", nowEpoch, recharge.userId
+      "在线支付充值", nowEpoch, recharge.userId
     ),
   ]);
   return { found: true, success: Boolean(results[0]?.results[0]) };
