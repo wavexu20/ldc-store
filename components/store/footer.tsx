@@ -23,10 +23,6 @@ export function Footer({ siteName = "LDC Store" }: FooterProps) {
             <Github className="h-3.5 w-3.5" />
             <span>GitHub</span>
           </Link>
-          <span className="text-xs">
-            ({process.env.NEXT_PUBLIC_COMMIT_SHA?.slice(0, 7) ||
-              (process.env.NODE_ENV === "production" ? "cloudflare" : "dev")})
-          </span>
         </div>
 
         <span className="text-xs text-muted-foreground/60">
