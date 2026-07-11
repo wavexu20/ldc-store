@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { formatLocalTime } from "@/lib/time";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/components/i18n-provider";
 
 interface OrderResultPageProps {
   // Next.js 期望 searchParams 为 Promise 类型；运行时保留 isThenable 检查以兼容测试传入对象。
@@ -105,6 +106,7 @@ function InfoItem({
 }
 
 export default function OrderResultPage({ searchParams }: OrderResultPageProps) {
+  const { t } = useI18n();
   // 兼容 undefined、Promise、纯对象（测试环境）三种情况
   const resolvedParams = searchParams
     ? (isThenable<{ out_trade_no?: string }>(searchParams) ? use(searchParams) : searchParams)
@@ -171,20 +173,20 @@ export default function OrderResultPage({ searchParams }: OrderResultPageProps) 
           setIsPolling(false);
           // 如果订单状态已更新，显示提示
           if (isPollingRequest && (orderData.status === "paid" || orderData.status === "completed")) {
-            toast.success("支付成功！");
+            toast.success(t("paymentSuccess"));
           }
         }
       } else {
-        setError(result.message || "获取订单失败");
+        setError(result.message || t("orderUnavailable"));
         setIsPolling(false);
       }
     } catch {
-      setError("获取订单失败");
+      setError(t("orderUnavailable"));
       setIsPolling(false);
     } finally {
       setIsLoading(false);
     }
-  }, [orderNo]);
+  }, [orderNo, t]);
 
   // 加载订单数据
   useEffect(() => {
@@ -196,7 +198,7 @@ export default function OrderResultPage({ searchParams }: OrderResultPageProps) 
     }
 
     if (!isLoggedIn) {
-      setError("请先登录查看订单");
+      setError(t("loginRequired"));
       setIsLoading(false);
       return;
     }
@@ -204,16 +206,16 @@ export default function OrderResultPage({ searchParams }: OrderResultPageProps) 
     // 重置轮询计数器
     pollCountRef.current = 0;
     loadOrder();
-  }, [sessionStatus, orderNo, isLoggedIn, loadOrder]);
+  }, [sessionStatus, orderNo, isLoggedIn, loadOrder, t]);
 
   const copyToClipboard = async (text: string, index: number) => {
     try {
       await navigator.clipboard.writeText(text);
       setCopiedIndex(index);
-      toast.success("已复制");
+      toast.success(t("copied"));
       setTimeout(() => setCopiedIndex(null), 2000);
     } catch {
-      toast.error("复制失败");
+      toast.error(t("copyFailed"));
     }
   };
 
@@ -222,8 +224,8 @@ export default function OrderResultPage({ searchParams }: OrderResultPageProps) 
     return (
       <CenteredStateCard
         icon={<Loader2 className="h-6 w-6 animate-spin" />}
-        title="加载中..."
-        description="正在获取订单信息"
+        title={t("loading")}
+        description={t("fetchingOrder")}
       />
     );
   }
@@ -233,11 +235,11 @@ export default function OrderResultPage({ searchParams }: OrderResultPageProps) 
     return (
       <CenteredStateCard
         icon={<XCircle className="h-6 w-6" />}
-        title="请先登录"
-        description="登录后才能查看订单与卡密信息"
+        title={t("loginRequired")}
+        description={t("signInToViewOrder")}
         actions={
           <Button asChild>
-            <Link href="/">返回首页</Link>
+            <Link href="/">{t("backHomePage")}</Link>
           </Button>
         }
       />
@@ -249,15 +251,15 @@ export default function OrderResultPage({ searchParams }: OrderResultPageProps) 
     return (
       <CenteredStateCard
         icon={<XCircle className="h-6 w-6" />}
-        title="订单号无效"
-        description="请从支付页面返回，或在“我的订单”中查看历史订单"
+        title={t("invalidOrderNo")}
+        description={t("invalidOrderHint")}
         actions={
           <div className="flex justify-center gap-3">
             <Button asChild variant="outline">
-              <Link href="/order/my">我的订单</Link>
+              <Link href="/order/my">{t("myOrders")}</Link>
             </Button>
             <Button asChild>
-              <Link href="/">返回首页</Link>
+              <Link href="/">{t("backHomePage")}</Link>
             </Button>
           </div>
         }
@@ -270,18 +272,18 @@ export default function OrderResultPage({ searchParams }: OrderResultPageProps) 
     return (
       <CenteredStateCard
         icon={<XCircle className="h-6 w-6" />}
-        title="无法获取订单"
+        title={t("orderUnavailable")}
         description={error}
         actions={
           <div className="flex justify-center gap-3">
             <Button asChild variant="outline">
               <Link href="/order/my">
                 <ShoppingBag className="mr-2 h-4 w-4" />
-                我的订单
+                {t("myOrders")}
               </Link>
             </Button>
             <Button asChild>
-              <Link href="/">返回首页</Link>
+              <Link href="/">{t("backHomePage")}</Link>
             </Button>
           </div>
         }
@@ -294,7 +296,7 @@ export default function OrderResultPage({ searchParams }: OrderResultPageProps) 
     return (
       <CenteredStateCard
         icon={<Loader2 className="h-6 w-6 animate-spin" />}
-        title="加载订单中..."
+        title={t("loadingOrder")}
       />
     );
   }
@@ -390,10 +392,10 @@ export default function OrderResultPage({ searchParams }: OrderResultPageProps) 
     try {
       await navigator.clipboard.writeText(order.orderNo);
       setIsOrderNoCopied(true);
-      toast.success("已复制订单号");
+      toast.success(t("copied"));
       setTimeout(() => setIsOrderNoCopied(false), 1500);
     } catch {
-      toast.error("复制失败");
+      toast.error(t("copyFailed"));
     }
   };
 
@@ -401,9 +403,9 @@ export default function OrderResultPage({ searchParams }: OrderResultPageProps) 
     if (!hasCards) return;
     try {
       await navigator.clipboard.writeText(order.cards.join("\n"));
-      toast.success(`已复制 ${order.cards.length} 个卡密`);
+      toast.success(`${t("copied")} ${order.cards.length}`);
     } catch {
-      toast.error("复制失败");
+      toast.error(t("copyFailed"));
     }
   };
 
@@ -471,15 +473,15 @@ export default function OrderResultPage({ searchParams }: OrderResultPageProps) 
           {/* Order Info */}
           <div className="rounded-2xl border bg-muted/20 p-4 space-y-3">
             <div className="flex items-center justify-between gap-3">
-              <div className="text-sm font-medium">订单信息</div>
+              <div className="text-sm font-medium">{t("orderInfo")}</div>
               <div className="text-[11px] text-muted-foreground">
-                请妥善保存订单号以便查询
+                {t("savingOrderNo")}
               </div>
             </div>
 
             <div className="space-y-2">
               <InfoItem
-                label="订单号"
+                label={t("orderNo")}
                 value={<code className="font-mono text-xs">{order.orderNo}</code>}
                 valueClassName="max-w-[220px]"
                 action={
@@ -500,17 +502,17 @@ export default function OrderResultPage({ searchParams }: OrderResultPageProps) 
                 }
               />
               <InfoItem
-                label="金额"
+                label={t("amount")}
                 value={
                   <span className="font-semibold tabular-nums">
                     ¥{order.totalAmount}
                   </span>
                 }
               />
-              <InfoItem label="数量" value={`${order.quantity} 件`} />
-              <InfoItem label="下单时间" value={formatLocalTime(order.createdAt)} />
+              <InfoItem label={t("quantity")} value={String(order.quantity)} />
+              <InfoItem label={t("placedAt")} value={formatLocalTime(order.createdAt)} />
               {order.paidAt ? (
-                <InfoItem label="支付时间" value={formatLocalTime(order.paidAt)} />
+                <InfoItem label={t("paidAt")} value={formatLocalTime(order.paidAt)} />
               ) : null}
             </div>
           </div>
@@ -522,7 +524,7 @@ export default function OrderResultPage({ searchParams }: OrderResultPageProps) 
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2 text-sm font-medium text-emerald-800 dark:text-emerald-200">
                     <Package className="h-4 w-4" />
-                    卡密信息
+                    {t("deliveryInfo")}
                     <Badge variant="secondary" className="ml-1">
                       {order.cards.length}
                     </Badge>
@@ -535,7 +537,7 @@ export default function OrderResultPage({ searchParams }: OrderResultPageProps) 
                     disabled={!hasCards}
                   >
                     <Copy className="mr-2 h-3 w-3" />
-                    复制全部
+                    {t("copyAll")}
                   </Button>
                 </div>
 
@@ -583,7 +585,7 @@ export default function OrderResultPage({ searchParams }: OrderResultPageProps) 
               <Button asChild className="justify-center">
                 <Link href={`/order/receipt/${order.orderNo}`}>
                   <ReceiptText className="mr-2 h-4 w-4" />
-                  支付成功凭证
+                  {t("paymentReceipt")}
                 </Link>
               </Button>
             ) : (
@@ -594,19 +596,19 @@ export default function OrderResultPage({ searchParams }: OrderResultPageProps) 
                 className="justify-center"
               >
                 <RefreshCw className={cn("mr-2 h-4 w-4", isRefreshing ? "animate-spin" : "")} />
-                刷新状态
+                {t("refreshStatus")}
               </Button>
             )}
             <Button asChild variant="outline" className="justify-center">
               <Link href="/order/my">
                 <ShoppingBag className="mr-2 h-4 w-4" />
-                我的订单
+                {t("myOrders")}
               </Link>
             </Button>
             <Button asChild variant="ghost" className="justify-center">
               <Link href="/">
                 <Home className="mr-2 h-4 w-4" />
-                返回首页
+                {t("backHomePage")}
               </Link>
             </Button>
           </div>

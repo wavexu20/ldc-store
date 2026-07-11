@@ -1,11 +1,15 @@
+"use client";
+
 import Link from "next/link";
 import { Github } from "lucide-react";
+import { useI18n } from "@/components/i18n-provider";
 
 interface FooterProps {
   siteName?: string;
 }
 
 export function Footer({ siteName = "LDC Store" }: FooterProps) {
+  const { t } = useI18n();
   return (
     <footer className="border-t border-border/50 bg-background/80 backdrop-blur-xl">
       <div className="mx-auto flex flex-col items-center justify-center gap-1 py-4 max-w-3xl px-4 text-sm text-muted-foreground">
@@ -26,7 +30,7 @@ export function Footer({ siteName = "LDC Store" }: FooterProps) {
         </div>
 
         <span className="text-xs text-muted-foreground/60">
-          本站与 Linux DO 官方无任何关系
+          {t("footerDisclaimer")}
         </span>
       </div>
     </footer>

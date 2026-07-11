@@ -11,11 +11,13 @@ import {
   FilterableProductItem,
   HomeCategoryFilter,
 } from "@/components/store/home-category-filter";
+import { getTranslator } from "@/lib/i18n-server";
 
 // 强制动态渲染，避免构建时查询数据库
 export const dynamic = "force-dynamic";
 
 async function HomeProductSection() {
+  const { t } = await getTranslator();
   const [categories, products] = await Promise.all([
     getActiveCategories(),
     getActiveProducts({ limit: 100 }),
@@ -31,8 +33,8 @@ async function HomeProductSection() {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
         <Package className="mb-4 h-12 w-12 opacity-50" />
-        <p className="text-lg font-medium">暂无商品</p>
-        <p className="mt-1 text-sm">请稍后再来看看吧</p>
+        <p className="text-lg font-medium">{t("noProducts")}</p>
+        <p className="mt-1 text-sm">{t("comeBackLater")}</p>
       </div>
     );
   }

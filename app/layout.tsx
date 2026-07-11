@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Providers } from "@/components/providers";
+import { I18nProvider } from "@/components/i18n-provider";
+import { localeMeta } from "@/lib/i18n";
+import { getLocale } from "@/lib/i18n-server";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -25,17 +28,18 @@ export const metadata: Metadata = {
   keywords: ["自动发卡", "虚拟商品", "Linux DO", "LDC"],
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const locale = await getLocale();
   return (
-    <html lang="zh-CN" suppressHydrationWarning>
+    <html lang={localeMeta[locale].htmlLang} suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased`}
       >
-        <Providers>{children}</Providers>
+        <Providers><I18nProvider initialLocale={locale}>{children}</I18nProvider></Providers>
       </body>
     </html>
   );

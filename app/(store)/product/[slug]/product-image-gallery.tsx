@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/components/i18n-provider";
 
 interface ProductImageGalleryProps {
   productName: string;
@@ -13,6 +14,7 @@ export function ProductImageGallery({
   productName,
   images,
 }: ProductImageGalleryProps) {
+  const { t } = useI18n();
   const safeImages = useMemo(() => images.filter((url) => url.trim().length > 0), [images]);
   const [selectedUrl, setSelectedUrl] = useState(() => safeImages[0] ?? "");
   const displayUrl = safeImages.includes(selectedUrl) ? selectedUrl : safeImages[0] ?? "";
@@ -43,7 +45,7 @@ export function ProductImageGallery({
                 key={`${url}-${index}`}
                 type="button"
                 onClick={() => setSelectedUrl(url)}
-                aria-label={`查看图片 ${index + 1}`}
+                aria-label={t("imageOf", { index: index + 1, total: safeImages.length })}
                 className={cn(
                   "relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border bg-muted/30 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
                   isActive
@@ -53,7 +55,7 @@ export function ProductImageGallery({
               >
                 <Image
                   src={url}
-                  alt={`${productName} - 图片 ${index + 1}`}
+                  alt={`${productName} - ${t("imageOf", { index: index + 1, total: safeImages.length })}`}
                   fill
                   sizes="64px"
                   className="object-cover"

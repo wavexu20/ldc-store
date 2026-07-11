@@ -7,13 +7,15 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 
 import { getCustomersSpendLeaderboard } from "@/lib/actions/customers";
+import { getTranslator } from "@/lib/i18n-server";
 
 // 强制动态渲染，避免构建时查询数据库
 export const dynamic = "force-dynamic";
 
-export const metadata: Metadata = {
-  title: "顾客消费榜",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getTranslator();
+  return { title: t("leaderboard") };
+}
 
 function formatAmount(value: string): string {
   const num = Number.parseFloat(value || "0");
@@ -41,16 +43,17 @@ function getRankAvatarStyles(rank: number): string {
 }
 
 export default async function CustomersLeaderboardPage() {
+  const { t } = await getTranslator();
   const items = await getCustomersSpendLeaderboard({ limit: 50 });
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 space-y-6">
       <div className="space-y-2">
         <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-50">
-          顾客消费榜
+          {t("leaderboard")}
         </h1>
         <p className="text-sm text-zinc-600 dark:text-zinc-400">
-          统计口径：仅统计已完成订单
+          {t("leaderboardDescription")}
         </p>
       </div>
 
@@ -67,10 +70,10 @@ export default async function CustomersLeaderboardPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-16">排名</TableHead>
-                    <TableHead>顾客</TableHead>
-                    <TableHead className="text-right">完成订单</TableHead>
-                    <TableHead className="text-right">累计消费</TableHead>
+                    <TableHead className="w-16">{t("rank")}</TableHead>
+                    <TableHead>{t("customer")}</TableHead>
+                    <TableHead className="text-right">{t("completedOrders")}</TableHead>
+                    <TableHead className="text-right">{t("totalSpent")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -92,7 +95,7 @@ export default async function CustomersLeaderboardPage() {
                             <Avatar className={`h-8 w-8 ${avatarStyles}`}>
                               <AvatarImage
                                 src={row.userImage || undefined}
-                                alt={row.username || "用户头像"}
+                                alt={row.username || t("userAvatar")}
                               />
                               <AvatarFallback className="text-xs font-medium">
                                 {row.username?.charAt(0).toUpperCase() || "U"}
@@ -117,7 +120,7 @@ export default async function CustomersLeaderboardPage() {
             </div>
           ) : (
             <div className="rounded-lg border py-12 text-center text-sm text-muted-foreground">
-              暂无数据
+              {t("noData")}
             </div>
           )}
         </CardContent>

@@ -33,6 +33,8 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { formatShortTime } from "@/lib/time";
+import { useI18n } from "@/components/i18n-provider";
+import type { MessageKey } from "@/lib/i18n";
 
 interface OrderData {
   orderNo: string;
@@ -48,48 +50,49 @@ interface OrderData {
 
 const statusConfig: Record<
   string,
-  { label: string; variant: "default" | "secondary" | "destructive" | "outline"; icon: React.ReactNode; className?: string }
+  { label: MessageKey; variant: "default" | "secondary" | "destructive" | "outline"; icon: React.ReactNode; className?: string }
 > = {
   pending: {
-    label: "待支付",
+    label: "pending",
     variant: "outline",
     icon: <Clock className="h-3 w-3" />,
   },
   paid: {
-    label: "已支付",
+    label: "paid",
     variant: "default",
     icon: <CheckCircle2 className="h-3 w-3" />,
   },
   completed: {
-    label: "已完成",
+    label: "completed",
     variant: "default",
     icon: <CheckCircle2 className="h-3 w-3" />,
     className: "bg-green-600 hover:bg-green-600/90",
   },
   expired: {
-    label: "已过期",
+    label: "expired",
     variant: "secondary",
     icon: <XCircle className="h-3 w-3" />,
   },
   refund_pending: {
-    label: "退款审核中",
+    label: "refundPending",
     variant: "outline",
     icon: <RotateCcw className="h-3 w-3" />,
     className: "border-amber-500 text-amber-600",
   },
   refund_rejected: {
-    label: "退款已拒绝",
+    label: "refundRejected",
     variant: "secondary",
     icon: <Ban className="h-3 w-3" />,
   },
   refunded: {
-    label: "已退款",
+    label: "refunded",
     variant: "destructive",
     icon: <AlertCircle className="h-3 w-3" />,
   },
 };
 
 export default function MyOrdersPage() {
+  const { t } = useI18n();
   const { data: session, status: sessionStatus } = useSession();
   const router = useRouter();
   const [orders, setOrders] = useState<OrderData[] | null>(null);
@@ -127,15 +130,15 @@ export default function MyOrdersPage() {
       if (result.success) {
         setOrders(result.data as OrderData[]);
       } else {
-        toast.error(result.message || "获取订单失败");
+        toast.error(result.message || t("orderFailed"));
       }
     } catch {
-      toast.error("获取订单失败");
+      toast.error(t("orderFailed"));
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     if (sessionStatus === "loading") return;
@@ -152,19 +155,19 @@ export default function MyOrdersPage() {
     try {
       await navigator.clipboard.writeText(text);
       setCopiedCard(cardId);
-      toast.success("已复制");
+      toast.success(t("copied"));
       setTimeout(() => setCopiedCard(null), 2000);
     } catch {
-      toast.error("复制失败");
+      toast.error(t("copyFailed"));
     }
   };
 
   const copyAllCards = async (cards: string[]) => {
     try {
       await navigator.clipboard.writeText(cards.join("\n"));
-      toast.success(`已复制 ${cards.length} 张卡密`);
+      toast.success(`${t("copied")} ${cards.length}`);
     } catch {
-      toast.error("复制失败");
+      toast.error(t("copyFailed"));
     }
   };
 
@@ -216,7 +219,7 @@ export default function MyOrdersPage() {
     <div className="container mx-auto max-w-2xl px-4 py-8">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-xl font-semibold">我的订单</h1>
+        <h1 className="text-xl font-semibold">{t("myOrders")}</h1>
         <Button
           variant="ghost"
           size="sm"
@@ -254,7 +257,7 @@ export default function MyOrdersPage() {
                   </div>
                   <Badge variant={status.variant} className={`shrink-0 text-xs ${status.className || ""}`}>
                     {status.icon}
-                    <span className="ml-1">{status.label}</span>
+                    <span className="ml-1">{t(status.label)}</span>
                   </Badge>
                   <ChevronRight
                     className={`h-4 w-4 text-muted-foreground shrink-0 transition-transform ${
@@ -268,12 +271,12 @@ export default function MyOrdersPage() {
                   <div className="px-4 pb-4 border-t bg-muted/30">
                     <div className="py-3 space-y-2 text-sm">
                       <div className="flex justify-between">
-                        <span className="text-muted-foreground">订单号</span>
+                        <span className="text-muted-foreground">{t("orderNo")}</span>
                         <span className="font-mono text-xs">{order.orderNo}</span>
                       </div>
                       {order.paidAt && (
                         <div className="flex justify-between">
-                          <span className="text-muted-foreground">支付时间</span>
+                          <span className="text-muted-foreground">{t("paidAt")}</span>
                           <span>{new Date(order.paidAt).toLocaleString("zh-CN")}</span>
                         </div>
                       )}
@@ -287,7 +290,7 @@ export default function MyOrdersPage() {
                             onClick={(e) => e.stopPropagation()}
                           >
                             <ReceiptText className="h-3 w-3 mr-1" />
-                            支付成功凭证
+                            {t("paymentReceipt")}
                           </Link>
                         </Button>
                       </div>
@@ -394,9 +397,9 @@ export default function MyOrdersPage() {
       ) : (
         <div className="text-center py-16 border rounded-lg bg-card">
           <Package className="h-10 w-10 mx-auto text-muted-foreground/50" />
-          <p className="mt-3 text-muted-foreground">暂无订单</p>
+          <p className="mt-3 text-muted-foreground">{t("noOrders")}</p>
           <Button asChild variant="outline" className="mt-4" size="sm">
-            <Link href="/">去购物</Link>
+            <Link href="/">{t("backHome")}</Link>
           </Button>
         </div>
       )}

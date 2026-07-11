@@ -4,6 +4,8 @@ import { Header } from "@/components/store/header";
 import { Footer } from "@/components/store/footer";
 import { Toaster } from "@/components/ui/sonner";
 import { getSystemSettings } from "@/lib/actions/system-settings";
+import { LanguageSwitcher } from "@/components/language-switcher";
+import { getTranslator } from "@/lib/i18n-server";
 
 // 强制动态渲染，避免构建时查询数据库
 export const dynamic = "force-dynamic";
@@ -13,10 +15,11 @@ const getSystemSettingsCached = cache(getSystemSettings);
 
 export async function generateMetadata(): Promise<Metadata> {
   const { siteName, siteDescription } = await getSystemSettingsCached();
+  const { locale } = await getTranslator();
 
   return {
     title: {
-      default: `${siteName} - 自动发卡系统`,
+      default: locale === "zh" ? `${siteName} - 自动发卡系统` : `${siteName} - Digital Goods Store`,
       template: `%s | ${siteName}`,
     },
     description: siteDescription,
@@ -35,6 +38,7 @@ export default async function StoreLayout({
       <Header siteName={siteName} siteIcon={siteIcon} siteIconUrl={siteIconUrl} />
       <main className="flex-1">{children}</main>
       <Footer siteName={siteName} />
+      <LanguageSwitcher />
       <Toaster position="top-center" richColors />
     </div>
   );

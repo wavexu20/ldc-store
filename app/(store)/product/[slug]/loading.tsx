@@ -1,14 +1,16 @@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { ChevronLeft } from "lucide-react";
+import { getTranslator } from "@/lib/i18n-server";
 
-export default function ProductLoading() {
+export default async function ProductLoading() {
+  const { t } = await getTranslator();
   return (
     <div className="mx-auto max-w-3xl px-4 py-6">
       {/* Back */}
       <div className="mb-6 inline-flex items-center gap-1 text-sm text-muted-foreground">
         <ChevronLeft className="h-4 w-4" />
-        返回首页
+        {t("backHomePage")}
       </div>
 
       {/* Header */}

@@ -9,6 +9,7 @@ import { OrderForm } from "./order-form";
 import { renderMarkdownToSafeHtml } from "@/lib/markdown";
 import { ProductImageGallery } from "./product-image-gallery";
 import { RestockRequestInline } from "@/components/store/restock-request-inline";
+import { getTranslator } from "@/lib/i18n-server";
 
 // 强制动态渲染，避免构建时查询数据库（docker build 无需 DATABASE_URL）
 export const dynamic = "force-dynamic";
@@ -21,11 +22,12 @@ interface ProductPageProps {
 }
 
 export async function generateMetadata({ params }: ProductPageProps) {
+  const { t } = await getTranslator();
   const { slug } = await params;
   const product = await getProductBySlugCached(slug);
 
   if (!product) {
-    return { title: "商品未找到" };
+    return { title: t("productNotFound") };
   }
 
   return {
@@ -35,6 +37,7 @@ export async function generateMetadata({ params }: ProductPageProps) {
 }
 
 export default async function ProductPage({ params }: ProductPageProps) {
+  const { t } = await getTranslator();
   const { slug } = await params;
   const product = await getProductBySlugCached(slug);
 
@@ -63,7 +66,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
         className="mb-6 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
       >
         <ChevronLeft className="h-4 w-4" />
-        返回首页
+        {t("backHomePage")}
       </Link>
 
       {/* Header */}
@@ -77,7 +80,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
           </div>
           <div className="flex gap-2 shrink-0">
             {product.isFeatured && (
-              <Badge variant="secondary">热门</Badge>
+              <Badge variant="secondary">{t("popular")}</Badge>
             )}
             {product.category && (
               <Badge variant="outline">{product.category.name}</Badge>
@@ -98,9 +101,9 @@ export default async function ProductPage({ params }: ProductPageProps) {
         </div>
         <div className="text-sm text-muted-foreground">
           {isOutOfStock ? (
-            <span className="text-destructive">暂无库存</span>
+            <span className="text-destructive">{t("outOfStock")}</span>
           ) : (
-            <span>库存 {product.stock} · 已售 {product.salesCount}</span>
+            <span>{t("inStockSold", { stock: product.stock, sold: product.salesCount })}</span>
           )}
         </div>
       </div>
@@ -109,9 +112,9 @@ export default async function ProductPage({ params }: ProductPageProps) {
       {isOutOfStock ? (
         <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-6">
           <div className="text-center">
-            <p className="font-medium text-destructive">商品暂时缺货</p>
+            <p className="font-medium text-destructive">{t("temporarilyOut")}</p>
             <p className="mt-1 text-sm text-muted-foreground">
-              你可以先催补货，我们会根据需求优先补充库存。
+              {t("restockPriority")}
             </p>
           </div>
 
@@ -144,7 +147,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
         <>
           <Separator className="my-6" />
           <div>
-            <h2 className="mb-3 font-medium">商品详情</h2>
+            <h2 className="mb-3 font-medium">{t("productDetails")}</h2>
             {uniqueImageUrls.length > 0 && (
               <ProductImageGallery
                 productName={product.name}

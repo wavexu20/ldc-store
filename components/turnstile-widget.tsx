@@ -66,7 +66,7 @@ export function TurnstileWidget({
         strategy="afterInteractive"
         onLoad={renderWidget}
       />
-      <div ref={containerRef} className="min-h-[65px] w-full" aria-label="Cloudflare 人机验证" />
+      <div ref={containerRef} className="min-h-[65px] w-full" aria-label="Cloudflare Turnstile" />
     </>
   );
 }

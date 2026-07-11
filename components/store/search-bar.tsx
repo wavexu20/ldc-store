@@ -6,6 +6,7 @@ import { Search, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useI18n } from "@/components/i18n-provider";
 
 function buildSearchUrl(params: URLSearchParams): string {
   const queryString = params.toString();
@@ -13,7 +14,7 @@ function buildSearchUrl(params: URLSearchParams): string {
 }
 
 export function SearchBar({
-  placeholder = "搜索商品…",
+  placeholder,
   autoSubmitOnTyping,
   onAfterSubmit,
   autoFocus,
@@ -25,6 +26,7 @@ export function SearchBar({
   autoFocus?: boolean;
   className?: string;
 }) {
+  const { t } = useI18n();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -113,13 +115,13 @@ export function SearchBar({
               submit();
             }
           }}
-          placeholder={placeholder}
+          placeholder={placeholder || t("searchProducts")}
           className="pl-9 pr-9"
           autoFocus={autoFocus}
-          aria-label="搜索商品"
+          aria-label={t("search")}
         />
         <button type="button" className="sr-only" onClick={submit}>
-          提交搜索
+          {t("submitSearch")}
         </button>
         {value ? (
           <Button
@@ -128,7 +130,7 @@ export function SearchBar({
             size="icon"
             className="absolute right-1 top-1/2 h-7 w-7 -translate-y-1/2"
             onClick={clear}
-            aria-label="清空搜索"
+            aria-label={t("clearSearch")}
           >
             <X className="h-4 w-4" />
           </Button>

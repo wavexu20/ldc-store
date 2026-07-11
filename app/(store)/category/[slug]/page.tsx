@@ -5,6 +5,7 @@ import { getActiveProducts } from "@/lib/actions/products";
 import { ProductCard } from "@/components/store/product-card";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, Package, Grid3X3 } from "lucide-react";
+import { getTranslator } from "@/lib/i18n-server";
 
 // 强制动态渲染，避免构建时查询数据库（docker build 无需 DATABASE_URL）
 export const dynamic = "force-dynamic";
@@ -14,20 +15,22 @@ interface CategoryPageProps {
 }
 
 export async function generateMetadata({ params }: CategoryPageProps) {
+  const { t } = await getTranslator();
   const { slug } = await params;
   const category = await getCategoryBySlug(slug);
 
   if (!category) {
-    return { title: "分类未找到" };
+    return { title: t("categoryNotFound") };
   }
 
   return {
     title: `${category.name} - LDC Store`,
-    description: category.description || `${category.name} 分类商品`,
+    description: category.description || t("categoryProducts", { name: category.name }),
   };
 }
 
 export default async function CategoryPage({ params }: CategoryPageProps) {
+  const { t } = await getTranslator();
   const { slug } = await params;
   const category = await getCategoryBySlug(slug);
 
@@ -45,7 +48,7 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
       {/* Breadcrumb */}
       <nav className="mb-6 flex items-center gap-2 text-sm text-zinc-500">
         <Link href="/" className="hover:text-violet-600">
-          首页
+          {t("home")}
         </Link>
         <ChevronLeft className="h-4 w-4 rotate-180" />
         <span className="text-zinc-900 dark:text-zinc-100">{category.name}</span>
@@ -96,13 +99,13 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <Package className="h-16 w-16 text-zinc-300 dark:text-zinc-700" />
           <h3 className="mt-4 text-lg font-medium text-zinc-900 dark:text-zinc-100">
-            该分类暂无商品
+            {t("emptyCategory")}
           </h3>
-          <p className="mt-2 text-sm text-zinc-500">商品即将上架，敬请期待</p>
+          <p className="mt-2 text-sm text-zinc-500">{t("productsComingSoon")}</p>
           <Link href="/" className="mt-6">
             <Button variant="outline" className="gap-2">
               <ChevronLeft className="h-4 w-4" />
-              返回首页
+              {t("backHomePage")}
             </Button>
           </Link>
         </div>

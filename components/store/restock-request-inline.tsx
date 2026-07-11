@@ -4,6 +4,7 @@ import { useMemo, useState, useSyncExternalStore, useTransition } from "react";
 import { signIn, useSession } from "next-auth/react";
 import { BellRing, CheckCircle2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { useI18n } from "@/components/i18n-provider";
 
 import { cn } from "@/lib/utils";
 import { requestRestock } from "@/lib/actions/restock-requests";
@@ -74,6 +75,7 @@ export function RestockRequestInline({
   className,
   size = "sm",
 }: RestockRequestInlineProps) {
+  const { t } = useI18n();
   const [isPending, startTransition] = useTransition();
   const { data: session, status } = useSession();
 
@@ -97,7 +99,7 @@ export function RestockRequestInline({
 
   const handleRequest = () => {
     if (!isLoggedIn) {
-      toast.error("请先登录后再催补货");
+      toast.error(t("restockLogin"));
       signIn(undefined, { callbackUrl: window.location.href });
       return;
     }
@@ -105,7 +107,7 @@ export function RestockRequestInline({
     startTransition(async () => {
       const result = await requestRestock(productId);
       if (!result.success) {
-        toast.error("催补货失败", { description: result.message });
+        toast.error(t("requestRestockFailed"), { description: result.message });
         return;
       }
 
@@ -130,10 +132,10 @@ export function RestockRequestInline({
   };
 
   const buttonLabel = (() => {
-    if (status === "loading") return "加载中";
-    if (!isLoggedIn) return "登录后催补货";
-    if (requestedByMe) return "已催补货";
-    return "催补货";
+    if (status === "loading") return t("loading");
+    if (!isLoggedIn) return t("restockLogin");
+    if (requestedByMe) return t("restockRequested");
+    return t("requestRestock");
   })();
 
   return (
@@ -151,7 +153,7 @@ export function RestockRequestInline({
                     avatarSizeClassName
                   )}
                 >
-                  <AvatarImage src={u.userImage ?? undefined} alt={`${u.username} 的头像`} />
+                  <AvatarImage src={u.userImage ?? undefined} alt={t("requesterAvatar", { name: u.username })} />
                   <AvatarFallback className="text-[10px] font-semibold text-muted-foreground">
                     {(u.username || "?").slice(0, 1).toUpperCase()}
                   </AvatarFallback>
@@ -164,7 +166,7 @@ export function RestockRequestInline({
                     "relative z-10 flex items-center justify-center rounded-full bg-muted text-[10px] font-semibold text-muted-foreground ring-2 ring-background",
                     avatarSizeClassName
                   )}
-                  aria-label={`还有 ${remainingCount} 人已催补货`}
+                  aria-label={t("moreRequesters", { count: remainingCount })}
                 >
                   +{remainingCount}
                 </div>
@@ -172,12 +174,12 @@ export function RestockRequestInline({
             </div>
 
             <div className={cn("tabular-nums text-muted-foreground", textClassName)}>
-              {count} 人已催
+              {t("peopleRequested", { count })}
             </div>
           </>
         ) : (
           <div className={cn("tabular-nums text-muted-foreground", textClassName)}>
-            还没人催
+            {t("noRestockRequests")}
           </div>
         )}
       </div>

@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Loader2, Minus, Plus, CheckCircle2, WalletCards } from "lucide-react";
+import { useI18n } from "@/components/i18n-provider";
 
 const orderFormSchema = z.object({
   quantity: z.number().int().min(1),
@@ -37,6 +38,7 @@ export function OrderForm({
   maxQuantity,
 }: OrderFormProps) {
   const [isPending, startTransition] = useTransition();
+  const { t } = useI18n();
   const [paymentMethod, setPaymentMethod] = useState<"gateway" | "balance">("gateway");
   const router = useRouter();
   const { data: session, status } = useSession();
@@ -69,7 +71,7 @@ export function OrderForm({
 
   const onSubmit = (values: OrderFormValues) => {
     if (!isLoggedIn) {
-      toast.error("请先登录");
+      toast.error(t("loginRequired"));
       return;
     }
 
@@ -81,8 +83,8 @@ export function OrderForm({
       });
 
       if (result.success) {
-        toast.success("订单创建成功", {
-          description: `订单号: ${result.orderNo}`,
+        toast.success(t("orderCreated"), {
+          description: t("orderNumberValue", { number: result.orderNo || "" }),
         });
 
         // 保存订单号到 localStorage，用于支付完成后回调页面读取
@@ -94,7 +96,7 @@ export function OrderForm({
             return;
           }
           if (!result.paymentForm.actionUrl || !result.paymentForm.params) {
-            throw new Error("支付链接无效");
+            throw new Error(t("invalidPaymentLink"));
           }
           const form = document.createElement("form");
           form.method = "POST";
@@ -115,7 +117,7 @@ export function OrderForm({
           router.push(`/order/result?out_trade_no=${result.orderNo}`);
         }
       } else {
-        toast.error("下单失败", {
+        toast.error(t("orderFailed"), {
           description: result.message,
         });
       }
@@ -137,11 +139,11 @@ export function OrderForm({
       <div className="space-y-4">
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-center dark:border-amber-900 dark:bg-amber-950">
           <p className="text-sm text-amber-700 dark:text-amber-300">
-            请登录后购买商品
+            {t("signInToBuy")}
           </p>
         </div>
         <Button onClick={handleLogin} className="w-full">
-          登录或创建账号
+          {t("loginTitle")}
         </Button>
       </div>
     );
@@ -153,21 +155,21 @@ export function OrderForm({
       <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300">
         <CheckCircle2 className="h-4 w-4 flex-shrink-0" />
         <span>
-          已登录为 <strong>{user?.name || user?.username}</strong>，支付完成后可在「我的订单」查看卡密
+          {t("signedInAs", { name: user?.name || user?.username || "" })}
         </span>
       </div>
 
       <div className="space-y-2">
-        <Label>支付方式</Label>
+        <Label>{t("paymentMethod")}</Label>
         <div className="grid grid-cols-2 gap-2">
-          <Button type="button" variant={paymentMethod === "gateway" ? "default" : "outline"} onClick={() => setPaymentMethod("gateway")}>在线支付</Button>
-          <Button type="button" variant={paymentMethod === "balance" ? "default" : "outline"} onClick={() => setPaymentMethod("balance")}><WalletCards />账户余额</Button>
+          <Button type="button" variant={paymentMethod === "gateway" ? "default" : "outline"} onClick={() => setPaymentMethod("gateway")}>{t("onlinePayment")}</Button>
+          <Button type="button" variant={paymentMethod === "balance" ? "default" : "outline"} onClick={() => setPaymentMethod("balance")}><WalletCards />{t("accountBalance")}</Button>
         </div>
       </div>
 
       {/* Quantity */}
       <div className="space-y-2">
-        <Label>数量</Label>
+        <Label>{t("quantity")}</Label>
         <div className="flex items-center gap-3">
           <div className="flex items-center rounded-md border">
             <Button
@@ -203,7 +205,7 @@ export function OrderForm({
             </Button>
           </div>
           <span className="text-sm text-muted-foreground">
-            限购 {minQuantity}-{effectiveMax} 件
+            {t("purchaseLimit", { min: minQuantity, max: effectiveMax })}
           </span>
         </div>
       </div>
@@ -218,10 +220,10 @@ export function OrderForm({
           {isPending ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              处理中
+              {t("processing")}
             </>
           ) : (
-            "立即购买"
+            t("buyNow")
           )}
         </Button>
       </div>
