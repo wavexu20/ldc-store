@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { QRCodeSVG } from "qrcode.react";
-import { Check, KeyRound, Loader2, ShieldCheck, Smartphone } from "lucide-react";
+import { Check, Eye, EyeOff, KeyRound, Loader2, ShieldCheck, Smartphone } from "lucide-react";
 import { toast } from "sonner";
 import { beginTwoFactorSetup, disableTwoFactor, enableTwoFactor, setAccountPassword } from "@/lib/actions/security";
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,9 @@ export function SecuritySettings({ overview }: { overview: SecurityOverview }) {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [setup, setSetup] = useState<{ secret: string; otpauthUrl: string } | null>(null);
   const [twoFactorCode, setTwoFactorCode] = useState("");
   const [recoveryCodes, setRecoveryCodes] = useState<string[] | null>(null);
@@ -83,9 +86,9 @@ export function SecuritySettings({ overview }: { overview: SecurityOverview }) {
     <div><h1 className="text-2xl font-semibold">账号与安全</h1><p className="mt-1 text-sm text-muted-foreground">管理密码和登录验证方式</p></div>
     <Card><CardHeader><CardTitle className="flex items-center gap-2 text-lg"><KeyRound className="size-5" />密码</CardTitle><CardDescription>{overview.hasPassword ? "设置强密码并定期更新" : "为第三方登录账号设置本地密码"}</CardDescription></CardHeader><CardContent>
       <form className="space-y-4" onSubmit={savePassword}>
-        {overview.hasPassword && <div className="space-y-2"><Label htmlFor="current-password">当前密码</Label><Input id="current-password" type="password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} required /></div>}
-        <div className="space-y-2"><Label htmlFor="new-password">新密码</Label><Input id="new-password" type="password" minLength={PASSWORD_MIN_LENGTH} maxLength={PASSWORD_MAX_LENGTH} autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} required /><ul className="space-y-1 text-xs">{passwordRules.map((rule) => <li className={rule.met ? "flex items-center gap-1 text-emerald-600" : "flex items-center gap-1 text-muted-foreground"} key={rule.label}><Check className="size-3" />{rule.label}</li>)}</ul></div>
-        <div className="space-y-2"><Label htmlFor="confirm-password">确认新密码</Label><Input id="confirm-password" type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} required />{confirmPassword && confirmPassword !== newPassword ? <p className="text-xs text-destructive">两次输入的密码不一致</p> : null}</div>
+        {overview.hasPassword && <div className="space-y-2"><Label htmlFor="current-password">当前密码</Label><PasswordField id="current-password" value={currentPassword} onChange={setCurrentPassword} visible={showCurrentPassword} onVisibilityChange={setShowCurrentPassword} autoComplete="current-password" /></div>}
+        <div className="space-y-2"><Label htmlFor="new-password">新密码</Label><PasswordField id="new-password" value={newPassword} onChange={setNewPassword} visible={showNewPassword} onVisibilityChange={setShowNewPassword} minLength={PASSWORD_MIN_LENGTH} maxLength={PASSWORD_MAX_LENGTH} autoComplete="new-password" /><ul className="space-y-1 text-xs">{passwordRules.map((rule) => <li className={rule.met ? "flex items-center gap-1 text-emerald-600" : "flex items-center gap-1 text-muted-foreground"} key={rule.label}><Check className="size-3" />{rule.label}</li>)}</ul></div>
+        <div className="space-y-2"><Label htmlFor="confirm-password">确认新密码</Label><PasswordField id="confirm-password" value={confirmPassword} onChange={setConfirmPassword} visible={showConfirmPassword} onVisibilityChange={setShowConfirmPassword} autoComplete="new-password" />{confirmPassword && confirmPassword !== newPassword ? <p className="text-xs text-destructive">两次输入的密码不一致</p> : null}</div>
         <Button disabled={pending || !passwordReady} type="submit">{pending ? <Loader2 className="animate-spin" /> : <KeyRound />}{overview.hasPassword ? "更新密码" : "设置密码"}</Button>
       </form>
     </CardContent></Card>
@@ -96,5 +99,20 @@ export function SecuritySettings({ overview }: { overview: SecurityOverview }) {
       {setup && <div className="space-y-4"><div className="rounded-xl border bg-muted/20 p-5 text-center"><p className="mb-4 text-sm font-medium">使用 Google Authenticator、Microsoft Authenticator 或 1Password 扫描二维码</p><div className="mx-auto inline-flex rounded-lg bg-white p-3"><QRCodeSVG value={setup.otpauthUrl} size={176} level="M" title="Game3DTech verification QR code" /></div><p className="mt-4 text-xs text-muted-foreground">无法扫描？手动输入密钥：</p><code className="mt-2 block select-all break-all rounded bg-background p-2 text-xs">{setup.secret}</code></div><div className="space-y-2"><Label htmlFor="two-factor-code">输入验证器中的 6 位验证码</Label><Input id="two-factor-code" inputMode="numeric" maxLength={6} placeholder="000000" value={twoFactorCode} onChange={(event) => setTwoFactorCode(event.target.value.replace(/\D/g, ""))} /></div><div className="flex gap-2"><Button disabled={pending || twoFactorCode.length !== 6} onClick={confirmSetup}>{pending ? <Loader2 className="animate-spin" /> : <ShieldCheck />}确认开启</Button><Button variant="ghost" disabled={pending} onClick={() => { setSetup(null); setTwoFactorCode(""); }}>取消</Button></div></div>}
       {twoFactorEnabled && <div className="border-t pt-4"><p className="mb-3 text-sm text-muted-foreground">关闭前，请输入验证器验证码或一组恢复码。</p><div className="flex flex-col gap-2 sm:flex-row"><Input aria-label="关闭二次验证验证码" placeholder="6 位验证码或恢复码" value={disableCode} onChange={(event) => setDisableCode(event.target.value)} /><Button variant="destructive" disabled={pending || !disableCode} onClick={turnOff}>关闭二次验证</Button></div></div>}
     </CardContent></Card>
+  </div>;
+}
+
+function PasswordField({ id, value, onChange, visible, onVisibilityChange, ...inputProps }: {
+  id: string;
+  value: string;
+  onChange: (value: string) => void;
+  visible: boolean;
+  onVisibilityChange: (visible: boolean) => void;
+} & Omit<React.ComponentProps<typeof Input>, "id" | "type" | "value" | "onChange">) {
+  return <div className="relative">
+    <Input {...inputProps} id={id} className="pr-10" type={visible ? "text" : "password"} value={value} onChange={(event) => onChange(event.target.value)} required />
+    <Button className="absolute right-0 top-0 h-9 w-9 text-muted-foreground hover:text-foreground" variant="ghost" size="icon" type="button" aria-label={visible ? "隐藏密码" : "显示密码"} aria-pressed={visible} title={visible ? "隐藏密码" : "显示密码"} onClick={() => onVisibilityChange(!visible)}>
+      {visible ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+    </Button>
   </div>;
 }
