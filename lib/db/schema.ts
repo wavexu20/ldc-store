@@ -54,6 +54,14 @@ const rechargeStatusValues = [
   "expired",
   "cancelled",
 ] as const;
+const memberAssetValues = ["bonus", "points"] as const;
+const memberTransactionTypeValues = [
+  "recharge_bonus",
+  "purchase",
+  "purchase_reward",
+  "refund",
+  "adjustment",
+] as const;
 const supportConversationStatusValues = ["open", "closed"] as const;
 const supportSenderValues = ["visitor", "admin", "system"] as const;
 
@@ -75,7 +83,10 @@ export const users = sqliteTable("users", {
   passwordHash: text("password_hash"),
   role: text("role", { enum: userRoleValues }).default("user").notNull(),
   status: text("status", { enum: userStatusValues }).default("active").notNull(),
+  memberNo: text("member_no").unique(),
   balanceCents: integer("balance_cents").default(0).notNull(),
+  bonusBalanceCents: integer("bonus_balance_cents").default(0).notNull(),
+  pointsBalance: integer("points_balance").default(0).notNull(),
   emailVerifiedAt: timestamp("email_verified_at"),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
@@ -118,6 +129,7 @@ export const rechargeOrders = sqliteTable("recharge_orders", {
   rechargeNo: text("recharge_no").notNull().unique(),
   userId: text("user_id").references(() => users.id, { onDelete: "restrict" }).notNull(),
   amountCents: integer("amount_cents").notNull(),
+  bonusCents: integer("bonus_cents").default(0).notNull(),
   // 数据库默认值保留为 ldc 兼容历史库；新充值单显式写入 gateway。
   provider: text("provider").default("ldc").notNull(),
   status: text("status", { enum: rechargeStatusValues }).default("pending").notNull(),
@@ -129,6 +141,23 @@ export const rechargeOrders = sqliteTable("recharge_orders", {
 }, (table) => [
   index("recharge_orders_user_created_idx").on(table.userId, table.createdAt),
   index("recharge_orders_status_idx").on(table.status),
+]);
+
+export const memberTransactions = sqliteTable("member_transactions", {
+  id: id("id"),
+  userId: text("user_id").references(() => users.id, { onDelete: "restrict" }).notNull(),
+  asset: text("asset", { enum: memberAssetValues }).notNull(),
+  type: text("type", { enum: memberTransactionTypeValues }).notNull(),
+  amount: integer("amount").notNull(),
+  balanceAfter: integer("balance_after").notNull(),
+  referenceType: text("reference_type"),
+  referenceId: text("reference_id"),
+  idempotencyKey: text("idempotency_key").notNull().unique(),
+  description: text("description"),
+  createdAt: createdAt(),
+}, (table) => [
+  index("member_transactions_user_created_idx").on(table.userId, table.createdAt),
+  index("member_transactions_reference_idx").on(table.referenceType, table.referenceId),
 ]);
 
 export const emailVerificationTokens = sqliteTable("email_verification_tokens", {
@@ -236,6 +265,11 @@ export const orders = sqliteTable("orders", {
   productPrice: text("product_price").notNull(), // 冗余存储单价
   quantity: integer("quantity").notNull(),
   totalAmount: text("total_amount").notNull(),
+  originalAmount: text("original_amount"),
+  cashSpentCents: integer("cash_spent_cents").default(0).notNull(),
+  bonusSpentCents: integer("bonus_spent_cents").default(0).notNull(),
+  pointsRedeemed: integer("points_redeemed").default(0).notNull(),
+  pointsEarned: integer("points_earned").default(0).notNull(),
   
   // 支付信息
   // 数据库默认值保留为 ldc 兼容历史库；新订单由业务层显式写入 gateway。
@@ -416,6 +450,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   walletTransactions: many(walletTransactions),
   rechargeOrders: many(rechargeOrders),
   emailVerificationTokens: many(emailVerificationTokens),
+  memberTransactions: many(memberTransactions),
 }));
 
 export const oauthAccountsRelations = relations(oauthAccounts, ({ one }) => ({
@@ -428,6 +463,10 @@ export const walletTransactionsRelations = relations(walletTransactions, ({ one 
 
 export const rechargeOrdersRelations = relations(rechargeOrders, ({ one }) => ({
   user: one(users, { fields: [rechargeOrders.userId], references: [users.id] }),
+}));
+
+export const memberTransactionsRelations = relations(memberTransactions, ({ one }) => ({
+  user: one(users, { fields: [memberTransactions.userId], references: [users.id] }),
 }));
 
 export const emailVerificationTokensRelations = relations(emailVerificationTokens, ({ one }) => ({
@@ -476,6 +515,7 @@ export type NewUser = typeof users.$inferInsert;
 export type OauthAccount = typeof oauthAccounts.$inferSelect;
 export type WalletTransaction = typeof walletTransactions.$inferSelect;
 export type RechargeOrder = typeof rechargeOrders.$inferSelect;
+export type MemberTransaction = typeof memberTransactions.$inferSelect;
 export type EmailVerificationToken = typeof emailVerificationTokens.$inferSelect;
 export type SupportConversation = typeof supportConversations.$inferSelect;
 export type SupportMessage = typeof supportMessages.$inferSelect;

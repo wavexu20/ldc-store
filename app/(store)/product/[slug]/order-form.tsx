@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Loader2, Minus, Plus, CheckCircle2, WalletCards } from "lucide-react";
 import { useI18n } from "@/components/i18n-provider";
+import { calculatePointsRedemption } from "@/lib/membership";
 
 const orderFormSchema = z.object({
   quantity: z.number().int().min(1),
@@ -27,6 +28,7 @@ interface OrderFormProps {
   stock: number;
   minQuantity: number;
   maxQuantity: number;
+  membership?: { balanceCents: number; bonusBalanceCents: number; pointsBalance: number };
 }
 
 export function OrderForm({
@@ -36,10 +38,12 @@ export function OrderForm({
   stock,
   minQuantity,
   maxQuantity,
+  membership,
 }: OrderFormProps) {
   const [isPending, startTransition] = useTransition();
   const { t } = useI18n();
   const [paymentMethod, setPaymentMethod] = useState<"gateway" | "balance">("gateway");
+  const [usePoints, setUsePoints] = useState(false);
   const router = useRouter();
   const { data: session, status } = useSession();
   const effectiveMax = Math.min(maxQuantity, stock);
@@ -57,6 +61,8 @@ export function OrderForm({
 
   const quantity = form.watch("quantity");
   const totalPrice = (price * quantity).toFixed(2);
+  const totalCents = Math.round(price * quantity * 100);
+  const redemption = usePoints ? calculatePointsRedemption(totalCents, membership?.pointsBalance || 0) : { points: 0, discountCents: 0 };
 
   const updateQuantity = (delta: number) => {
     const newValue = quantity + delta;
@@ -80,6 +86,7 @@ export function OrderForm({
         productId,
         quantity: values.quantity,
         paymentMethod,
+        usePoints: paymentMethod === "balance" && usePoints,
       });
 
       if (result.success) {
@@ -167,6 +174,17 @@ export function OrderForm({
         </div>
       </div>
 
+      {paymentMethod === "balance" && membership && <div className="rounded-lg border bg-muted/30 p-3 text-sm">
+        <div className="flex justify-between"><span>现金余额</span><span>¥{(membership.balanceCents / 100).toFixed(2)}</span></div>
+        <div className="mt-1 flex justify-between"><span>奖励金</span><span>¥{(membership.bonusBalanceCents / 100).toFixed(2)}</span></div>
+        <label className="mt-3 flex cursor-pointer items-center gap-2 border-t pt-3">
+          <input className="h-4 w-4 accent-primary" type="checkbox" checked={usePoints} onChange={(event) => setUsePoints(event.target.checked)} disabled={membership.pointsBalance < 2} />
+          <span className="flex-1">使用积分（现有 {membership.pointsBalance}）</span>
+          {redemption.discountCents > 0 && <span className="text-emerald-600">-¥{(redemption.discountCents / 100).toFixed(2)}</span>}
+        </label>
+        <p className="mt-2 text-xs text-muted-foreground">200 积分抵 ¥1，单笔最多抵扣 10%</p>
+      </div>}
+
       {/* Quantity */}
       <div className="space-y-2">
         <Label>{t("quantity")}</Label>
@@ -214,7 +232,7 @@ export function OrderForm({
       <div className="flex items-center justify-between pt-2">
         <div>
           <span className="text-sm text-muted-foreground">{productName} × {quantity}</span>
-          <div className="text-xl font-bold">¥{totalPrice}</div>
+          <div className="text-xl font-bold">¥{((totalCents - redemption.discountCents) / 100).toFixed(2)}</div>
         </div>
         <Button type="submit" disabled={isPending}>
           {isPending ? (

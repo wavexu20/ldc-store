@@ -63,6 +63,7 @@ export function CustomersTable({
             <TableHead className="w-16">排名</TableHead>
             <TableHead>顾客</TableHead>
             <TableHead className="hidden md:table-cell">用户ID</TableHead>
+            <TableHead className="hidden xl:table-cell">会员账户</TableHead>
             <TableHead className="text-right">完成订单</TableHead>
             <TableHead className="text-right">累计消费</TableHead>
             <TableHead className="hidden lg:table-cell">首次消费</TableHead>
@@ -95,6 +96,11 @@ export function CustomersTable({
                 </TableCell>
                 <TableCell className="hidden md:table-cell font-mono text-xs text-muted-foreground">
                   {row.userId}
+                </TableCell>
+                <TableCell className="hidden xl:table-cell text-xs">
+                  <p className="font-mono">{row.memberNo || "-"}</p>
+                  <p className="mt-1 text-muted-foreground">{row.email || "未绑定邮箱"}</p>
+                  <p className="mt-1 text-muted-foreground">余额 ¥{((row.cashBalanceCents + row.bonusBalanceCents) / 100).toFixed(2)} · {row.pointsBalance} 积分</p>
                 </TableCell>
                 <TableCell className="text-right tabular-nums">
                   {row.orderCount}

@@ -10,7 +10,7 @@
  * - 前端显示时浏览器自动转换为用户本地时区
  */
 
-import { db, getD1Binding, orders, cards, products } from "@/lib/db";
+import { db, getD1Binding, orders, cards, products, users } from "@/lib/db";
 import { eq, and, desc, inArray, lt } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { headers } from "next/headers";
@@ -35,6 +35,8 @@ import { getExpireTime } from "@/lib/time";
 import { getSystemSettings, getTelegramConfigWithToggles } from "@/lib/actions/system-settings";
 import { logger, getRequestIdFromHeaders } from "@/lib/logger";
 import { parseWalletAmount } from "@/lib/money";
+import { calculatePointsEarned, calculatePointsRedemption, splitBalancePayment } from "@/lib/membership";
+import { awardOrderPoints, reverseExternalOrderPoints } from "@/lib/member-service";
 import {
   sendNewOrderNotification,
   sendPaymentSuccessNotification,
@@ -109,7 +111,7 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     };
   }
 
-  const { productId, quantity, paymentMethod } = validationResult.data;
+  const { productId, quantity, paymentMethod, usePoints } = validationResult.data;
 
   try {
     log.info({ userId: user.id, productId, quantity, paymentMethod }, "开始创建订单");
@@ -157,32 +159,48 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     const expiredEpoch = Math.floor(expiredAt.getTime() / 1000);
     const placeholders = cardIds.map(() => "?").join(", ");
     const isBalance = paymentMethod === "balance";
+    const member = isBalance ? await db.query.users.findFirst({
+      where: eq(users.id, userId),
+      columns: { balanceCents: true, bonusBalanceCents: true, pointsBalance: true },
+    }) : null;
+    if (isBalance && !member) throw new Error("账号不存在");
+    const redemption = isBalance && usePoints
+      ? calculatePointsRedemption(totalCents, member?.pointsBalance || 0)
+      : { points: 0, discountCents: 0 };
+    const payableCents = totalCents - redemption.discountCents;
+    const split = isBalance ? splitBalancePayment(payableCents, member?.balanceCents || 0, member?.bonusBalanceCents || 0) : null;
+    if (isBalance && !split) throw new Error("账户余额不足，请先充值");
+    const cashSpentCents = split?.cashSpentCents || 0;
+    const bonusSpentCents = split?.bonusSpentCents || 0;
+    const pointsEarned = calculatePointsEarned(payableCents);
     const d1 = getD1Binding();
 
     const statements = [
       d1.prepare(`
         INSERT INTO orders (
           id, order_no, product_id, product_name, product_price, quantity,
-          total_amount, payment_method, status, trade_no, user_id, username,
+          total_amount, original_amount, cash_spent_cents, bonus_spent_cents, points_redeemed, points_earned,
+          payment_method, status, trade_no, user_id, username,
           user_image, paid_at, expired_at, created_at, updated_at
         )
-        SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+        SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
         WHERE (
           SELECT COUNT(*) FROM cards
           WHERE product_id = ? AND status = 'available' AND id IN (${placeholders})
         ) = ?
         AND (? <> 'balance' OR EXISTS (
-          SELECT 1 FROM users WHERE id = ? AND balance_cents >= ?
+          SELECT 1 FROM users WHERE id = ? AND balance_cents >= ? AND bonus_balance_cents >= ? AND points_balance >= ?
         ))
         RETURNING id, order_no
       `).bind(
         orderId, orderNo, productId, product.name, product.price, quantity,
-        totalAmount.toFixed(2), paymentMethod,
+        (payableCents / 100).toFixed(2), totalAmount.toFixed(2), cashSpentCents, bonusSpentCents, redemption.points, pointsEarned,
+        paymentMethod,
         isBalance ? "completed" : "pending",
         isBalance ? `BALANCE-${orderNo}` : null,
         userId, user.username ?? null, user.image ?? null,
         isBalance ? createdEpoch : null, expiredEpoch, createdEpoch, createdEpoch,
-        productId, ...cardIds, quantity, paymentMethod, userId, totalCents
+        productId, ...cardIds, quantity, paymentMethod, userId, cashSpentCents, bonusSpentCents, redemption.points
       ),
       d1.prepare(`
         UPDATE cards SET status = ?, order_id = ?, locked_at = ?, sold_at = ?
@@ -196,10 +214,11 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
       ),
       d1.prepare(`
         UPDATE users
-        SET balance_cents = balance_cents - ?, updated_at = ?
+        SET balance_cents = balance_cents - ?, bonus_balance_cents = bonus_balance_cents - ?,
+            points_balance = points_balance - ?, updated_at = ?
         WHERE id = ? AND ? = 'balance'
           AND EXISTS (SELECT 1 FROM orders WHERE id = ?)
-      `).bind(totalCents, createdEpoch, userId, paymentMethod, orderId),
+      `).bind(cashSpentCents, bonusSpentCents, redemption.points, createdEpoch, userId, paymentMethod, orderId),
       d1.prepare(`
         INSERT INTO wallet_transactions (
           id, user_id, type, amount_cents, balance_after_cents,
@@ -210,10 +229,22 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
         WHERE id = ? AND ? = 'balance'
           AND EXISTS (SELECT 1 FROM orders WHERE id = ?)
         ON CONFLICT(idempotency_key) DO NOTHING
-      `).bind(
-        walletTransactionId, -totalCents, orderId, `purchase:${orderId}`,
+        `).bind(
+        walletTransactionId, -cashSpentCents, orderId, `purchase:${orderId}`,
         `购买 ${product.name}`, createdEpoch, userId, paymentMethod, orderId
       ),
+      d1.prepare(`
+        INSERT INTO member_transactions (id,user_id,asset,type,amount,balance_after,reference_type,reference_id,idempotency_key,description,created_at)
+        SELECT ?,id,'bonus','purchase',?,bonus_balance_cents,'order',?,?,?,? FROM users
+        WHERE id = ? AND ? = 'balance' AND ? > 0 AND EXISTS (SELECT 1 FROM orders WHERE id = ?)
+        ON CONFLICT(idempotency_key) DO NOTHING
+      `).bind(crypto.randomUUID(), -bonusSpentCents, orderId, `bonus:purchase:${orderId}`, `购买 ${product.name}`, createdEpoch, userId, paymentMethod, bonusSpentCents, orderId),
+      d1.prepare(`
+        INSERT INTO member_transactions (id,user_id,asset,type,amount,balance_after,reference_type,reference_id,idempotency_key,description,created_at)
+        SELECT ?,id,'points','purchase',?,points_balance,'order',?,?,?,? FROM users
+        WHERE id = ? AND ? = 'balance' AND ? > 0 AND EXISTS (SELECT 1 FROM orders WHERE id = ?)
+        ON CONFLICT(idempotency_key) DO NOTHING
+      `).bind(crypto.randomUUID(), -redemption.points, orderId, `points:purchase:${orderId}`, `订单 ${orderNo} 积分抵扣`, createdEpoch, userId, paymentMethod, redemption.points, orderId),
       d1.prepare(`
         UPDATE products SET sales_count = sales_count + ?, updated_at = ?
         WHERE id = ? AND ? = 'balance'
@@ -226,8 +257,9 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     }
     const result = {
       order: { orderNo, createdAt, expiredAt },
-      totalAmount,
+      totalAmount: payableCents / 100,
     };
+    if (isBalance) await awardOrderPoints(orderId);
 
     // 4. 刷新页面缓存，确保库存显示准确
     revalidatePath("/");
@@ -352,6 +384,7 @@ export async function handlePaymentSuccess(
     ];
     const batchResult = await d1.batch<{ id: string }>(statements);
     if (!batchResult[2]?.results[0]) throw new Error("订单不存在或已处理");
+    await awardOrderPoints(pendingOrder.id);
     const result = { ...pendingOrder, status: "completed" as const, tradeNo, paidAt: new Date() };
     if (pendingOrder.productId) {
       const product = await db.query.products.findFirst({
@@ -482,6 +515,7 @@ export async function adminCompleteOrder(
       `).bind(nowEpoch, adminRemark ?? null, nowEpoch, orderId),
     ]);
     if (!results[2]?.results[0]) throw new Error("订单状态不允许手动完成");
+    await awardOrderPoints(orderId);
     if (order.productId) {
       const product = await db.query.products.findFirst({
         where: eq(products.id, order.productId),
@@ -902,7 +936,11 @@ export async function approveRefund(
 
     if (order.paymentMethod === "balance") {
       if (!order.userId) return { success: false, message: "余额订单缺少用户信息" };
-      const refundCents = Math.round(parseFloat(order.totalAmount) * 100);
+      const cashRefundCents = order.originalAmount === null
+        ? Math.round(parseFloat(order.totalAmount) * 100)
+        : order.cashSpentCents;
+      const bonusRefundCents = order.bonusSpentCents;
+      const pointsDelta = order.pointsRedeemed - order.pointsEarned;
       const nowEpoch = Math.floor(Date.now() / 1000);
       const idempotencyKey = `refund:${order.id}`;
       const d1 = getD1Binding();
@@ -924,7 +962,12 @@ export async function approveRefund(
             AND NOT EXISTS (
               SELECT 1 FROM wallet_transactions WHERE idempotency_key = ?
             )
-        `).bind(refundCents, nowEpoch, order.userId, order.id, idempotencyKey),
+        `).bind(cashRefundCents, nowEpoch, order.userId, order.id, idempotencyKey),
+        d1.prepare(`
+          UPDATE users SET bonus_balance_cents = bonus_balance_cents + ?, points_balance = points_balance + ?, updated_at = ?
+          WHERE id = ? AND EXISTS (SELECT 1 FROM orders WHERE id = ? AND status = 'refunded')
+            AND NOT EXISTS (SELECT 1 FROM member_transactions WHERE idempotency_key = ?)
+        `).bind(bonusRefundCents, pointsDelta, nowEpoch, order.userId, order.id, `benefits:refund:${order.id}`),
         d1.prepare(`
           INSERT INTO wallet_transactions (
             id, user_id, type, amount_cents, balance_after_cents,
@@ -935,9 +978,19 @@ export async function approveRefund(
             AND EXISTS (SELECT 1 FROM orders WHERE id = ? AND status = 'refunded')
           ON CONFLICT(idempotency_key) DO NOTHING
         `).bind(
-          crypto.randomUUID(), refundCents, order.id, idempotencyKey,
+          crypto.randomUUID(), cashRefundCents, order.id, idempotencyKey,
           `订单 ${order.orderNo} 退款`, nowEpoch, order.userId, order.id
         ),
+        d1.prepare(`
+          INSERT INTO member_transactions (id,user_id,asset,type,amount,balance_after,reference_type,reference_id,idempotency_key,description,created_at)
+          SELECT ?,id,'bonus','refund',?,bonus_balance_cents,'order',?,?,?,? FROM users WHERE id = ?
+          ON CONFLICT(idempotency_key) DO NOTHING
+        `).bind(crypto.randomUUID(), bonusRefundCents, order.id, `benefits:refund:${order.id}`, `订单 ${order.orderNo} 退回奖励金`, nowEpoch, order.userId),
+        d1.prepare(`
+          INSERT INTO member_transactions (id,user_id,asset,type,amount,balance_after,reference_type,reference_id,idempotency_key,description,created_at)
+          SELECT ?,id,'points','refund',?,points_balance,'order',?,?,?,? FROM users WHERE id = ? AND ? <> 0
+          ON CONFLICT(idempotency_key) DO NOTHING
+        `).bind(crypto.randomUUID(), pointsDelta, order.id, `points:refund:${order.id}`, `订单 ${order.orderNo} 退款积分冲正`, nowEpoch, order.userId, pointsDelta),
         d1.prepare(`
           UPDATE cards SET status = 'refunded'
           WHERE order_id = ? AND EXISTS (
@@ -996,6 +1049,7 @@ export async function approveRefund(
         updatedAt: new Date(),
       })
       .where(eq(orders.id, orderId));
+    await reverseExternalOrderPoints(orderId);
 
     // 退款后将卡密标记为 refunded（保留 orderId、soldAt 用于溯源）
     // 仅管理员可通过"重新上架"清空关联并改为 available
@@ -1080,7 +1134,6 @@ export async function rejectRefund(
         updatedAt: new Date(),
       })
       .where(eq(orders.id, orderId));
-
     revalidatePath("/admin/orders");
     revalidatePath("/order/my");
 
@@ -1258,6 +1311,7 @@ export async function markOrderRefunded(
         updatedAt: new Date(),
       })
       .where(eq(orders.id, orderId));
+    await reverseExternalOrderPoints(orderId);
 
     // 退款后将卡密标记为 refunded（保留 orderId、soldAt 用于溯源）
     // 仅管理员可通过"重新上架"清空关联并改为 available

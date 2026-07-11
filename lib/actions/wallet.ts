@@ -5,9 +5,10 @@ import { headers } from "next/headers";
 import { nanoid } from "nanoid";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
-import { db, rechargeOrders, users, walletTransactions } from "@/lib/db";
+import { db, memberTransactions, rechargeOrders, users, walletTransactions } from "@/lib/db";
 import type { PaymentLaunchData } from "@/lib/payment/types";
 import { createGatewayPayment } from "@/lib/payment/gateway";
+import { calculateRechargeBonus } from "@/lib/membership";
 
 const rechargeSchema = z.number().int().min(100, "最低充值 1.00").max(10_000_000, "单笔充值不能超过 100,000.00");
 
@@ -23,19 +24,33 @@ export async function getWalletOverview() {
   if (!session?.user?.id || session.user.id === "admin") {
     return { success: false as const, message: "请先登录" };
   }
-  const [user, transactions] = await Promise.all([
+  const [user, transactions, memberHistory] = await Promise.all([
     db.query.users.findFirst({
       where: eq(users.id, session.user.id),
-      columns: { balanceCents: true, email: true, name: true },
+      columns: { balanceCents: true, bonusBalanceCents: true, pointsBalance: true, memberNo: true, email: true, name: true },
     }),
     db.query.walletTransactions.findMany({
       where: eq(walletTransactions.userId, session.user.id),
       orderBy: [desc(walletTransactions.createdAt)],
       limit: 50,
     }),
+    db.query.memberTransactions.findMany({
+      where: eq(memberTransactions.userId, session.user.id),
+      orderBy: [desc(memberTransactions.createdAt)],
+      limit: 50,
+    }),
   ]);
   if (!user) return { success: false as const, message: "账号不存在" };
-  return { success: true as const, user, transactions };
+  return { success: true as const, user, transactions, memberHistory };
+}
+
+export async function getCheckoutMembership() {
+  const session = await auth();
+  if (!session?.user?.id || session.user.id === "admin") return null;
+  return db.query.users.findFirst({
+    where: eq(users.id, session.user.id),
+    columns: { balanceCents: true, bonusBalanceCents: true, pointsBalance: true },
+  });
 }
 
 export async function createRecharge(amountCents: number): Promise<{
@@ -54,6 +69,7 @@ export async function createRecharge(amountCents: number): Promise<{
     rechargeNo,
     userId: session.user.id,
     amountCents: parsed.data,
+    bonusCents: calculateRechargeBonus(parsed.data),
     provider: "gateway",
     expiredAt: new Date(Date.now() + 30 * 60 * 1000),
   });

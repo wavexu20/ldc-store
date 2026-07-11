@@ -12,6 +12,11 @@ export interface AdminCustomerListItem {
   userId: string;
   username: string | null;
   userImage: string | null;
+  memberNo: string | null;
+  email: string | null;
+  cashBalanceCents: number;
+  bonusBalanceCents: number;
+  pointsBalance: number;
   orderCount: number;
   totalSpent: string;
   firstPaidAt: string | null;
@@ -58,7 +63,7 @@ export async function getAdminCustomersPage(input: {
   const q = input.filters?.query?.trim();
   const pattern = q ? `%${q}%` : null;
   const whereSql = pattern
-    ? sql`WHERE (user_id LIKE ${pattern} OR username LIKE ${pattern})`
+    ? sql`WHERE (user_id LIKE ${pattern} OR username LIKE ${pattern} OR member_no LIKE ${pattern} OR email LIKE ${pattern})`
     : sql``;
 
   const [itemsRows, totalRows] = await Promise.all([
@@ -78,8 +83,9 @@ export async function getAdminCustomersPage(input: {
         WHERE o.status = 'completed' AND o.user_id IS NOT NULL
         GROUP BY o.user_id
       )
-      SELECT user_id, username, user_image, order_count, total_spent, first_paid_at, last_paid_at
-      FROM agg
+      SELECT agg.user_id, agg.username, agg.user_image, agg.order_count, agg.total_spent, agg.first_paid_at, agg.last_paid_at,
+             u.member_no, u.email, u.balance_cents, u.bonus_balance_cents, u.points_balance
+      FROM agg JOIN users u ON u.id = agg.user_id
       ${whereSql}
       ORDER BY CAST(total_spent AS REAL) DESC, order_count DESC, user_id ASC
       LIMIT ${pageSize} OFFSET ${offset}
@@ -90,7 +96,8 @@ export async function getAdminCustomersPage(input: {
           o.user_id,
           (SELECT latest.username FROM orders latest
            WHERE latest.user_id = o.user_id ORDER BY latest.created_at DESC LIMIT 1) AS username
-        FROM orders o
+          ,u.member_no, u.email
+        FROM orders o JOIN users u ON u.id = o.user_id
         WHERE o.status = 'completed' AND o.user_id IS NOT NULL
         GROUP BY o.user_id
       )
@@ -105,6 +112,11 @@ export async function getAdminCustomersPage(input: {
       user_id: string;
       username: string | null;
       user_image: string | null;
+      member_no: string | null;
+      email: string | null;
+      balance_cents: number;
+      bonus_balance_cents: number;
+      points_balance: number;
       order_count: number;
       total_spent: string;
       first_paid_at: Date | string | null;
@@ -123,6 +135,11 @@ export async function getAdminCustomersPage(input: {
       userId: row.user_id,
       username: row.username ?? null,
       userImage: row.user_image ?? null,
+      memberNo: row.member_no ?? null,
+      email: row.email ?? null,
+      cashBalanceCents: row.balance_cents || 0,
+      bonusBalanceCents: row.bonus_balance_cents || 0,
+      pointsBalance: row.points_balance || 0,
       orderCount: Number.isFinite(row.order_count) ? row.order_count : 0,
       totalSpent: row.total_spent ?? "0",
       firstPaidAt: toIsoString(row.first_paid_at),

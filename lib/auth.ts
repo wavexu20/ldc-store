@@ -9,6 +9,8 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db, oauthAccounts, users } from "@/lib/db";
 import { verifySteamTicket } from "@/lib/auth/steam";
+import { createMemberNo } from "@/lib/membership";
+import { isPlaceholderEmail } from "@/lib/email-address";
 
 const adminLoginSchema = z.object({ password: z.string().min(1) });
 const emailLoginSchema = z.object({
@@ -48,7 +50,7 @@ const LinuxDoProvider = {
     return {
       id: String(profile.id),
       name: profile.name || profile.username,
-      email: `${username}@linux.do`,
+      email: null,
       image: profile.avatar_template?.replace("{size}", "120"),
       username: profile.username,
       trustLevel: profile.trust_level,
@@ -85,23 +87,33 @@ export async function resolveOAuthUser(
   });
 
   if (existingAccount) {
+    const providerEmail = user.email && !isPlaceholderEmail(user.email) ? user.email.toLowerCase() : null;
+    const emailOwner = providerEmail
+      ? await db.query.users.findFirst({ where: eq(users.email, providerEmail), columns: { id: true } })
+      : null;
+    const mayAdoptEmail = Boolean(providerEmail && isPlaceholderEmail(existingAccount.user.email) && (!emailOwner || emailOwner.id === existingAccount.user.id));
     await db.update(users).set({
       name: user.name || existingAccount.user.name,
       image: user.image || existingAccount.user.image,
+      ...(mayAdoptEmail ? { email: providerEmail!, emailVerifiedAt: new Date() } : {}),
       updatedAt: new Date(),
     }).where(eq(users.id, existingAccount.user.id));
-    return existingAccount.user;
+    return { ...existingAccount.user, ...(mayAdoptEmail ? { email: providerEmail!, emailVerifiedAt: new Date() } : {}) };
   }
 
-  const email = (user.email || `${provider}-${providerAccountId}@oauth.local`).toLowerCase();
+  const providerEmail = user.email && !isPlaceholderEmail(user.email) ? user.email.toLowerCase() : null;
+  const email = providerEmail || `${provider}-${providerAccountId}@oauth.local`;
   let localUser = await db.query.users.findFirst({ where: eq(users.email, email) });
 
   if (!localUser) {
+    const id = crypto.randomUUID();
     const [created] = await db.insert(users).values({
+      id,
       email,
       name: user.name,
       image: user.image,
-      emailVerifiedAt: new Date(),
+      memberNo: createMemberNo(id),
+      emailVerifiedAt: providerEmail ? new Date() : null,
     }).onConflictDoNothing({ target: users.email }).returning();
     localUser = created || await db.query.users.findFirst({ where: eq(users.email, email) });
   }
@@ -222,7 +234,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       }
       return localUser.status === "active";
     },
-    async jwt({ token, user, account }) {
+    async jwt({ token, user, account, trigger }) {
       if (user) {
         const authUser = user as AuthUser;
         token.id = authUser.id;
@@ -234,11 +246,19 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         token.active = authUser.active;
         token.silenced = authUser.silenced;
       }
+      if (trigger === "update" && token.id && token.id !== "admin") {
+        const current = await db.query.users.findFirst({ where: eq(users.id, token.id as string) });
+        if (current) {
+          token.email = current.email;
+          token.name = current.name;
+        }
+      }
       return token;
     },
     async session({ session, token }) {
       if (session.user) {
         session.user.id = (token.id || token.sub) as string;
+        session.user.email = (token.email || "") as string;
         const sessionUser = session.user as AuthUser;
         sessionUser.role = token.role as "user" | "admin";
         sessionUser.provider = token.provider as string;

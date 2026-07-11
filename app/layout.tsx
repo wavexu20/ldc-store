@@ -36,6 +36,9 @@ export default async function RootLayout({
   const locale = await getLocale();
   return (
     <html lang={localeMeta[locale].htmlLang} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: "globalThis.__name ||= ((target, value) => Object.defineProperty(target, 'name', { value, configurable: true }));" }} />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased`}
       >

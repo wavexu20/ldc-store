@@ -1,0 +1,54 @@
+"use client";
+
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
+import { Loader2, MailCheck } from "lucide-react";
+import { toast } from "sonner";
+import { sendBindingEmail, verifyBindingEmail } from "@/lib/actions/account";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+
+export function EmailBindingForm({ callbackUrl = "/" }: { callbackUrl?: string }) {
+  const [email, setEmail] = useState("");
+  const [code, setCode] = useState("");
+  const [sent, setSent] = useState(false);
+  const [pending, startTransition] = useTransition();
+  const router = useRouter();
+  const { update } = useSession();
+  const safeCallback = callbackUrl.startsWith("/") && !callbackUrl.startsWith("//") ? callbackUrl : "/";
+
+  function send() {
+    startTransition(async () => {
+      const result = await sendBindingEmail(email);
+      result.success ? (setSent(true), toast.success(result.message)) : toast.error(result.message);
+    });
+  }
+
+  function verify() {
+    startTransition(async () => {
+      const result = await verifyBindingEmail({ email, code });
+      if (!result.success) {
+        toast.error(result.message);
+        return;
+      }
+      toast.success(result.message);
+      await update();
+      router.replace(safeCallback);
+      router.refresh();
+    });
+  }
+
+  return <div className="space-y-5">
+    <div className="rounded-xl bg-primary/10 p-4 text-sm text-muted-foreground">
+      我们只用这个邮箱发送订单、充值和安全通知，不会公开展示或发送营销垃圾邮件。
+    </div>
+    <div className="space-y-2"><Label htmlFor="binding-email">真实邮箱</Label><Input id="binding-email" type="email" autoComplete="email" placeholder="name@example.com" value={email} onChange={(e) => setEmail(e.target.value)} disabled={sent || pending} /></div>
+    {sent && <div className="space-y-2"><Label htmlFor="binding-code">6 位验证码</Label><Input id="binding-code" inputMode="numeric" maxLength={6} placeholder="000000" value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} /></div>}
+    <Button className="w-full" disabled={pending || (sent ? code.length !== 6 : !email)} onClick={sent ? verify : send}>
+      {pending ? <Loader2 className="animate-spin" /> : <MailCheck />}{sent ? "验证并完成绑定" : "发送验证码"}
+    </Button>
+    {sent && <Button className="w-full" variant="ghost" disabled={pending} onClick={() => { setSent(false); setCode(""); }}>更换邮箱</Button>}
+  </div>;
+}

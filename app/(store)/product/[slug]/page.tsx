@@ -11,6 +11,7 @@ import { ProductImageGallery } from "./product-image-gallery";
 import { RestockRequestInline } from "@/components/store/restock-request-inline";
 import { getTranslator } from "@/lib/i18n-server";
 import { localizeProduct } from "@/lib/product-i18n";
+import { getCheckoutMembership } from "@/lib/actions/wallet";
 
 // 强制动态渲染，避免构建时查询数据库（docker build 无需 DATABASE_URL）
 export const dynamic = "force-dynamic";
@@ -42,6 +43,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
   const { locale, t } = await getTranslator();
   const { slug } = await params;
   const sourceProduct = await getProductBySlugCached(slug);
+  const membership = await getCheckoutMembership();
 
   if (!sourceProduct) {
     notFound();
@@ -141,6 +143,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
             stock={product.stock}
             minQuantity={product.minQuantity}
             maxQuantity={product.maxQuantity}
+            membership={membership || undefined}
           />
         </div>
       )}

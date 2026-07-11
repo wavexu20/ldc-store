@@ -7,6 +7,11 @@ import { getSystemSettings } from "@/lib/actions/system-settings";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { getTranslator } from "@/lib/i18n-server";
 import { SupportWidget } from "@/components/store/support-widget";
+import { redirect } from "next/navigation";
+import { auth } from "@/lib/auth";
+import { db, oauthAccounts, users } from "@/lib/db";
+import { eq } from "drizzle-orm";
+import { hasVerifiedRealEmail } from "@/lib/email-address";
 
 // 强制动态渲染，避免构建时查询数据库
 export const dynamic = "force-dynamic";
@@ -33,6 +38,14 @@ export default async function StoreLayout({
   children: React.ReactNode;
 }) {
   const { siteName, siteIcon, siteIconUrl } = await getSystemSettingsCached();
+  const session = await auth();
+  if (session?.user?.id && session.user.id !== "admin") {
+    const [user, oauth] = await Promise.all([
+      db.query.users.findFirst({ where: eq(users.id, session.user.id), columns: { email: true, emailVerifiedAt: true } }),
+      db.query.oauthAccounts.findFirst({ where: eq(oauthAccounts.userId, session.user.id), columns: { id: true } }),
+    ]);
+    if (oauth && user && !hasVerifiedRealEmail(user)) redirect("/account/complete-profile");
+  }
 
   return (
     <div className="flex min-h-screen flex-col">
