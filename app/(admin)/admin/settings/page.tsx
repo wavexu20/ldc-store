@@ -37,9 +37,7 @@ export default async function SystemStatusPage() {
   const isLinuxDoOAuthConfigured = !!(linuxdoClientId && linuxdoClientSecret);
 
   // 检查支付配置
-  const ldcClientId = process.env.LDC_CLIENT_ID;
-  const ldcClientSecret = process.env.LDC_CLIENT_SECRET;
-  const isPaymentConfigured = !!(ldcClientId && ldcClientSecret);
+  const isPaymentConfigured = !!process.env.PAYMENT_GATEWAY_API_KEY;
 
   const configStatus = [
     {
@@ -73,10 +71,10 @@ export default async function SystemStatusPage() {
       hint: "用户下单/查单必须",
     },
     {
-      title: "Linux DO Credit",
-      env: "LDC_CLIENT_ID / LDC_CLIENT_SECRET",
+      title: "Game3DTech Pay",
+      env: "PAYMENT_GATEWAY_API_KEY",
       ok: isPaymentConfigured,
-      hint: "积分支付",
+      hint: "Stripe / ZPAY / NowPayments 托管收银台",
     },
   ] as const;
 
@@ -211,7 +209,7 @@ export default async function SystemStatusPage() {
               支付配置
             </CardTitle>
             <CardDescription>
-              Linux DO Credit 支付状态
+              自有支付网关状态
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -222,7 +220,7 @@ export default async function SystemStatusPage() {
                   <span className="font-medium text-emerald-600 dark:text-emerald-400">
                     支付已配置
                   </span>
-                  <Badge variant="secondary">LDC 支付可用</Badge>
+                  <Badge variant="secondary">托管收银台可用</Badge>
                 </>
               ) : (
                 <>
@@ -240,12 +238,13 @@ export default async function SystemStatusPage() {
                 在 .env 文件中添加以下环境变量：
               </p>
               <pre className="text-xs bg-zinc-900 text-zinc-100 p-3 rounded-md overflow-x-auto">
-{`# Linux DO Credit 支付配置
-LDC_CLIENT_ID=your_client_id
-LDC_CLIENT_SECRET=your_client_secret
+{`# Game3DTech Pay
+PAYMENT_GATEWAY_URL=https://pay.game3dtech.com
+PAYMENT_GATEWAY_APP_ID=game3dtech
+PAYMENT_GATEWAY_API_KEY=your_app_api_key
 
-# 可选：自定义支付网关
-LDC_GATEWAY=https://credit.linux.do/epay`}
+# Webhook
+# https://game3dtech.com/api/payments/webhook/gateway`}
               </pre>
             </div>
           </CardContent>
@@ -283,10 +282,10 @@ LINUXDO_CLIENT_SECRET=your_oauth_client_secret
 NEXT_PUBLIC_SITE_NAME=LDC Store
 NEXT_PUBLIC_SITE_DESCRIPTION=自动发卡系统
 
-# Linux DO Credit 支付
-LDC_CLIENT_ID=your_client_id
-LDC_CLIENT_SECRET=your_client_secret
-LDC_GATEWAY=https://credit.linux.do/epay`}
+# Game3DTech Pay
+PAYMENT_GATEWAY_URL=https://pay.game3dtech.com
+PAYMENT_GATEWAY_APP_ID=game3dtech
+PAYMENT_GATEWAY_API_KEY=your_app_api_key`}
               </pre>
             </div>
           </CardContent>

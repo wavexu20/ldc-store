@@ -236,6 +236,7 @@ export async function testTelegramConnection(
 }
 
 const PAYMENT_METHOD_LABELS: Record<string, string> = {
+  gateway: "在线支付",
   ldc: "Linux DO Credit",
   alipay: "支付宝",
   wechat: "微信支付",

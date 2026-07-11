@@ -31,6 +31,7 @@ const orderStatusValues = [
 export const orderStatusEnum = { enumValues: orderStatusValues };
 
 const paymentMethodValues = [
+  "gateway",   // Game3DTech 自有支付网关
   "ldc",       // Linux DO Credit
   "balance",   // 账户余额
   "alipay",    // 支付宝（预留）
@@ -115,6 +116,7 @@ export const rechargeOrders = sqliteTable("recharge_orders", {
   rechargeNo: text("recharge_no").notNull().unique(),
   userId: text("user_id").references(() => users.id, { onDelete: "restrict" }).notNull(),
   amountCents: integer("amount_cents").notNull(),
+  // 数据库默认值保留为 ldc 兼容历史库；新充值单显式写入 gateway。
   provider: text("provider").default("ldc").notNull(),
   status: text("status", { enum: rechargeStatusValues }).default("pending").notNull(),
   tradeNo: text("trade_no").unique(),
@@ -223,6 +225,7 @@ export const orders = sqliteTable("orders", {
   totalAmount: text("total_amount").notNull(),
   
   // 支付信息
+  // 数据库默认值保留为 ldc 兼容历史库；新订单由业务层显式写入 gateway。
   paymentMethod: text("payment_method", { enum: paymentMethodValues }).default("ldc").notNull(),
   status: text("status", { enum: orderStatusValues }).default("pending").notNull(),
   tradeNo: text("trade_no"), // 支付平台订单号

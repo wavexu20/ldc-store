@@ -28,11 +28,9 @@ export default async function AdminLayout({
   const isLinuxDoOAuthConfigured = !!(
     process.env.LINUXDO_CLIENT_ID && process.env.LINUXDO_CLIENT_SECRET
   );
-  const isLdcPaymentConfigured = !!(
-    process.env.LDC_CLIENT_ID && process.env.LDC_CLIENT_SECRET
-  );
+  const isGatewayPaymentConfigured = !!process.env.PAYMENT_GATEWAY_API_KEY;
 
-  const shouldWarn = !isLinuxDoOAuthConfigured || !isLdcPaymentConfigured;
+  const shouldWarn = !isLinuxDoOAuthConfigured || !isGatewayPaymentConfigured;
 
   return (
     <SidebarProvider defaultOpen={defaultOpen}>
@@ -53,10 +51,9 @@ export default async function AdminLayout({
                       <code>LINUXDO_CLIENT_SECRET</code>），用户将无法登录下单/查单。
                     </li>
                   ) : null}
-                  {!isLdcPaymentConfigured ? (
+                  {!isGatewayPaymentConfigured ? (
                     <li>
-                      Linux DO Credit 支付未配置（<code>LDC_CLIENT_ID</code> /{" "}
-                      <code>LDC_CLIENT_SECRET</code>），订单无法发起支付。
+                      自有支付网关未配置（<code>PAYMENT_GATEWAY_API_KEY</code>），订单与余额充值无法发起支付。
                     </li>
                   ) : null}
                 </ul>

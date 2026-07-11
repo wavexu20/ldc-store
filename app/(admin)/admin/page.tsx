@@ -359,7 +359,7 @@ export default async function AdminDashboard() {
               </div>
               <div className="min-w-0">
                 <p className="text-xl font-semibold leading-none text-zinc-900 dark:text-zinc-50">
-                  {stats.todaySales.total} LDC
+                  ¥{stats.todaySales.total}
                 </p>
                 <div className="mt-1 flex items-center gap-2 text-xs">
                   {stats.todayTrend.direction === "up" ? (
@@ -472,7 +472,7 @@ export default async function AdminDashboard() {
                 <div className="text-sm text-muted-foreground">今日销售额</div>
                 <div className="text-3xl font-semibold tracking-tight">
                   {stats.todaySales.total}
-                  <span className="ml-1 text-base text-muted-foreground">LDC</span>
+                  <span className="ml-1 text-base text-muted-foreground">CNY</span>
                 </div>
                 <div className="text-sm text-muted-foreground">
                   今日完成订单：{stats.todaySales.count}
@@ -593,7 +593,7 @@ export default async function AdminDashboard() {
                               {order.productName}
                             </p>
                             <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                              {order.orderNo} · {order.totalAmount} LDC · {createdAt}
+                              {order.orderNo} · ¥{order.totalAmount} · {createdAt}
                             </p>
                           </Link>
                         </TableCell>

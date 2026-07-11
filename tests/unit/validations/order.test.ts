@@ -14,7 +14,7 @@ describe("validations/order", () => {
       if (!result.success) return;
 
       // 为什么要断言 default：避免调用方忘传 paymentMethod 导致服务端分支不一致
-      expect(result.data.paymentMethod).toBe("ldc");
+      expect(result.data.paymentMethod).toBe("gateway");
     });
 
     it("应拒绝无效的 productId（非 UUID）", () => {
@@ -68,4 +68,3 @@ describe("validations/order", () => {
     });
   });
 });
-

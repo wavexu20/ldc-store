@@ -323,10 +323,10 @@ function ProductsTableView({
               </TableCell>
               <TableCell className="text-right">
                 <div className="flex flex-col items-end">
-                  <span className="font-medium">{product.price} LDC</span>
+                  <span className="font-medium">¥{product.price}</span>
                   {product.originalPrice && (
                     <span className="text-xs text-zinc-400 line-through">
-                      {product.originalPrice} LDC
+                      ¥{product.originalPrice}
                     </span>
                   )}
                 </div>

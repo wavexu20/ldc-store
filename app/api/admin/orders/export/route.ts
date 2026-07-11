@@ -133,7 +133,7 @@ export async function GET(request: Request) {
       "支付方式",
       "商品",
       "数量",
-      "金额(LDC)",
+      "金额(CNY)",
       "邮箱",
       "用户名",
       "用户ID",
@@ -186,4 +186,3 @@ export async function GET(request: Request) {
     );
   }
 }
-

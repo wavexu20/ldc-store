@@ -90,7 +90,7 @@ export function OrderReceiptView({
       `${resolvedMerchantName} - 支付成功凭证`,
       `订单号：${receipt.orderNo}`,
       `商品：${receipt.productName}`,
-      `金额：${receipt.totalAmount} LDC`,
+      `金额：¥${receipt.totalAmount}`,
       `支付时间：${paidAtText}`,
       `用户名：${username}`,
       shareUrl ? `链接：${shareUrl}` : undefined,
@@ -193,7 +193,7 @@ export function OrderReceiptView({
                     {receipt.totalAmount}
                   </div>
                   <div className="shrink-0 text-sm font-semibold text-slate-700">
-                    LDC
+                    CNY
                   </div>
                 </div>
                 <div className="mt-2 text-sm text-slate-700">
@@ -212,7 +212,7 @@ export function OrderReceiptView({
                   <PosterField label="商品" value={receipt.productName} />
                   <PosterField
                     label="金额"
-                    value={`${receipt.totalAmount} LDC`}
+                    value={`¥${receipt.totalAmount}`}
                     mono
                   />
                   <PosterField label="支付时间" value={paidAtText} />

@@ -5,14 +5,14 @@ export function shouldUseClientRefund(
   paymentMethod: string,
   refundMode: RefundMode
 ): boolean {
-  return paymentMethod !== "balance" && refundMode === "client";
+  return paymentMethod === "ldc" && refundMode === "client";
 }
 
 export function canApproveRefund(
   paymentMethod: string,
   externalRefundEnabled: boolean
 ): boolean {
-  return paymentMethod === "balance" || externalRefundEnabled;
+  return paymentMethod === "balance" || (paymentMethod === "ldc" && externalRefundEnabled);
 }
 
 export const orderStatusConfig: Record<
@@ -50,6 +50,7 @@ export const orderStatusConfig: Record<
 };
 
 export const paymentMethodLabels: Record<PaymentMethod, string> = {
+  gateway: "在线支付",
   ldc: "LDC 积分",
   balance: "账户余额",
   alipay: "支付宝",

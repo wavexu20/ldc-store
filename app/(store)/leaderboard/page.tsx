@@ -107,7 +107,7 @@ export default async function CustomersLeaderboardPage() {
                           {row.orderCount}
                         </TableCell>
                         <TableCell className="text-right tabular-nums">
-                          {formatAmount(row.totalSpent)} LDC
+                          ¥{formatAmount(row.totalSpent)}
                         </TableCell>
                       </TableRow>
                     );
