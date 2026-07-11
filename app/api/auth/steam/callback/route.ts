@@ -11,7 +11,13 @@ import {
 export async function GET(request: Request) {
   const cookieStore = await cookies();
   const state = cookieStore.get(STEAM_STATE_COOKIE)?.value;
-  cookieStore.delete(STEAM_STATE_COOKIE);
+  cookieStore.set(STEAM_STATE_COOKIE, "", {
+    httpOnly: true,
+    secure: true,
+    sameSite: "lax",
+    path: "/api/auth/steam/callback",
+    maxAge: 0,
+  });
 
   try {
     if (!state || !process.env.STEAM_WEB_API_KEY || !process.env.AUTH_SECRET) {
