@@ -6,6 +6,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { getSystemSettings } from "@/lib/actions/system-settings";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { getTranslator } from "@/lib/i18n-server";
+import { SupportWidget } from "@/components/store/support-widget";
 
 // 强制动态渲染，避免构建时查询数据库
 export const dynamic = "force-dynamic";
@@ -39,6 +40,7 @@ export default async function StoreLayout({
       <main className="flex-1">{children}</main>
       <Footer siteName={siteName} />
       <LanguageSwitcher />
+      <SupportWidget siteName={siteName} />
       <Toaster position="top-center" richColors />
     </div>
   );

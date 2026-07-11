@@ -2,7 +2,7 @@
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "ldc-store",
   "account_id": "b519eb90d2148fbe9655af86640e392a",
-  "main": ".open-next/worker.js",
+  "main": "custom-worker.ts",
   "compatibility_date": "2026-07-11",
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   "routes": [
@@ -24,6 +24,20 @@
       "database_name": "ldc-store-production",
       "database_id": "160f8693-d6e5-42b6-a3fa-16727cb8b427",
       "migrations_dir": "lib/db/d1-migrations"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "SUPPORT_CHAT",
+        "class_name": "SupportChatRoom"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "support-chat-v1",
+      "new_sqlite_classes": ["SupportChatRoom"]
     }
   ],
   "assets": {

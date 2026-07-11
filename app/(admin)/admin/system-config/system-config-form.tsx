@@ -140,7 +140,7 @@ export function SystemConfigForm({ initialValues }: SystemConfigFormProps) {
         body: JSON.stringify({ botToken, chatId }),
       });
 
-      const result = await response.json();
+      const result = await response.json() as { success?: boolean; message?: string };
       if (result.success) {
         toast.success("测试消息发送成功！请检查 Telegram");
       } else {

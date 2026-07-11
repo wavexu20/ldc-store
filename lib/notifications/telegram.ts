@@ -158,7 +158,7 @@ async function sendTelegramMessage(
       signal: controller.signal,
     });
 
-    const data = await response.json();
+    const data = await response.json() as { ok?: boolean; description?: string };
 
     if (!response.ok || !data.ok) {
       const errorDesc = data.description || `HTTP ${response.status}`;

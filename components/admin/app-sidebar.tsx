@@ -17,6 +17,7 @@ import {
   Command,
   User,
   Megaphone,
+  Headphones,
 } from "lucide-react";
 import { signOut } from "next-auth/react";
 
@@ -80,6 +81,11 @@ const mainNavItems = [
     title: "公告管理",
     href: "/admin/announcements",
     icon: Megaphone,
+  },
+  {
+    title: "在线客服",
+    href: "/admin/support",
+    icon: Headphones,
   },
 ];
 

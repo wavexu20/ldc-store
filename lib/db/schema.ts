@@ -54,6 +54,8 @@ const rechargeStatusValues = [
   "expired",
   "cancelled",
 ] as const;
+const supportConversationStatusValues = ["open", "closed"] as const;
+const supportSenderValues = ["visitor", "admin", "system"] as const;
 
 const id = (name: string) =>
   text(name).primaryKey().$defaultFn(() => crypto.randomUUID());
@@ -324,6 +326,38 @@ export const loginRateLimits = sqliteTable("login_rate_limits", {
 });
 
 // ============================================
+// Realtime customer support
+// ============================================
+
+export const supportConversations = sqliteTable("support_conversations", {
+  id: id("id"),
+  visitorKey: text("visitor_key").notNull(),
+  userId: text("user_id").references(() => users.id, { onDelete: "set null" }),
+  visitorName: text("visitor_name"),
+  visitorEmail: text("visitor_email"),
+  status: text("status", { enum: supportConversationStatusValues }).default("open").notNull(),
+  lastMessage: text("last_message"),
+  unreadAdmin: integer("unread_admin").default(0).notNull(),
+  unreadVisitor: integer("unread_visitor").default(0).notNull(),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+}, (table) => [
+  index("support_conversations_visitor_status_idx").on(table.visitorKey, table.status),
+  index("support_conversations_status_updated_idx").on(table.status, table.updatedAt),
+]);
+
+export const supportMessages = sqliteTable("support_messages", {
+  id: id("id"),
+  conversationId: text("conversation_id").references(() => supportConversations.id, { onDelete: "cascade" }).notNull(),
+  senderType: text("sender_type", { enum: supportSenderValues }).notNull(),
+  senderId: text("sender_id"),
+  content: text("content").notNull(),
+  createdAt: createdAt(),
+}, (table) => [
+  index("support_messages_conversation_created_idx").on(table.conversationId, table.createdAt),
+]);
+
+// ============================================
 // Relations
 // ============================================
 
@@ -389,6 +423,18 @@ export const emailVerificationTokensRelations = relations(emailVerificationToken
   user: one(users, { fields: [emailVerificationTokens.userId], references: [users.id] }),
 }));
 
+export const supportConversationsRelations = relations(supportConversations, ({ one, many }) => ({
+  user: one(users, { fields: [supportConversations.userId], references: [users.id] }),
+  messages: many(supportMessages),
+}));
+
+export const supportMessagesRelations = relations(supportMessages, ({ one }) => ({
+  conversation: one(supportConversations, {
+    fields: [supportMessages.conversationId],
+    references: [supportConversations.id],
+  }),
+}));
+
 // ============================================
 // Type Exports
 // ============================================
@@ -420,6 +466,8 @@ export type OauthAccount = typeof oauthAccounts.$inferSelect;
 export type WalletTransaction = typeof walletTransactions.$inferSelect;
 export type RechargeOrder = typeof rechargeOrders.$inferSelect;
 export type EmailVerificationToken = typeof emailVerificationTokens.$inferSelect;
+export type SupportConversation = typeof supportConversations.$inferSelect;
+export type SupportMessage = typeof supportMessages.$inferSelect;
 
 export type CardStatus = (typeof cardStatusEnum.enumValues)[number];
 export type OrderStatus = (typeof orderStatusEnum.enumValues)[number];

@@ -33,7 +33,7 @@ export function LanguageSwitcher() {
     router.refresh();
   }
   return (
-    <div ref={rootRef} className="fixed bottom-5 right-4 z-[70] flex flex-col items-end gap-2 sm:bottom-8 sm:right-6">
+    <div ref={rootRef} className="fixed bottom-5 left-4 z-[70] flex flex-col items-start gap-2 sm:bottom-8 sm:left-6">
       {open ? (
         <div role="menu" aria-label={t("language")} className="flex max-h-[min(70vh,480px)] flex-col gap-1.5 overflow-y-auto rounded-[1.35rem] border bg-background/95 p-2.5 shadow-2xl backdrop-blur-xl">
           {locales.map((item) => (
