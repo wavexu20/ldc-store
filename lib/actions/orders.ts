@@ -37,6 +37,7 @@ import { logger, getRequestIdFromHeaders } from "@/lib/logger";
 import { parseWalletAmount } from "@/lib/money";
 import { calculatePointsEarned, calculatePointsRedemption, splitBalancePayment } from "@/lib/membership";
 import { awardOrderPoints, reverseExternalOrderPoints } from "@/lib/member-service";
+import { requireSecondFactor } from "@/lib/security/two-factor-session";
 import {
   sendNewOrderNotification,
   sendPaymentSuccessNotification,
@@ -109,6 +110,12 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
       success: false,
       message: validationResult.error.issues[0].message,
     };
+  }
+
+  try {
+    await requireSecondFactor(userId);
+  } catch (error) {
+    return { success: false, message: error instanceof Error ? error.message : "请先完成二次验证" };
   }
 
   const { productId, quantity, paymentMethod, usePoints } = validationResult.data;

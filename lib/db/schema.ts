@@ -87,6 +87,8 @@ export const users = sqliteTable("users", {
   balanceCents: integer("balance_cents").default(0).notNull(),
   bonusBalanceCents: integer("bonus_balance_cents").default(0).notNull(),
   pointsBalance: integer("points_balance").default(0).notNull(),
+  twoFactorSecret: text("two_factor_secret"),
+  twoFactorEnabledAt: timestamp("two_factor_enabled_at"),
   emailVerifiedAt: timestamp("email_verified_at"),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
@@ -410,6 +412,28 @@ export const categoriesRelations = relations(categories, ({ many }) => ({
   products: many(products),
 }));
 
+export const passwordResetTokens = sqliteTable("password_reset_tokens", {
+  id: id("id"),
+  userId: text("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  tokenHash: text("token_hash").notNull().unique(),
+  expiresAt: timestamp("expires_at").notNull(),
+  consumedAt: timestamp("consumed_at"),
+  createdAt: createdAt(),
+}, (table) => [
+  index("password_reset_tokens_user_created_idx").on(table.userId, table.createdAt),
+  index("password_reset_tokens_expires_idx").on(table.expiresAt),
+]);
+
+export const twoFactorRecoveryCodes = sqliteTable("two_factor_recovery_codes", {
+  id: id("id"),
+  userId: text("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  codeHash: text("code_hash").notNull().unique(),
+  usedAt: timestamp("used_at"),
+  createdAt: createdAt(),
+}, (table) => [
+  index("two_factor_recovery_codes_user_idx").on(table.userId),
+]);
+
 export const productsRelations = relations(products, ({ one, many }) => ({
   category: one(categories, {
     fields: [products.categoryId],
@@ -450,6 +474,8 @@ export const usersRelations = relations(users, ({ many }) => ({
   walletTransactions: many(walletTransactions),
   rechargeOrders: many(rechargeOrders),
   emailVerificationTokens: many(emailVerificationTokens),
+  passwordResetTokens: many(passwordResetTokens),
+  twoFactorRecoveryCodes: many(twoFactorRecoveryCodes),
   memberTransactions: many(memberTransactions),
 }));
 
@@ -471,6 +497,14 @@ export const memberTransactionsRelations = relations(memberTransactions, ({ one 
 
 export const emailVerificationTokensRelations = relations(emailVerificationTokens, ({ one }) => ({
   user: one(users, { fields: [emailVerificationTokens.userId], references: [users.id] }),
+}));
+
+export const passwordResetTokensRelations = relations(passwordResetTokens, ({ one }) => ({
+  user: one(users, { fields: [passwordResetTokens.userId], references: [users.id] }),
+}));
+
+export const twoFactorRecoveryCodesRelations = relations(twoFactorRecoveryCodes, ({ one }) => ({
+  user: one(users, { fields: [twoFactorRecoveryCodes.userId], references: [users.id] }),
 }));
 
 export const supportConversationsRelations = relations(supportConversations, ({ one, many }) => ({
@@ -517,6 +551,8 @@ export type WalletTransaction = typeof walletTransactions.$inferSelect;
 export type RechargeOrder = typeof rechargeOrders.$inferSelect;
 export type MemberTransaction = typeof memberTransactions.$inferSelect;
 export type EmailVerificationToken = typeof emailVerificationTokens.$inferSelect;
+export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
+export type TwoFactorRecoveryCode = typeof twoFactorRecoveryCodes.$inferSelect;
 export type SupportConversation = typeof supportConversations.$inferSelect;
 export type SupportMessage = typeof supportMessages.$inferSelect;
 
