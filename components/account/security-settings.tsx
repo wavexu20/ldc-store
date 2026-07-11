@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { QRCodeSVG } from "qrcode.react";
 import { Check, Eye, EyeOff, KeyRound, Loader2, ShieldCheck, Smartphone } from "lucide-react";
 import { toast } from "sonner";
@@ -21,6 +22,8 @@ export type SecurityOverview = {
 
 export function SecuritySettings({ overview }: { overview: SecurityOverview }) {
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
+  const [hasPassword, setHasPassword] = useState(overview.hasPassword);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -37,14 +40,23 @@ export function SecuritySettings({ overview }: { overview: SecurityOverview }) {
     { label: "至少包含 3 类字符", met: countPasswordCharacterClasses(newPassword) >= 3 },
     { label: "不包含邮箱或昵称", met: newPassword.length > 0 && !passwordContainsIdentity(newPassword, { email: overview.email, name: overview.name }) },
   ];
-  const passwordReady = passwordRules.every((rule) => rule.met) && newPassword === confirmPassword && (!overview.hasPassword || Boolean(currentPassword));
+  const passwordReady = passwordRules.every((rule) => rule.met) && newPassword === confirmPassword && (!hasPassword || Boolean(currentPassword));
 
   function savePassword(event: React.FormEvent) {
     event.preventDefault();
     if (newPassword !== confirmPassword) return toast.error("两次输入的密码不一致");
     startTransition(async () => {
       const result = await setAccountPassword({ currentPassword, password: newPassword });
-      result.success ? (toast.success(result.message), setCurrentPassword(""), setNewPassword(""), setConfirmPassword("")) : toast.error(result.message);
+      if (!result.success) {
+        toast.error(result.message);
+        return;
+      }
+      setHasPassword(true);
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      router.refresh();
+      toast.success(result.message);
     });
   }
 
@@ -84,12 +96,12 @@ export function SecuritySettings({ overview }: { overview: SecurityOverview }) {
 
   return <div className="mx-auto max-w-2xl space-y-6 px-4 py-8">
     <div><h1 className="text-2xl font-semibold">账号与安全</h1><p className="mt-1 text-sm text-muted-foreground">管理密码和登录验证方式</p></div>
-    <Card><CardHeader><CardTitle className="flex items-center gap-2 text-lg"><KeyRound className="size-5" />密码</CardTitle><CardDescription>{overview.hasPassword ? "设置强密码并定期更新" : "为第三方登录账号设置本地密码"}</CardDescription></CardHeader><CardContent>
+    <Card><CardHeader><CardTitle className="flex items-center gap-2 text-lg"><KeyRound className="size-5" />密码</CardTitle><CardDescription>{hasPassword ? "设置强密码并定期更新" : "为第三方登录账号设置本地密码"}</CardDescription></CardHeader><CardContent>
       <form className="space-y-4" onSubmit={savePassword}>
-        {overview.hasPassword && <div className="space-y-2"><Label htmlFor="current-password">当前密码</Label><PasswordField id="current-password" value={currentPassword} onChange={setCurrentPassword} visible={showCurrentPassword} onVisibilityChange={setShowCurrentPassword} autoComplete="current-password" /></div>}
+        {hasPassword && <div className="space-y-2"><Label htmlFor="current-password">当前密码</Label><PasswordField id="current-password" value={currentPassword} onChange={setCurrentPassword} visible={showCurrentPassword} onVisibilityChange={setShowCurrentPassword} autoComplete="current-password" /></div>}
         <div className="space-y-2"><Label htmlFor="new-password">新密码</Label><PasswordField id="new-password" value={newPassword} onChange={setNewPassword} visible={showNewPassword} onVisibilityChange={setShowNewPassword} minLength={PASSWORD_MIN_LENGTH} maxLength={PASSWORD_MAX_LENGTH} autoComplete="new-password" /><ul className="space-y-1 text-xs">{passwordRules.map((rule) => <li className={rule.met ? "flex items-center gap-1 text-emerald-600" : "flex items-center gap-1 text-muted-foreground"} key={rule.label}><Check className="size-3" />{rule.label}</li>)}</ul></div>
         <div className="space-y-2"><Label htmlFor="confirm-password">确认新密码</Label><PasswordField id="confirm-password" value={confirmPassword} onChange={setConfirmPassword} visible={showConfirmPassword} onVisibilityChange={setShowConfirmPassword} autoComplete="new-password" />{confirmPassword && confirmPassword !== newPassword ? <p className="text-xs text-destructive">两次输入的密码不一致</p> : null}</div>
-        <Button disabled={pending || !passwordReady} type="submit">{pending ? <Loader2 className="animate-spin" /> : <KeyRound />}{overview.hasPassword ? "更新密码" : "设置密码"}</Button>
+        <Button disabled={pending || !passwordReady} type="submit">{pending ? <Loader2 className="animate-spin" /> : <KeyRound />}{hasPassword ? "更新密码" : "设置密码"}</Button>
       </form>
     </CardContent></Card>
 
