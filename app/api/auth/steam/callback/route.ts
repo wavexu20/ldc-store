@@ -15,7 +15,7 @@ export async function GET(request: Request) {
     httpOnly: true,
     secure: true,
     sameSite: "lax",
-    path: "/api/auth/steam/callback",
+    path: "/",
     maxAge: 0,
   });
 

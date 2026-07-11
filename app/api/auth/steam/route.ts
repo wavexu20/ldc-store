@@ -13,7 +13,8 @@ export async function GET(request: Request) {
     httpOnly: true,
     secure: true,
     sameSite: "lax",
-    path: "/api/auth/steam/callback",
+    // Cookies with the __Host- prefix must use Path=/ or browsers reject them.
+    path: "/",
     maxAge: 10 * 60,
   });
   return response;
