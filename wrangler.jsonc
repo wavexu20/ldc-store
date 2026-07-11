@@ -14,6 +14,7 @@
   "vars": {
     "AUTH_URL": "https://game3dtech.com",
     "EMAIL_FROM": "noreply@game3dtech.com",
+    "EMAIL_BRAND_NAME": "Game3DTech",
     "NEXT_PUBLIC_TURNSTILE_SITE_KEY": "0x4AAAAAADzuo3ZhBpLFfnJ1",
     "PAYMENT_GATEWAY_URL": "https://pay.game3dtech.com",
     "PAYMENT_GATEWAY_APP_ID": "game3dtech"
