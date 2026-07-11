@@ -26,6 +26,9 @@
       "migrations_dir": "lib/db/d1-migrations"
     }
   ],
+  "ai": {
+    "binding": "AI"
+  },
   "durable_objects": {
     "bindings": [
       {

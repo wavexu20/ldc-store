@@ -166,6 +166,16 @@ export const categories = sqliteTable("categories", {
 // Products Table (商品)
 // ============================================
 
+export type ProductTranslation = {
+  name?: string;
+  description?: string;
+  content?: string;
+};
+
+export type ProductTranslations = Partial<
+  Record<"en" | "ko" | "zh" | "ru" | "de" | "id" | "hi", ProductTranslation>
+>;
+
 export const products = sqliteTable("products", {
   id: id("id"),
   categoryId: text("category_id").references(() => categories.id, { onDelete: "set null" }),
@@ -173,6 +183,7 @@ export const products = sqliteTable("products", {
   slug: text("slug").notNull().unique(),
   description: text("description"), // 简短描述
   content: text("content"), // 富文本/Markdown 详细描述
+  translations: text("translations", { mode: "json" }).$type<ProductTranslations>(),
   price: text("price").notNull(),
   originalPrice: text("original_price"), // 原价（用于显示折扣）
   coverImage: text("cover_image"),

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { productSchema, type ProductInput } from "@/lib/validations/product";
+import { localeMeta, locales } from "@/lib/i18n";
 import { type AdminCategoryOption } from "@/lib/actions/categories";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,7 +23,7 @@ import {
 } from "@/components/ui/form";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { toast } from "sonner";
-import { Loader2, ArrowLeft, Package, Save, Copy } from "lucide-react";
+import { Loader2, ArrowLeft, Package, Save, Copy, Languages } from "lucide-react";
 import Link from "next/link";
 
 interface ProductFormProps {
@@ -47,6 +48,8 @@ const defaultValues: ProductInput = {
   sortOrder: 0,
   minQuantity: 1,
   maxQuantity: 10,
+  autoTranslate: true,
+  translationSourceLocale: "zh",
 };
 
 export function ProductForm({
@@ -78,7 +81,7 @@ export function ProductForm({
       const result = await onSubmit(values);
 
       if (result.success) {
-        toast.success(isEdit ? "商品更新成功" : "商品创建成功");
+        toast.success(result.message || (isEdit ? "商品更新成功" : "商品创建成功"));
         router.push("/admin/products");
       } else {
         toast.error(result.message);
@@ -245,6 +248,62 @@ export function ProductForm({
                       </FormItem>
                     )}
                   />
+
+                  <div className="space-y-4 rounded-lg border bg-muted/20 p-4">
+                    <FormField
+                      control={form.control}
+                      name="autoTranslate"
+                      render={({ field }) => (
+                        <FormItem className="flex items-center justify-between gap-4">
+                          <div className="space-y-1">
+                            <FormLabel className="flex items-center gap-2 text-base">
+                              <Languages className="h-4 w-4" />
+                              {isEdit ? "重新生成多语言描述" : "自动生成多语言描述"}
+                            </FormLabel>
+                            <FormDescription>
+                              使用 Cloudflare Workers AI 翻译名称、简介和详细描述；关闭后仅保存原文。
+                            </FormDescription>
+                          </div>
+                          <FormControl>
+                            <Switch
+                              checked={field.value}
+                              onCheckedChange={field.onChange}
+                              aria-label={isEdit ? "重新生成多语言描述" : "自动生成多语言描述"}
+                            />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+
+                    {form.watch("autoTranslate") && (
+                      <FormField
+                        control={form.control}
+                        name="translationSourceLocale"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>原文语言</FormLabel>
+                            <FormControl>
+                              <select
+                                aria-label="商品原文语言"
+                                className="border-input bg-background ring-offset-background focus-visible:ring-ring flex h-9 w-full rounded-md border px-3 py-1 text-sm shadow-xs outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50"
+                                {...field}
+                              >
+                                {locales.map((locale) => (
+                                  <option key={locale} value={locale}>
+                                    {localeMeta[locale].name}
+                                  </option>
+                                ))}
+                              </select>
+                            </FormControl>
+                            <FormDescription>
+                              保存时会生成其余 {locales.length - 1} 种语言；详细描述中的 Markdown 代码块保持原样。
+                            </FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    )}
+                  </div>
                 </CardContent>
               </Card>
             </div>
@@ -465,7 +524,13 @@ export function ProductForm({
                 {isPending ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    {isEdit ? "保存中..." : "创建中..."}
+                    {form.watch("autoTranslate")
+                      ? isEdit
+                        ? "保存并翻译中..."
+                        : "创建并翻译中..."
+                      : isEdit
+                        ? "保存中..."
+                        : "创建中..."}
                   </>
                 ) : (
                   <>

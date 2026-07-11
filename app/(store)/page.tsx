@@ -12,24 +12,26 @@ import {
   HomeCategoryFilter,
 } from "@/components/store/home-category-filter";
 import { getTranslator } from "@/lib/i18n-server";
+import { localizeProducts } from "@/lib/product-i18n";
 
 // 强制动态渲染，避免构建时查询数据库
 export const dynamic = "force-dynamic";
 
 async function HomeProductSection() {
-  const { t } = await getTranslator();
+  const { locale, t } = await getTranslator();
   const [categories, products] = await Promise.all([
     getActiveCategories(),
     getActiveProducts({ limit: 100 }),
   ]);
 
+  const localizedProducts = localizeProducts(products, locale);
   const categoryTabs = categories.map((category) => ({
     id: category.id,
     name: category.name,
     slug: category.slug,
   }));
 
-  if (products.length === 0) {
+  if (localizedProducts.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
         <Package className="mb-4 h-12 w-12 opacity-50" />
@@ -41,7 +43,7 @@ async function HomeProductSection() {
 
   return (
     <HomeCategoryFilter categories={categoryTabs}>
-      {products.map((product) => (
+      {localizedProducts.map((product) => (
         <FilterableProductItem
           key={product.id}
           categoryId={product.categoryId ?? null}

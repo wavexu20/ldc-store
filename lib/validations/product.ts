@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+export const productTranslationLocales = ["en", "ko", "zh", "ru", "de", "id", "hi"] as const;
+
 // 创建/更新商品验证
 export const productSchema = z.object({
   name: z.string().min(1, "商品名称不能为空").max(100, "商品名称最多100字符"),
@@ -20,6 +22,8 @@ export const productSchema = z.object({
   sortOrder: z.number().int().default(0),
   minQuantity: z.number().int().min(1).default(1),
   maxQuantity: z.number().int().min(1).default(10),
+  autoTranslate: z.boolean().default(true),
+  translationSourceLocale: z.enum(productTranslationLocales).default("zh"),
 });
 
 export const createProductSchema = productSchema;
@@ -29,4 +33,3 @@ export type ProductInput = z.input<typeof productSchema>;
 export type ProductOutput = z.infer<typeof productSchema>;
 export type CreateProductInput = z.input<typeof createProductSchema>;
 export type UpdateProductInput = z.infer<typeof updateProductSchema>;
-

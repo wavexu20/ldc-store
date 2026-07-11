@@ -6,6 +6,7 @@ import { ProductCard } from "@/components/store/product-card";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, Package, Grid3X3 } from "lucide-react";
 import { getTranslator } from "@/lib/i18n-server";
+import { localizeProducts } from "@/lib/product-i18n";
 
 // 强制动态渲染，避免构建时查询数据库（docker build 无需 DATABASE_URL）
 export const dynamic = "force-dynamic";
@@ -30,7 +31,7 @@ export async function generateMetadata({ params }: CategoryPageProps) {
 }
 
 export default async function CategoryPage({ params }: CategoryPageProps) {
-  const { t } = await getTranslator();
+  const { locale, t } = await getTranslator();
   const { slug } = await params;
   const category = await getCategoryBySlug(slug);
 
@@ -42,6 +43,7 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
     categoryId: category.id,
     limit: 50,
   });
+  const localizedProducts = localizeProducts(products, locale);
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8">
@@ -74,9 +76,9 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
       </div>
 
       {/* Products Grid */}
-      {products.length > 0 ? (
+      {localizedProducts.length > 0 ? (
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {products.map((product) => (
+          {localizedProducts.map((product) => (
             <ProductCard
               key={product.id}
               id={product.id}

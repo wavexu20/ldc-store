@@ -11,6 +11,7 @@ import { getActiveCategories } from "@/lib/actions/categories";
 import { searchProducts } from "@/lib/actions/products";
 import { getTranslator } from "@/lib/i18n-server";
 import type { MessageKey } from "@/lib/i18n";
+import { localizeProducts } from "@/lib/product-i18n";
 
 // 强制动态渲染，避免构建时查询数据库
 export const dynamic = "force-dynamic";
@@ -58,7 +59,7 @@ interface SearchPageProps {
 }
 
 export default async function SearchPage({ searchParams }: SearchPageProps) {
-  const { t } = await getTranslator();
+  const { locale, t } = await getTranslator();
   const params = await searchParams;
 
   const q = (params.q || "").trim();
@@ -81,6 +82,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
         offset,
       })
     : { items: [], total: 0 };
+  const localizedItems = localizeProducts(result.items, locale);
 
   const totalPages = Math.max(1, Math.ceil(result.total / PAGE_SIZE));
   if (shouldQuery && result.total > 0 && currentPage > totalPages) {
@@ -209,7 +211,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {result.items.map((product) => (
+            {localizedItems.map((product) => (
               <ProductCard
                 key={product.id}
                 id={product.id}

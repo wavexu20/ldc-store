@@ -10,6 +10,7 @@ import { renderMarkdownToSafeHtml } from "@/lib/markdown";
 import { ProductImageGallery } from "./product-image-gallery";
 import { RestockRequestInline } from "@/components/store/restock-request-inline";
 import { getTranslator } from "@/lib/i18n-server";
+import { localizeProduct } from "@/lib/product-i18n";
 
 // 强制动态渲染，避免构建时查询数据库（docker build 无需 DATABASE_URL）
 export const dynamic = "force-dynamic";
@@ -22,13 +23,14 @@ interface ProductPageProps {
 }
 
 export async function generateMetadata({ params }: ProductPageProps) {
-  const { t } = await getTranslator();
+  const { locale, t } = await getTranslator();
   const { slug } = await params;
-  const product = await getProductBySlugCached(slug);
+  const sourceProduct = await getProductBySlugCached(slug);
 
-  if (!product) {
+  if (!sourceProduct) {
     return { title: t("productNotFound") };
   }
+  const product = localizeProduct(sourceProduct, locale);
 
   return {
     title: `${product.name} - LDC Store`,
@@ -37,13 +39,14 @@ export async function generateMetadata({ params }: ProductPageProps) {
 }
 
 export default async function ProductPage({ params }: ProductPageProps) {
-  const { t } = await getTranslator();
+  const { locale, t } = await getTranslator();
   const { slug } = await params;
-  const product = await getProductBySlugCached(slug);
+  const sourceProduct = await getProductBySlugCached(slug);
 
-  if (!product) {
+  if (!sourceProduct) {
     notFound();
   }
+  const product = localizeProduct(sourceProduct, locale);
 
   const isOutOfStock = product.stock === 0;
   const hasDiscount =

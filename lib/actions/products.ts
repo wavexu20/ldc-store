@@ -18,6 +18,7 @@ import {
   getRestockSummaryForProducts,
   type RestockSummary,
 } from "@/lib/actions/restock-requests";
+import { generateProductTranslations } from "@/lib/ai/product-translation";
 
 // 节流：最多每 60 秒检查一次过期订单
 let lastExpireCheck = 0;
@@ -106,6 +107,7 @@ export async function getActiveProducts(options?: {
         name: true,
         slug: true,
         description: true,
+        translations: true,
         price: true,
         originalPrice: true,
         coverImage: true,
@@ -183,6 +185,7 @@ export async function getProductBySlug(slug: string) {
         slug: true,
         description: true,
         content: true,
+        translations: true,
         price: true,
         originalPrice: true,
         coverImage: true,
@@ -487,7 +490,8 @@ export async function searchProducts(
   const matchCondition = or(
     like(products.name, pattern),
     like(products.description, pattern),
-    like(products.content, pattern)
+    like(products.content, pattern),
+    like(products.translations, pattern)
   )!;
 
   const conditions = [eq(products.isActive, true), matchCondition];
@@ -512,7 +516,8 @@ export async function searchProducts(
   const relevanceScore = sql<number>`
     (CASE WHEN ${products.name} LIKE ${pattern} THEN 3 ELSE 0 END) +
     (CASE WHEN ${products.description} LIKE ${pattern} THEN 2 ELSE 0 END) +
-    (CASE WHEN ${products.content} LIKE ${pattern} THEN 1 ELSE 0 END)
+    (CASE WHEN ${products.content} LIKE ${pattern} THEN 1 ELSE 0 END) +
+    (CASE WHEN ${products.translations} LIKE ${pattern} THEN 2 ELSE 0 END)
   `;
 
   const orderBy = (() => {
@@ -599,15 +604,42 @@ export async function createProduct(input: CreateProductInput) {
   }
 
   try {
+    const { autoTranslate, translationSourceLocale, ...productData } =
+      validationResult.data;
     const [product] = await db
       .insert(products)
       .values({
-        ...validationResult.data,
-        price: validationResult.data.price.toFixed(2),
-        originalPrice: validationResult.data.originalPrice?.toFixed(2),
-        coverImage: validationResult.data.coverImage || null,
+        ...productData,
+        price: productData.price.toFixed(2),
+        originalPrice: productData.originalPrice?.toFixed(2),
+        coverImage: productData.coverImage || null,
       })
       .returning();
+
+    let savedProduct = product;
+    let translationWarning: string | undefined;
+    if (autoTranslate) {
+      try {
+        const generated = await generateProductTranslations(
+          product,
+          translationSourceLocale
+        );
+        [savedProduct] = await db
+          .update(products)
+          .set({
+            translations: { ...product.translations, ...generated.translations },
+            updatedAt: new Date(),
+          })
+          .where(eq(products.id, product.id))
+          .returning();
+        if (generated.failedLocales.length > 0) {
+          translationWarning = `商品已创建；${generated.failedLocales.join(", ")} 翻译失败，可在编辑页重试`;
+        }
+      } catch (error) {
+        console.error("[createProduct] 自动翻译失败:", error);
+        translationWarning = "商品已创建，但自动翻译暂时失败，可在编辑页重新生成";
+      }
+    }
 
     // 获取分类 slug 用于清理分类页缓存
     let categorySlug: string | undefined;
@@ -621,7 +653,11 @@ export async function createProduct(input: CreateProductInput) {
 
     await revalidateProductAndRelatedCache(product.slug, categorySlug);
 
-    return { success: true, data: product };
+    return {
+      success: true,
+      data: savedProduct,
+      message: translationWarning ?? (autoTranslate ? "商品已创建并生成多语言描述" : undefined),
+    };
   } catch (error) {
     console.error("创建商品失败:", error);
     // 检查是否是唯一约束冲突
@@ -651,19 +687,24 @@ export async function updateProduct(id: string, input: UpdateProductInput) {
   }
 
   try {
+    const {
+      autoTranslate = false,
+      translationSourceLocale = "zh",
+      ...productFields
+    } = validationResult.data;
     const updateData: Record<string, unknown> = {
-      ...validationResult.data,
+      ...productFields,
       updatedAt: new Date(),
     };
 
-    if (validationResult.data.price !== undefined) {
-      updateData.price = validationResult.data.price.toFixed(2);
+    if (productFields.price !== undefined) {
+      updateData.price = productFields.price.toFixed(2);
     }
-    if (validationResult.data.originalPrice !== undefined) {
-      updateData.originalPrice = validationResult.data.originalPrice?.toFixed(2);
+    if (productFields.originalPrice !== undefined) {
+      updateData.originalPrice = productFields.originalPrice?.toFixed(2);
     }
-    if (validationResult.data.coverImage !== undefined) {
-      updateData.coverImage = validationResult.data.coverImage || null;
+    if (productFields.coverImage !== undefined) {
+      updateData.coverImage = productFields.coverImage || null;
     }
 
     const [product] = await db
@@ -674,6 +715,31 @@ export async function updateProduct(id: string, input: UpdateProductInput) {
 
     if (!product) {
       return { success: false, message: "商品不存在" };
+    }
+
+    let savedProduct = product;
+    let translationWarning: string | undefined;
+    if (autoTranslate) {
+      try {
+        const generated = await generateProductTranslations(
+          product,
+          translationSourceLocale
+        );
+        [savedProduct] = await db
+          .update(products)
+          .set({
+            translations: { ...product.translations, ...generated.translations },
+            updatedAt: new Date(),
+          })
+          .where(eq(products.id, product.id))
+          .returning();
+        if (generated.failedLocales.length > 0) {
+          translationWarning = `商品已保存；${generated.failedLocales.join(", ")} 翻译失败，请稍后重试`;
+        }
+      } catch (error) {
+        console.error("[updateProduct] 自动翻译失败:", error);
+        translationWarning = "商品已保存，但自动翻译暂时失败，请稍后重试";
+      }
     }
 
     // 获取分类 slug 用于清理分类页缓存
@@ -688,7 +754,11 @@ export async function updateProduct(id: string, input: UpdateProductInput) {
 
     await revalidateProductAndRelatedCache(product.slug, categorySlug);
 
-    return { success: true, data: product };
+    return {
+      success: true,
+      data: savedProduct,
+      message: translationWarning ?? (autoTranslate ? "商品已保存并重新生成多语言描述" : undefined),
+    };
   } catch (error) {
     console.error("更新商品失败:", error);
     if (error instanceof Error && error.message.includes("unique")) {

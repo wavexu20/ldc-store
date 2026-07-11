@@ -62,6 +62,8 @@ export default function EditProductPage({ params }: EditProductPageProps) {
           sortOrder: product.sortOrder,
           minQuantity: product.minQuantity,
           maxQuantity: product.maxQuantity,
+          autoTranslate: false,
+          translationSourceLocale: "zh",
         });
       } catch (error) {
         if (!isMounted) return;
