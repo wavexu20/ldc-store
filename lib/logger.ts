@@ -1,72 +1,73 @@
 import "server-only";
 
-/**
- * 结构化日志（Node runtime）
- *
- * 为什么单独封装：
- * - 统一字段（requestId/userId/orderNo 等），方便跨模块检索与关联排障
- * - 统一脱敏策略，避免业务层日志“不小心”把敏感信息写出去
- *
- * 注意：Next.js middleware 运行在 Edge runtime，不应引入此文件（pino 依赖 Node 环境）
- */
-
-import pino from "pino";
 import { headers } from "next/headers";
 
-const isProduction = process.env.NODE_ENV === "production";
+const SENSITIVE_KEYS = new Set([
+  "password",
+  "secret",
+  "token",
+  "key",
+  "authorization",
+  "cookie",
+  "sign",
+]);
 
-export const logger = pino({
-  level: process.env.LOG_LEVEL || (isProduction ? "info" : "debug"),
-  // 关键：日志中禁止出现敏感字段；这里做“兜底”脱敏，业务侧仍应尽量只记录白名单字段
-  redact: {
-    paths: [
-      // 常见凭证/敏感字段
-      "*.password",
-      "*.secret",
-      "*.token",
-      "*.key",
-      "password",
-      "secret",
-      "token",
-      "key",
-      // 请求相关敏感头
-      "req.headers.authorization",
-      "req.headers.cookie",
-      "headers.authorization",
-      "headers.cookie",
-      // 支付回调签名
-      "*.sign",
-      "sign",
-    ],
-    remove: true,
-  },
-  transport: isProduction
-    ? undefined
-    : {
-        target: "pino-pretty",
-        options: {
-          colorize: true,
-          translateTime: "SYS:standard",
-          singleLine: false,
-          ignore: "pid,hostname",
-        },
-      },
-});
+function sanitize(value: unknown): unknown {
+  if (!value || typeof value !== "object") return value;
+  if (value instanceof Error) {
+    return { name: value.name, message: value.message, stack: value.stack };
+  }
+  if (Array.isArray(value)) return value.map(sanitize);
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .filter(([key]) => !SENSITIVE_KEYS.has(key.toLowerCase()))
+      .map(([key, item]) => [key, sanitize(item)])
+  );
+}
+
+type LogMethod = (dataOrMessage?: unknown, message?: string) => void;
+export interface AppLogger {
+  debug: LogMethod;
+  info: LogMethod;
+  warn: LogMethod;
+  error: LogMethod;
+  child: (bindings: Record<string, unknown>) => AppLogger;
+}
+
+function createLogger(bindings: Record<string, unknown> = {}): AppLogger {
+  const write = (level: "debug" | "info" | "warn" | "error"): LogMethod =>
+    (dataOrMessage, message) => {
+      const payload =
+        typeof dataOrMessage === "string"
+          ? { ...bindings, message: dataOrMessage }
+          : { ...bindings, ...(sanitize(dataOrMessage) as object), message };
+      const method = level === "debug" ? console.log : console[level];
+      method(JSON.stringify({ level, ...payload }));
+    };
+  return {
+    debug: write("debug"),
+    info: write("info"),
+    warn: write("warn"),
+    error: write("error"),
+    child: (childBindings) =>
+      createLogger({
+        ...bindings,
+        ...(sanitize(childBindings) as Record<string, unknown>),
+      }),
+  };
+}
+
+export const logger = createLogger();
 
 export function childLogger(bindings: Record<string, unknown>) {
   return logger.child(bindings);
 }
 
-/**
- * 从请求头获取 requestId（由 middleware 注入 x-request-id）
- */
 export async function getRequestIdFromHeaders(): Promise<string | undefined> {
   try {
     const headersList = await headers();
     return headersList.get("x-request-id") || undefined;
   } catch {
-    // 在无请求上下文（例如测试/脚本）场景下 headers() 可能不可用，
-    // 这里返回 undefined，保证业务逻辑不被日志/上下文获取影响。
     return undefined;
   }
 }

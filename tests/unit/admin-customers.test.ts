@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 
-const executeMock = vi.fn();
+const allMock = vi.fn();
 const requireAdminMock = vi.fn();
 
-// 关键：避免在单元测试中初始化真实数据库连接（lib/db 会强依赖 DATABASE_URL）
+// 避免在单元测试中读取真实 D1 Binding。
 vi.mock("@/lib/db", () => ({
   db: {
-    execute: (...args: unknown[]) => executeMock(...args),
+    all: (...args: unknown[]) => allMock(...args),
   },
 }));
 
@@ -29,7 +29,7 @@ describe("getAdminCustomersPage", () => {
   it("should require admin and return items/total", async () => {
     requireAdminMock.mockResolvedValueOnce({ user: { id: "a1", role: "admin" } });
 
-    executeMock
+    allMock
       .mockResolvedValueOnce([
         {
           user_id: "u1",
@@ -50,9 +50,9 @@ describe("getAdminCustomersPage", () => {
     });
 
     expect(requireAdminMock).toHaveBeenCalledTimes(1);
-    expect(executeMock).toHaveBeenCalledTimes(2);
+    expect(allMock).toHaveBeenCalledTimes(2);
 
-    const firstCallSql = executeMock.mock.calls[0]?.[0] as { values?: unknown[] } | undefined;
+    const firstCallSql = allMock.mock.calls[0]?.[0] as { values?: unknown[] } | undefined;
     // values 中会包含 whereSql(嵌套 sql 对象)、limit、offset
     expect(firstCallSql?.values).toContain(20);
 
@@ -76,4 +76,3 @@ describe("getAdminCustomersPage", () => {
     ]);
   });
 });
-

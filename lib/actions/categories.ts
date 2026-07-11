@@ -61,7 +61,7 @@ export async function getAllCategoriesWithCount() {
   const productCounts = await db
     .select({
       categoryId: products.categoryId,
-      count: sql<number>`count(*)::int`,
+      count: sql<number>`count(*)`,
     })
     .from(products)
     .where(eq(products.isActive, true))
@@ -181,7 +181,7 @@ export async function deleteCategory(id: string) {
   try {
     // 检查是否有商品使用该分类
     const productCount = await db
-      .select({ count: sql<number>`count(*)::int` })
+      .select({ count: sql<number>`count(*)` })
       .from(products)
       .where(eq(products.categoryId, id));
 

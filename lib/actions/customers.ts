@@ -22,21 +22,19 @@ export async function getCustomersSpendLeaderboard(input?: {
 }): Promise<CustomerSpendLeaderboardItem[]> {
   const limit = normalizeLimit(input?.limit, 50);
 
-  const rows = await db.execute(sql`
-    WITH agg AS (
-      SELECT
-        user_id,
-        (ARRAY_AGG(username ORDER BY created_at DESC))[1] AS username,
-        (ARRAY_AGG(user_image ORDER BY created_at DESC))[1] AS user_image,
-        COUNT(*)::int AS order_count,
-        COALESCE(SUM(total_amount::numeric), 0)::text AS total_spent
-      FROM orders
-      WHERE status = 'completed' AND user_id IS NOT NULL
-      GROUP BY user_id
-    )
-    SELECT user_id, username, user_image, order_count, total_spent
-    FROM agg
-    ORDER BY total_spent::numeric DESC, order_count DESC, user_id ASC
+  const rows = await db.all(sql`
+    SELECT
+      o.user_id,
+      (SELECT latest.username FROM orders latest
+       WHERE latest.user_id = o.user_id ORDER BY latest.created_at DESC LIMIT 1) AS username,
+      (SELECT latest.user_image FROM orders latest
+       WHERE latest.user_id = o.user_id ORDER BY latest.created_at DESC LIMIT 1) AS user_image,
+      COUNT(*) AS order_count,
+      printf('%.2f', COALESCE(SUM(CAST(o.total_amount AS REAL)), 0)) AS total_spent
+    FROM orders o
+    WHERE o.status = 'completed' AND o.user_id IS NOT NULL
+    GROUP BY o.user_id
+    ORDER BY SUM(CAST(o.total_amount AS REAL)) DESC, order_count DESC, o.user_id ASC
     LIMIT ${limit}
   `);
 
@@ -57,4 +55,3 @@ export async function getCustomersSpendLeaderboard(input?: {
     totalSpent: row.total_spent ?? "0",
   }));
 }
-

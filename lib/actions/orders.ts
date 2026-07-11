@@ -5,13 +5,13 @@
  *
  * 时区策略说明：
  * - 所有时间使用 JavaScript Date 对象（内部为 UTC 时间戳）
- * - 数据库字段为 timestamp with time zone，PostgreSQL 自动以 UTC 存储
- * - 过期判断使用数据库 NOW() 函数，确保与存储时间一致
+ * - D1 时间字段使用 Unix 秒时间戳，以 UTC 语义存储
+ * - 过期判断使用显式 Unix 时间戳参数，确保批处理内口径一致
  * - 前端显示时浏览器自动转换为用户本地时区
  */
 
-import { db, orders, cards, products, users, walletTransactions } from "@/lib/db";
-import { eq, and, sql, desc, inArray } from "drizzle-orm";
+import { db, getD1Binding, orders, cards, products } from "@/lib/db";
+import { eq, and, sql, desc, inArray, lt } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { headers } from "next/headers";
 import { after } from "next/server";
@@ -135,95 +135,98 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
 
     const { orderExpireMinutes } = await getSystemSettings();
 
-    // 3. 使用事务处理订单创建和卡密锁定
-    const result = await db.transaction(async (tx) => {
-      // 3.1 查询可用库存（使用 FOR UPDATE 锁定行）
-      const availableCards = await tx
-        .select({ id: cards.id })
-        .from(cards)
-        .where(and(eq(cards.productId, productId), eq(cards.status, "available")))
-        .limit(quantity)
-        .for("update");
+    const availableCards = await db
+      .select({ id: cards.id })
+      .from(cards)
+      .where(and(eq(cards.productId, productId), eq(cards.status, "available")))
+      .limit(quantity);
+    if (availableCards.length < quantity) {
+      throw new Error(`库存不足，当前仅剩 ${availableCards.length} 件`);
+    }
 
-      if (availableCards.length < quantity) {
-        throw new Error(`库存不足，当前仅剩 ${availableCards.length} 件`);
-      }
+    const cardIds = availableCards.map((card) => card.id);
+    const orderId = crypto.randomUUID();
+    const walletTransactionId = crypto.randomUUID();
+    const orderNo = generateOrderNo();
+    const totalAmount = parseFloat(product.price) * quantity;
+    const totalCents = Math.round(totalAmount * 100);
+    const createdAt = new Date();
+    const expiredAt = getExpireTime(orderExpireMinutes);
+    const createdEpoch = Math.floor(createdAt.getTime() / 1000);
+    const expiredEpoch = Math.floor(expiredAt.getTime() / 1000);
+    const placeholders = cardIds.map(() => "?").join(", ");
+    const isBalance = paymentMethod === "balance";
+    const d1 = getD1Binding();
 
-      const cardIds = availableCards.map((c) => c.id);
-      const orderNo = generateOrderNo();
-      const totalAmount = parseFloat(product.price) * quantity;
-      const totalCents = Math.round(totalAmount * 100);
-      // 计算订单过期时间（UTC 时间戳，存入数据库时自动转换）
-      const expiredAt = getExpireTime(orderExpireMinutes);
-
-      let balanceAfterCents: number | null = null;
-      if (paymentMethod === "balance") {
-        const [walletUser] = await tx.select().from(users)
-          .where(eq(users.id, userId)).for("update");
-        if (!walletUser) throw new Error("账号不存在");
-        if (walletUser.balanceCents < totalCents) throw new Error("账户余额不足，请先充值");
-        balanceAfterCents = walletUser.balanceCents - totalCents;
-      }
-
-      // 3.2 创建订单
-      const [newOrder] = await tx
-        .insert(orders)
-        .values({
-          orderNo,
-          productId,
-          productName: product.name,
-          productPrice: product.price,
-          quantity,
-          totalAmount: totalAmount.toFixed(2),
-          paymentMethod,
-          status: paymentMethod === "balance" ? "completed" : "pending",
-          tradeNo: paymentMethod === "balance" ? `BALANCE-${orderNo}` : null,
-          paidAt: paymentMethod === "balance" ? new Date() : null,
-          userId,
-          username: user.username,
-          userImage: user.image || null,
-          expiredAt,
-        })
-        .returning();
-
-      // 3.3 锁定卡密
-      await tx
-        .update(cards)
-        .set({
-          status: paymentMethod === "balance" ? "sold" : "locked",
-          orderId: newOrder.id,
-          lockedAt: paymentMethod === "balance" ? null : new Date(),
-          soldAt: paymentMethod === "balance" ? new Date() : null,
-        })
-        .where(
-          and(
-            eq(cards.productId, productId),
-            eq(cards.status, "available"),
-            inArray(cards.id, cardIds)
-          )
-        );
-
-      if (paymentMethod === "balance" && balanceAfterCents !== null) {
-        await tx.update(users).set({ balanceCents: balanceAfterCents, updatedAt: new Date() })
-          .where(eq(users.id, userId));
-        await tx.insert(walletTransactions).values({
-          userId,
-          type: "purchase",
-          amountCents: -totalCents,
-          balanceAfterCents,
-          referenceType: "order",
-          referenceId: newOrder.id,
-          idempotencyKey: `purchase:${newOrder.id}`,
-          description: `购买 ${product.name}`,
-        });
-        await tx.update(products).set({
-          salesCount: sql`${products.salesCount} + ${quantity}`,
-          updatedAt: new Date(),
-        }).where(eq(products.id, productId));
-      }
-
-      return { order: newOrder, totalAmount };
-    });
+    const statements = [
+      d1.prepare(`
+        INSERT INTO orders (
+          id, order_no, product_id, product_name, product_price, quantity,
+          total_amount, payment_method, status, trade_no, user_id, username,
+          user_image, paid_at, expired_at, created_at, updated_at
+        )
+        SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+        WHERE (
+          SELECT COUNT(*) FROM cards
+          WHERE product_id = ? AND status = 'available' AND id IN (${placeholders})
+        ) = ?
+        AND (? <> 'balance' OR EXISTS (
+          SELECT 1 FROM users WHERE id = ? AND balance_cents >= ?
+        ))
+        RETURNING id, order_no
+      `).bind(
+        orderId, orderNo, productId, product.name, product.price, quantity,
+        totalAmount.toFixed(2), paymentMethod,
+        isBalance ? "completed" : "pending",
+        isBalance ? `BALANCE-${orderNo}` : null,
+        userId, user.username ?? null, user.image ?? null,
+        isBalance ? createdEpoch : null, expiredEpoch, createdEpoch, createdEpoch,
+        productId, ...cardIds, quantity, paymentMethod, userId, totalCents
+      ),
+      d1.prepare(`
+        UPDATE cards SET status = ?, order_id = ?, locked_at = ?, sold_at = ?
+        WHERE product_id = ? AND status = 'available'
+          AND id IN (${placeholders})
+          AND EXISTS (SELECT 1 FROM orders WHERE id = ?)
+      `).bind(
+        isBalance ? "sold" : "locked", orderId,
+        isBalance ? null : createdEpoch, isBalance ? createdEpoch : null,
+        productId, ...cardIds, orderId
+      ),
+      d1.prepare(`
+        UPDATE users
+        SET balance_cents = balance_cents - ?, updated_at = ?
+        WHERE id = ? AND ? = 'balance'
+          AND EXISTS (SELECT 1 FROM orders WHERE id = ?)
+      `).bind(totalCents, createdEpoch, userId, paymentMethod, orderId),
+      d1.prepare(`
+        INSERT INTO wallet_transactions (
+          id, user_id, type, amount_cents, balance_after_cents,
+          reference_type, reference_id, idempotency_key, description, created_at
+        )
+        SELECT ?, id, 'purchase', ?, balance_cents, 'order', ?, ?, ?, ?
+        FROM users
+        WHERE id = ? AND ? = 'balance'
+          AND EXISTS (SELECT 1 FROM orders WHERE id = ?)
+        ON CONFLICT(idempotency_key) DO NOTHING
+      `).bind(
+        walletTransactionId, -totalCents, orderId, `purchase:${orderId}`,
+        `购买 ${product.name}`, createdEpoch, userId, paymentMethod, orderId
+      ),
+      d1.prepare(`
+        UPDATE products SET sales_count = sales_count + ?, updated_at = ?
+        WHERE id = ? AND ? = 'balance'
+          AND EXISTS (SELECT 1 FROM orders WHERE id = ?)
+      `).bind(quantity, createdEpoch, productId, paymentMethod, orderId),
+    ];
+    const [insertResult] = await d1.batch<{ id: string; order_no: string }>(statements);
+    if (!insertResult.results[0]) {
+      throw new Error("库存或余额已发生变化，请刷新后重试");
+    }
+    const result = {
+      order: { orderNo, createdAt, expiredAt },
+      totalAmount,
+    };
 
     // 4. 刷新页面缓存，确保库存显示准确
     revalidatePath("/");
@@ -318,48 +321,39 @@ export async function handlePaymentSuccess(
     const log = logger.child({ action: "handlePaymentSuccess", orderNo, tradeNo });
     let productSlug: string | null = null;
 
-    const result = await db.transaction(async (tx) => {
-      const [order] = await tx
-        .update(orders)
-        .set({
-          status: "completed",
-          tradeNo,
-          paidAt: new Date(),
-          updatedAt: new Date(),
-        })
-        .where(and(eq(orders.orderNo, orderNo), eq(orders.status, "pending")))
-        .returning();
-
-      if (!order) {
-        throw new Error("订单不存在或已处理");
-      }
-
-      await tx
-        .update(cards)
-        .set({
-          status: "sold",
-          soldAt: new Date(),
-        })
-        .where(eq(cards.orderId, order.id));
-
-      if (order.productId) {
-        await tx
-          .update(products)
-          .set({
-            salesCount: sql`${products.salesCount} + ${order.quantity}`,
-            updatedAt: new Date(),
-          })
-          .where(eq(products.id, order.productId));
-
-        const product = await tx.query.products.findFirst({
-          where: eq(products.id, order.productId),
-          columns: { slug: true },
-        });
-        productSlug = product?.slug || null;
-      }
-
-      return order;
+    const pendingOrder = await db.query.orders.findFirst({
+      where: and(eq(orders.orderNo, orderNo), eq(orders.status, "pending")),
     });
+    if (!pendingOrder) throw new Error("订单不存在或已处理");
+    const nowEpoch = Math.floor(Date.now() / 1000);
+    const d1 = getD1Binding();
+    const statements = [
+      d1.prepare(`
+        UPDATE cards SET status = 'sold', sold_at = ?
+        WHERE order_id = ?
+          AND EXISTS (SELECT 1 FROM orders WHERE id = ? AND status = 'pending')
+      `).bind(nowEpoch, pendingOrder.id, pendingOrder.id),
+      d1.prepare(`
+        UPDATE products SET sales_count = sales_count + ?, updated_at = ?
+        WHERE id = ?
+          AND EXISTS (SELECT 1 FROM orders WHERE id = ? AND status = 'pending')
+      `).bind(pendingOrder.quantity, nowEpoch, pendingOrder.productId, pendingOrder.id),
+      d1.prepare(`
+        UPDATE orders SET status = 'completed', trade_no = ?, paid_at = ?, updated_at = ?
+        WHERE id = ? AND status = 'pending'
+        RETURNING id
+      `).bind(tradeNo, nowEpoch, nowEpoch, pendingOrder.id),
+    ];
+    const batchResult = await d1.batch<{ id: string }>(statements);
+    if (!batchResult[2]?.results[0]) throw new Error("订单不存在或已处理");
+    const result = { ...pendingOrder, status: "completed" as const, tradeNo, paidAt: new Date() };
+    if (pendingOrder.productId) {
+      const product = await db.query.products.findFirst({
+        where: eq(products.id, pendingOrder.productId),
+        columns: { slug: true },
+      });
+      productSlug = product?.slug || null;
+    }
 
     revalidatePath("/admin/orders");
     revalidatePath("/admin");
@@ -401,50 +395,35 @@ export async function handlePaymentSuccess(
  *
  * 时区一致性说明：
  * - 订单创建时 expiredAt 使用 JavaScript Date（UTC 时间戳）
- * - PostgreSQL 存储为 timestamp with time zone（内部 UTC）
- * - 过期检查使用数据库 NOW() 函数（与存储时区一致）
+ * - D1 以 Unix 秒时间戳存储（UTC 语义）
+ * - 过期检查使用同一次调用生成的时间参数
  * - 这确保了无论服务器部署在哪个时区，过期判断都是准确的
  */
 export async function releaseExpiredOrders(): Promise<number> {
   try {
-    const expiredOrdersData = await db.transaction(async (tx) => {
-      const expiredOrders = await tx
-        .update(orders)
-        .set({
-          status: "expired",
-          updatedAt: new Date(),
-        })
-        .where(
-          and(
-            eq(orders.status, "pending"),
-            sql`${orders.expiredAt} < NOW()`
-          )
-        )
-        .returning({
-          id: orders.id,
-        });
-
-      if (expiredOrders.length === 0) {
-        return [];
-      }
-
-      const orderIds = expiredOrders.map((o) => o.id);
-      await tx
-        .update(cards)
-        .set({
-          status: "available",
-          orderId: null,
-          lockedAt: null,
-        })
-        .where(
-          and(
-            eq(cards.status, "locked"),
-            inArray(cards.orderId, orderIds)
-          )
-        );
-
-      return expiredOrders;
-    });
+    const expiredOrdersData = await db
+      .select({ id: orders.id })
+      .from(orders)
+      .where(and(eq(orders.status, "pending"), lt(orders.expiredAt, new Date())));
+    if (expiredOrdersData.length > 0) {
+      const orderIds = expiredOrdersData.map((order) => order.id);
+      await db.batch([
+        db
+          .update(cards)
+          .set({ status: "available", orderId: null, lockedAt: null })
+          .where(and(eq(cards.status, "locked"), inArray(cards.orderId, orderIds))),
+        db
+          .update(orders)
+          .set({ status: "expired", updatedAt: new Date() })
+          .where(
+            and(
+              eq(orders.status, "pending"),
+              inArray(orders.id, orderIds),
+              lt(orders.expiredAt, new Date())
+            )
+          ),
+      ]);
+    }
 
     if (expiredOrdersData.length > 0) {
       revalidatePath("/admin/orders");
@@ -474,50 +453,36 @@ export async function adminCompleteOrder(
   try {
     let productSlug: string | null = null;
 
-    await db.transaction(async (tx) => {
-      // 1. 更新订单状态
-      const [order] = await tx
-        .update(orders)
-        .set({
-          status: "completed",
-          paidAt: new Date(),
-          adminRemark,
-          updatedAt: new Date(),
-        })
-        .where(eq(orders.id, orderId))
-        .returning();
-
-      if (!order) {
-        throw new Error("订单不存在");
-      }
-
-      // 2. 更新卡密状态
-      await tx
-        .update(cards)
-        .set({
-          status: "sold",
-          soldAt: new Date(),
-        })
-        .where(eq(cards.orderId, order.id));
-
-      // 3. 更新销量
-      if (order.productId) {
-        await tx
-          .update(products)
-          .set({
-            salesCount: sql`${products.salesCount} + ${order.quantity}`,
-            updatedAt: new Date(),
-          })
-          .where(eq(products.id, order.productId));
-
-        // 获取商品 slug 用于刷新缓存
-        const product = await tx.query.products.findFirst({
-          where: eq(products.id, order.productId),
-          columns: { slug: true },
-        });
-        productSlug = product?.slug || null;
-      }
-    });
+    const order = await db.query.orders.findFirst({ where: eq(orders.id, orderId) });
+    if (!order) throw new Error("订单不存在");
+    const nowEpoch = Math.floor(Date.now() / 1000);
+    const d1 = getD1Binding();
+    const results = await d1.batch<{ id: string }>([
+      d1.prepare(`
+        UPDATE cards SET status = 'sold', sold_at = ?
+        WHERE order_id = ? AND EXISTS (
+          SELECT 1 FROM orders WHERE id = ? AND status IN ('pending', 'paid')
+        )
+      `).bind(nowEpoch, orderId, orderId),
+      d1.prepare(`
+        UPDATE products SET sales_count = sales_count + ?, updated_at = ?
+        WHERE id = ? AND EXISTS (
+          SELECT 1 FROM orders WHERE id = ? AND status IN ('pending', 'paid')
+        )
+      `).bind(order.quantity, nowEpoch, order.productId, orderId),
+      d1.prepare(`
+        UPDATE orders SET status = 'completed', paid_at = ?, admin_remark = ?, updated_at = ?
+        WHERE id = ? AND status IN ('pending', 'paid') RETURNING id
+      `).bind(nowEpoch, adminRemark ?? null, nowEpoch, orderId),
+    ]);
+    if (!results[2]?.results[0]) throw new Error("订单状态不允许手动完成");
+    if (order.productId) {
+      const product = await db.query.products.findFirst({
+        where: eq(products.id, order.productId),
+        columns: { slug: true },
+      });
+      productSlug = product?.slug || null;
+    }
 
     // 刷新页面缓存
     revalidatePath("/admin/orders");
@@ -915,31 +880,51 @@ export async function approveRefund(
     if (order.paymentMethod === "balance") {
       if (!order.userId) return { success: false, message: "余额订单缺少用户信息" };
       const refundCents = Math.round(parseFloat(order.totalAmount) * 100);
-      await db.transaction(async (tx) => {
-        const [walletUser] = await tx.select().from(users)
-          .where(eq(users.id, order.userId!)).for("update");
-        if (!walletUser) throw new Error("退款用户不存在");
-        const balanceAfterCents = walletUser.balanceCents + refundCents;
-        await tx.update(users).set({ balanceCents: balanceAfterCents, updatedAt: new Date() })
-          .where(eq(users.id, walletUser.id));
-        await tx.insert(walletTransactions).values({
-          userId: walletUser.id,
-          type: "refund",
-          amountCents: refundCents,
-          balanceAfterCents,
-          referenceType: "order",
-          referenceId: order.id,
-          idempotencyKey: `refund:${order.id}`,
-          description: `订单 ${order.orderNo} 退款`,
-        });
-        await tx.update(orders).set({
-          status: "refunded",
-          adminRemark: adminRemark || "退款已原路退回账户余额",
-          refundedAt: new Date(),
-          updatedAt: new Date(),
-        }).where(eq(orders.id, order.id));
-        await tx.update(cards).set({ status: "refunded" }).where(eq(cards.orderId, order.id));
-      });
+      const nowEpoch = Math.floor(Date.now() / 1000);
+      const idempotencyKey = `refund:${order.id}`;
+      const d1 = getD1Binding();
+      const results = await d1.batch<{ id: string }>([
+        d1.prepare(`
+          UPDATE orders
+          SET status = 'refunded', admin_remark = ?, refunded_at = ?, updated_at = ?
+          WHERE id = ? AND status = 'refund_pending' RETURNING id
+        `).bind(
+          adminRemark || "退款已原路退回账户余额",
+          nowEpoch,
+          nowEpoch,
+          order.id
+        ),
+        d1.prepare(`
+          UPDATE users SET balance_cents = balance_cents + ?, updated_at = ?
+          WHERE id = ?
+            AND EXISTS (SELECT 1 FROM orders WHERE id = ? AND status = 'refunded')
+            AND NOT EXISTS (
+              SELECT 1 FROM wallet_transactions WHERE idempotency_key = ?
+            )
+        `).bind(refundCents, nowEpoch, order.userId, order.id, idempotencyKey),
+        d1.prepare(`
+          INSERT INTO wallet_transactions (
+            id, user_id, type, amount_cents, balance_after_cents,
+            reference_type, reference_id, idempotency_key, description, created_at
+          )
+          SELECT ?, id, 'refund', ?, balance_cents, 'order', ?, ?, ?, ?
+          FROM users WHERE id = ?
+            AND EXISTS (SELECT 1 FROM orders WHERE id = ? AND status = 'refunded')
+          ON CONFLICT(idempotency_key) DO NOTHING
+        `).bind(
+          crypto.randomUUID(), refundCents, order.id, idempotencyKey,
+          `订单 ${order.orderNo} 退款`, nowEpoch, order.userId, order.id
+        ),
+        d1.prepare(`
+          UPDATE cards SET status = 'refunded'
+          WHERE order_id = ? AND EXISTS (
+            SELECT 1 FROM orders WHERE id = ? AND status = 'refunded'
+          )
+        `).bind(order.id, order.id),
+      ]);
+      if (!results[0]?.results[0]) {
+        return { success: false, message: "该退款已处理或订单状态已变化" };
+      }
       revalidatePath("/admin/orders");
       revalidatePath("/order/my");
       revalidatePath("/account/wallet");

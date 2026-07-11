@@ -1,29 +1,25 @@
 import {
-  pgTable,
+  sqliteTable,
   text,
-  timestamp,
-  uuid,
   integer,
-  decimal,
-  boolean,
-  pgEnum,
   index,
   uniqueIndex,
-} from "drizzle-orm/pg-core";
+} from "drizzle-orm/sqlite-core";
 import { relations, sql } from "drizzle-orm";
 
 // ============================================
 // Enums
 // ============================================
 
-export const cardStatusEnum = pgEnum("card_status", [
+const cardStatusValues = [
   "available", // 可用
   "locked",    // 已锁定（待支付）
   "sold",      // 已售出
   "refunded",  // 已退款
-]);
+] as const;
+export const cardStatusEnum = { enumValues: cardStatusValues };
 
-export const orderStatusEnum = pgEnum("order_status", [
+const orderStatusValues = [
   "pending",          // 待支付
   "paid",             // 已支付
   "completed",        // 已完成（卡密已发放）
@@ -31,105 +27,113 @@ export const orderStatusEnum = pgEnum("order_status", [
   "refund_pending",   // 退款审核中
   "refund_rejected",  // 退款已拒绝
   "refunded",         // 已退款
-]);
+] as const;
+export const orderStatusEnum = { enumValues: orderStatusValues };
 
-export const paymentMethodEnum = pgEnum("payment_method", [
+const paymentMethodValues = [
   "ldc",       // Linux DO Credit
   "balance",   // 账户余额
   "alipay",    // 支付宝（预留）
   "wechat",    // 微信支付（预留）
   "usdt",      // USDT（预留）
-]);
+] as const;
+export const paymentMethodEnum = { enumValues: paymentMethodValues };
 
-export const userRoleEnum = pgEnum("user_role", ["user", "admin"]);
-export const userStatusEnum = pgEnum("user_status", ["active", "disabled"]);
-export const walletTransactionTypeEnum = pgEnum("wallet_transaction_type", [
+const userRoleValues = ["user", "admin"] as const;
+const userStatusValues = ["active", "disabled"] as const;
+const walletTransactionTypeValues = [
   "recharge",
   "purchase",
   "refund",
   "adjustment",
-]);
-export const rechargeStatusEnum = pgEnum("recharge_status", [
+] as const;
+const rechargeStatusValues = [
   "pending",
   "paid",
   "expired",
   "cancelled",
-]);
+] as const;
+
+const id = (name: string) =>
+  text(name).primaryKey().$defaultFn(() => crypto.randomUUID());
+const timestamp = (name: string) => integer(name, { mode: "timestamp" });
+const createdAt = () => timestamp("created_at").$defaultFn(() => new Date()).notNull();
+const updatedAt = () => timestamp("updated_at").$defaultFn(() => new Date()).notNull();
 
 // ============================================
 // Users & linked identities
 // ============================================
 
-export const users = pgTable("users", {
-  id: uuid("id").primaryKey().defaultRandom(),
+export const users = sqliteTable("users", {
+  id: id("id"),
   email: text("email").notNull().unique(),
   name: text("name"),
   image: text("image"),
   passwordHash: text("password_hash"),
-  role: userRoleEnum("role").default("user").notNull(),
-  status: userStatusEnum("status").default("active").notNull(),
+  role: text("role", { enum: userRoleValues }).default("user").notNull(),
+  status: text("status", { enum: userStatusValues }).default("active").notNull(),
   balanceCents: integer("balance_cents").default(0).notNull(),
-  emailVerifiedAt: timestamp("email_verified_at", { withTimezone: true }),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  emailVerifiedAt: timestamp("email_verified_at"),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
 }, (table) => [
   index("users_role_idx").on(table.role),
   index("users_status_idx").on(table.status),
 ]);
 
-export const oauthAccounts = pgTable("oauth_accounts", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+export const oauthAccounts = sqliteTable("oauth_accounts", {
+  id: id("id"),
+  userId: text("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
   provider: text("provider").notNull(),
   providerAccountId: text("provider_account_id").notNull(),
   username: text("username"),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
 }, (table) => [
   uniqueIndex("oauth_accounts_provider_account_idx").on(table.provider, table.providerAccountId),
   index("oauth_accounts_user_id_idx").on(table.userId),
 ]);
 
-export const walletTransactions = pgTable("wallet_transactions", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  userId: uuid("user_id").references(() => users.id, { onDelete: "restrict" }).notNull(),
-  type: walletTransactionTypeEnum("type").notNull(),
+export const walletTransactions = sqliteTable("wallet_transactions", {
+  id: id("id"),
+  userId: text("user_id").references(() => users.id, { onDelete: "restrict" }).notNull(),
+  type: text("type", { enum: walletTransactionTypeValues }).notNull(),
   amountCents: integer("amount_cents").notNull(),
   balanceAfterCents: integer("balance_after_cents").notNull(),
   referenceType: text("reference_type"),
   referenceId: text("reference_id"),
   idempotencyKey: text("idempotency_key").notNull().unique(),
   description: text("description"),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  createdAt: createdAt(),
 }, (table) => [
   index("wallet_transactions_user_created_idx").on(table.userId, table.createdAt),
   index("wallet_transactions_reference_idx").on(table.referenceType, table.referenceId),
 ]);
 
-export const rechargeOrders = pgTable("recharge_orders", {
-  id: uuid("id").primaryKey().defaultRandom(),
+export const rechargeOrders = sqliteTable("recharge_orders", {
+  id: id("id"),
   rechargeNo: text("recharge_no").notNull().unique(),
-  userId: uuid("user_id").references(() => users.id, { onDelete: "restrict" }).notNull(),
+  userId: text("user_id").references(() => users.id, { onDelete: "restrict" }).notNull(),
   amountCents: integer("amount_cents").notNull(),
   provider: text("provider").default("ldc").notNull(),
-  status: rechargeStatusEnum("status").default("pending").notNull(),
+  status: text("status", { enum: rechargeStatusValues }).default("pending").notNull(),
   tradeNo: text("trade_no").unique(),
-  expiredAt: timestamp("expired_at", { withTimezone: true }).notNull(),
-  paidAt: timestamp("paid_at", { withTimezone: true }),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  expiredAt: timestamp("expired_at").notNull(),
+  paidAt: timestamp("paid_at"),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
 }, (table) => [
   index("recharge_orders_user_created_idx").on(table.userId, table.createdAt),
   index("recharge_orders_status_idx").on(table.status),
 ]);
 
-export const emailVerificationTokens = pgTable("email_verification_tokens", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+export const emailVerificationTokens = sqliteTable("email_verification_tokens", {
+  id: id("id"),
+  userId: text("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
   tokenHash: text("token_hash").notNull().unique(),
-  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
-  consumedAt: timestamp("consumed_at", { withTimezone: true }),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  consumedAt: timestamp("consumed_at"),
+  createdAt: createdAt(),
 }, (table) => [
   index("email_verification_tokens_user_created_idx").on(table.userId, table.createdAt),
   index("email_verification_tokens_expires_idx").on(table.expiresAt),
@@ -139,16 +143,16 @@ export const emailVerificationTokens = pgTable("email_verification_tokens", {
 // Categories Table (商品分类)
 // ============================================
 
-export const categories = pgTable("categories", {
-  id: uuid("id").primaryKey().defaultRandom(),
+export const categories = sqliteTable("categories", {
+  id: id("id"),
   name: text("name").notNull(),
   slug: text("slug").notNull().unique(),
   description: text("description"),
   icon: text("icon"), // Lucide icon name
   sortOrder: integer("sort_order").default(0).notNull(),
-  isActive: boolean("is_active").default(true).notNull(),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  isActive: integer("is_active", { mode: "boolean" }).default(true).notNull(),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
 }, (table) => [
   index("categories_sort_order_idx").on(table.sortOrder),
   index("categories_is_active_idx").on(table.isActive),
@@ -158,25 +162,25 @@ export const categories = pgTable("categories", {
 // Products Table (商品)
 // ============================================
 
-export const products = pgTable("products", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  categoryId: uuid("category_id").references(() => categories.id, { onDelete: "set null" }),
+export const products = sqliteTable("products", {
+  id: id("id"),
+  categoryId: text("category_id").references(() => categories.id, { onDelete: "set null" }),
   name: text("name").notNull(),
   slug: text("slug").notNull().unique(),
   description: text("description"), // 简短描述
   content: text("content"), // 富文本/Markdown 详细描述
-  price: decimal("price", { precision: 10, scale: 2 }).notNull(),
-  originalPrice: decimal("original_price", { precision: 10, scale: 2 }), // 原价（用于显示折扣）
+  price: text("price").notNull(),
+  originalPrice: text("original_price"), // 原价（用于显示折扣）
   coverImage: text("cover_image"),
-  images: text("images").array(), // 商品图片数组
-  isActive: boolean("is_active").default(true).notNull(),
-  isFeatured: boolean("is_featured").default(false).notNull(), // 热门/推荐
+  images: text("images", { mode: "json" }).$type<string[]>(), // 商品图片数组
+  isActive: integer("is_active", { mode: "boolean" }).default(true).notNull(),
+  isFeatured: integer("is_featured", { mode: "boolean" }).default(false).notNull(), // 热门/推荐
   sortOrder: integer("sort_order").default(0).notNull(),
   minQuantity: integer("min_quantity").default(1).notNull(),
   maxQuantity: integer("max_quantity").default(10).notNull(),
   salesCount: integer("sales_count").default(0).notNull(), // 销量统计
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
 }, (table) => [
   index("products_category_id_idx").on(table.categoryId),
   index("products_is_active_idx").on(table.isActive),
@@ -188,15 +192,15 @@ export const products = pgTable("products", {
 // Cards Table (卡密/库存)
 // ============================================
 
-export const cards = pgTable("cards", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  productId: uuid("product_id").references(() => products.id, { onDelete: "cascade" }).notNull(),
+export const cards = sqliteTable("cards", {
+  id: id("id"),
+  productId: text("product_id").references(() => products.id, { onDelete: "cascade" }).notNull(),
   content: text("content").notNull(), // 卡密内容
-  status: cardStatusEnum("status").default("available").notNull(),
-  orderId: uuid("order_id").references(() => orders.id, { onDelete: "set null" }),
-  lockedAt: timestamp("locked_at", { withTimezone: true }), // 锁定时间
-  soldAt: timestamp("sold_at", { withTimezone: true }), // 售出时间
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  status: text("status", { enum: cardStatusValues }).default("available").notNull(),
+  orderId: text("order_id").references(() => orders.id, { onDelete: "set null" }),
+  lockedAt: timestamp("locked_at"), // 锁定时间
+  soldAt: timestamp("sold_at"), // 售出时间
+  createdAt: createdAt(),
 }, (table) => [
   index("cards_product_id_idx").on(table.productId),
   index("cards_status_idx").on(table.status),
@@ -209,18 +213,18 @@ export const cards = pgTable("cards", {
 // Orders Table (订单)
 // ============================================
 
-export const orders = pgTable("orders", {
-  id: uuid("id").primaryKey().defaultRandom(),
+export const orders = sqliteTable("orders", {
+  id: id("id"),
   orderNo: text("order_no").notNull().unique(), // 订单号
-  productId: uuid("product_id").references(() => products.id, { onDelete: "set null" }),
+  productId: text("product_id").references(() => products.id, { onDelete: "set null" }),
   productName: text("product_name").notNull(), // 冗余存储商品名
-  productPrice: decimal("product_price", { precision: 10, scale: 2 }).notNull(), // 冗余存储单价
+  productPrice: text("product_price").notNull(), // 冗余存储单价
   quantity: integer("quantity").notNull(),
-  totalAmount: decimal("total_amount", { precision: 10, scale: 2 }).notNull(),
+  totalAmount: text("total_amount").notNull(),
   
   // 支付信息
-  paymentMethod: paymentMethodEnum("payment_method").default("ldc").notNull(),
-  status: orderStatusEnum("status").default("pending").notNull(),
+  paymentMethod: text("payment_method", { enum: paymentMethodValues }).default("ldc").notNull(),
+  status: text("status", { enum: orderStatusValues }).default("pending").notNull(),
   tradeNo: text("trade_no"), // 支付平台订单号
   
   // 用户信息（OSS登录用户）
@@ -233,10 +237,10 @@ export const orders = pgTable("orders", {
   queryPassword: text("query_password"), // 游客下单时必填（哈希）
   
   // 时间戳
-  paidAt: timestamp("paid_at", { withTimezone: true }),
-  expiredAt: timestamp("expired_at", { withTimezone: true }), // 过期时间
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  paidAt: timestamp("paid_at"),
+  expiredAt: timestamp("expired_at"), // 过期时间
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
   
   // 备注
   remark: text("remark"),
@@ -244,8 +248,8 @@ export const orders = pgTable("orders", {
   
   // 退款相关
   refundReason: text("refund_reason"), // 退款原因
-  refundRequestedAt: timestamp("refund_requested_at", { withTimezone: true }), // 申请退款时间
-  refundedAt: timestamp("refunded_at", { withTimezone: true }), // 退款完成时间
+  refundRequestedAt: timestamp("refund_requested_at"), // 申请退款时间
+  refundedAt: timestamp("refunded_at"), // 退款完成时间
 }, (table) => [
   uniqueIndex("orders_order_no_idx").on(table.orderNo),
   index("orders_status_idx").on(table.status),
@@ -261,41 +265,41 @@ export const orders = pgTable("orders", {
 // System Settings Table (系统设置)
 // ============================================
 
-export const settings = pgTable("settings", {
-  id: uuid("id").primaryKey().defaultRandom(),
+export const settings = sqliteTable("settings", {
+  id: id("id"),
   key: text("key").notNull().unique(),
   value: text("value"),
   description: text("description"),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: updatedAt(),
 });
 
 // ============================================
 // Announcements Table (公告)
 // ============================================
 
-export const announcements = pgTable("announcements", {
-  id: uuid("id").primaryKey().defaultRandom(),
+export const announcements = sqliteTable("announcements", {
+  id: id("id"),
   title: text("title").notNull(),
   content: text("content").notNull(),
-  isActive: boolean("is_active").default(true).notNull(),
+  isActive: integer("is_active", { mode: "boolean" }).default(true).notNull(),
   sortOrder: integer("sort_order").default(0).notNull(),
-  startAt: timestamp("start_at", { withTimezone: true }),
-  endAt: timestamp("end_at", { withTimezone: true }),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  startAt: timestamp("start_at"),
+  endAt: timestamp("end_at"),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
 });
 
 // ============================================
 // Restock Requests Table (催补货请求)
 // ============================================
 
-export const restockRequests = pgTable("restock_requests", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  productId: uuid("product_id").references(() => products.id, { onDelete: "cascade" }).notNull(),
+export const restockRequests = sqliteTable("restock_requests", {
+  id: id("id"),
+  productId: text("product_id").references(() => products.id, { onDelete: "cascade" }).notNull(),
   userId: text("user_id").notNull(),
   username: text("username").notNull(),
   userImage: text("user_image"),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  createdAt: createdAt(),
 }, (table) => [
   index("restock_requests_product_id_idx").on(table.productId),
   index("restock_requests_user_id_idx").on(table.userId),
@@ -308,12 +312,12 @@ export const restockRequests = pgTable("restock_requests", {
 // Login Rate Limits Table (登录限流)
 // ============================================
 
-export const loginRateLimits = pgTable("login_rate_limits", {
+export const loginRateLimits = sqliteTable("login_rate_limits", {
   identifier: text("identifier").primaryKey(),
   count: integer("count").default(0).notNull(),
-  firstAttemptAt: timestamp("first_attempt_at", { withTimezone: true }).defaultNow().notNull(),
-  lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }).defaultNow().notNull(),
-  blockedUntil: timestamp("blocked_until", { withTimezone: true }),
+  firstAttemptAt: timestamp("first_attempt_at").$defaultFn(() => new Date()).notNull(),
+  lastAttemptAt: timestamp("last_attempt_at").$defaultFn(() => new Date()).notNull(),
+  blockedUntil: timestamp("blocked_until"),
 });
 
 // ============================================

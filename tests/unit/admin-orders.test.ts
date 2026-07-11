@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
-// 关键：避免在单元测试中初始化真实数据库连接（lib/db 会强依赖 DATABASE_URL）
-const transactionMock = vi.fn();
+// 避免在单元测试中读取真实 D1 Binding。
+const selectResultMock = vi.fn();
+const batchMock = vi.fn();
 const revalidatePathMock = vi.fn();
 const requireAdminMock = vi.fn();
 
@@ -22,7 +23,14 @@ vi.mock("drizzle-orm", () => ({
 
 vi.mock("@/lib/db", () => ({
   db: {
-    transaction: (...args: unknown[]) => transactionMock(...args),
+    select: () => ({
+      from: () => ({ where: (...args: unknown[]) => selectResultMock(...args) }),
+    }),
+    update: () => ({ set: () => ({ where: () => ({ kind: "update" }) }) }),
+    delete: () => ({
+      where: () => ({ returning: () => ({ kind: "delete" }) }),
+    }),
+    batch: (...args: unknown[]) => batchMock(...args),
   },
   orders: {},
   cards: {},
@@ -70,26 +78,8 @@ describe("deleteAdminOrders", () => {
   it("should allow deleting completed orders", async () => {
     requireAdminMock.mockResolvedValueOnce({ user: { id: "a1", role: "admin" } });
 
-    transactionMock.mockImplementationOnce(async (fn: (tx: unknown) => unknown) => {
-      const tx = {
-        select: vi.fn(() => ({
-          from: vi.fn(() => ({
-            where: vi.fn(async () => [{ id: "o1" }]),
-          })),
-        })),
-        update: vi.fn(() => ({
-          set: vi.fn(() => ({
-            where: vi.fn(async () => undefined),
-          })),
-        })),
-        delete: vi.fn(() => ({
-          where: vi.fn(() => ({
-            returning: vi.fn(async () => [{ id: "o1" }]),
-          })),
-        })),
-      };
-      return fn(tx);
-    });
+    selectResultMock.mockResolvedValueOnce([{ id: "o1" }]);
+    batchMock.mockResolvedValueOnce([[], [{ id: "o1" }]]);
 
     const result = await deleteAdminOrders(["o1"]);
 
@@ -100,38 +90,15 @@ describe("deleteAdminOrders", () => {
   it("should report notFound ids when partially missing", async () => {
     requireAdminMock.mockResolvedValueOnce({ user: { id: "a1", role: "admin" } });
 
-    const deleteCall = vi.fn(() => ({
-      where: vi.fn(() => ({
-        returning: vi.fn(async () => [{ id: "o1" }, { id: "o2" }]),
-      })),
-    }));
-
-    transactionMock.mockImplementationOnce(async (fn: (tx: unknown) => unknown) => {
-      const tx = {
-        select: vi.fn(() => ({
-          from: vi.fn(() => ({
-            where: vi.fn(async () => [
-              { id: "o1" },
-              { id: "o2" },
-            ]),
-          })),
-        })),
-        update: vi.fn(() => ({
-          set: vi.fn(() => ({
-            where: vi.fn(async () => undefined),
-          })),
-        })),
-        delete: deleteCall,
-      };
-      return fn(tx);
-    });
+    selectResultMock.mockResolvedValueOnce([{ id: "o1" }, { id: "o2" }]);
+    batchMock.mockResolvedValueOnce([[], [{ id: "o1" }, { id: "o2" }]]);
 
     const result = await deleteAdminOrders(["o1", "o2", "missing"]);
 
     expect(result.success).toBe(true);
     expect(result.deletedCount).toBe(2);
     expect(result.notFoundCount).toBe(1);
-    expect(deleteCall).toHaveBeenCalledTimes(1);
+    expect(batchMock).toHaveBeenCalledTimes(1);
     expect(revalidatePathMock).toHaveBeenCalled();
   });
 });

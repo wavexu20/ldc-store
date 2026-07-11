@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 import { redirect } from "next/navigation";
 
 import { db, products, cards, orders, categories, cardStatusEnum, type CardStatus } from "@/lib/db";
-import { eq, sql, desc, asc, and, ilike, inArray } from "drizzle-orm";
+import { eq, sql, desc, asc, and, like, inArray } from "drizzle-orm";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { CreditCard } from "lucide-react";
@@ -65,7 +65,7 @@ async function getProductsWithStock() {
     .select({
       productId: cards.productId,
       status: cards.status,
-      count: sql<number>`count(*)::int`,
+      count: sql<number>`count(*)`,
     })
     .from(cards)
     .groupBy(cards.productId, cards.status);
@@ -101,7 +101,7 @@ async function getCardsPage(
 
   if (options.q) {
     const pattern = `%${escapeLikePattern(options.q)}%`;
-    conditions.push(ilike(cards.content, pattern));
+    conditions.push(like(cards.content, pattern));
   }
 
   if (options.orderNo) {
@@ -109,7 +109,7 @@ async function getCardsPage(
     const matchedOrders = await db
       .select({ id: orders.id })
       .from(orders)
-      .where(ilike(orders.orderNo, pattern))
+      .where(like(orders.orderNo, pattern))
       .limit(200);
 
     const orderIds = matchedOrders.map((o) => o.id);
@@ -145,7 +145,7 @@ async function getCardsPage(
       limit: options.pageSize,
       offset,
     }),
-    db.select({ count: sql<number>`count(*)::int` }).from(cards).where(where),
+    db.select({ count: sql<number>`count(*)` }).from(cards).where(where),
   ]);
 
   const total = countRows[0]?.count ?? 0;

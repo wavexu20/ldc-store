@@ -4,9 +4,7 @@ A virtual goods automated card delivery platform built on Next.js 16, supporting
 
 > 📖 [中文文档 README](./docs/README.zh-CN.md)
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fgptkong%2Fldc-store&env=DATABASE_URL,AUTH_SECRET,ADMIN_PASSWORD,LDC_CLIENT_ID,LDC_CLIENT_SECRET,LINUXDO_CLIENT_ID,LINUXDO_CLIENT_SECRET,STATS_TIMEZONE&envDescription=DATABASE_URL%3A%20PostgreSQL%20%7C%20AUTH_SECRET%3A%20openssl%20rand%20-base64%2032%20%7C%20ADMIN_PASSWORD%3A%20Admin%20Password%20%7C%20LDC_CLIENT_ID%2FLDC_CLIENT_SECRET%3A%20Payment%20Credentials%20%7C%20LINUXDO_CLIENT_ID%2FLINUXDO_CLIENT_SECRET%3A%20OAuth%20Login%20Credentials%20%7C%20STATS_TIMEZONE%3A%20Stats%20Timezone%20(default%20Asia%2FShanghai)&envLink=https%3A%2F%2Fgithub.com%2Fgptkong%2Fldc-store%2Fblob%2Fmain%2Fdocs%2FDEPLOY.md&project-name=ldc-store&repository-name=ldc-store)
-
-> 📚 **Detailed Deployment Guide**: [docs/DEPLOY.md](./docs/DEPLOY.md)
+> ☁️ **Cloudflare deployment guide**: [docs/CLOUDFLARE.md](./docs/CLOUDFLARE.md)
 
 ## ✨ Features
 
@@ -23,7 +21,8 @@ A virtual goods automated card delivery platform built on Next.js 16, supporting
 - **ISR Cache** - 60-second Incremental Static Regeneration for improved page load performance
 
 ### 🔐 Login & Permissions
-- **User Orders** - Login via Linux DO Connect OAuth2, orders/queries linked to account
+- **User Accounts** - Email registration with verification and password policy, plus Google, GitHub and Linux DO OAuth2
+- **Bot Protection** - Cloudflare Turnstile protects Email registration
 - **Admin Panel** - Admin password login (`ADMIN_PASSWORD`), or configure `ADMIN_USERNAMES` to allow specific Linux DO usernames to log in as admin
 - **Session Management** - JWT session strategy based on NextAuth v5
 
@@ -32,7 +31,7 @@ A virtual goods automated card delivery platform built on Next.js 16, supporting
 - Automatic card key delivery upon successful payment
 - Auto-release of locked inventory on order timeout (lazy load + throttle strategy)
 - Idempotent payment callback handling to prevent duplicate deliveries
-- Card key locking uses database transactions + `FOR UPDATE` for atomicity
+- Card key locking, wallet debit and delivery use atomic Cloudflare D1 batches
 
 ### 🔄 Refund System
 - Users can apply for refunds (with reason), reviewed by admin
@@ -77,18 +76,19 @@ A virtual goods automated card delivery platform built on Next.js 16, supporting
 
 - **Framework:** Next.js 16 (App Router, Server Actions)
 - **Language:** TypeScript
-- **Database:** PostgreSQL (Neon/Supabase recommended)
+- **Runtime:** Cloudflare Workers via OpenNext
+- **Database:** Cloudflare D1 (SQLite)
 - **ORM:** Drizzle ORM
 - **UI:** Shadcn/UI + Tailwind CSS
 - **Auth:** NextAuth.js v5
 - **Payment:** Linux DO Credit
 
-## 🚀 One-Click Deploy to Vercel
+## 🚀 Deploy to Cloudflare Workers
 
-1. Click the "Deploy with Vercel" button above
-2. Configure environment variables in Vercel
-3. Wait for deployment to complete
-4. Initialize database schema (Production deployments automatically run `pnpm db:baseline && pnpm db:migrate`; run manually if it fails)
+1. Create a D1 database and update its ID in `wrangler.jsonc`.
+2. Configure Worker Secrets described in [docs/CLOUDFLARE.md](./docs/CLOUDFLARE.md).
+3. Run `pnpm db:migrate && pnpm db:seed`.
+4. Run `pnpm deploy`.
 
 ## 📦 Local Development
 
@@ -111,9 +111,6 @@ cp .env.example .env
 Edit `.env` with your actual values:
 
 ```env
-# Database (Neon recommended: https://neon.tech)
-DATABASE_URL="postgresql://user:password@host/database?sslmode=require"
-
 # NextAuth secret (generate: openssl rand -base64 32)
 AUTH_SECRET="your-auth-secret"
 AUTH_TRUST_HOST=true
@@ -153,10 +150,6 @@ STATS_TIMEZONE="Asia/Shanghai"
 # New database: run migrations to create schema
 pnpm db:migrate
 
-# Existing database: if you previously used db:push (no migration history), baseline first
-# pnpm db:baseline
-# pnpm db:migrate
-
 # Seed example data (optional)
 pnpm db:seed
 ```
@@ -190,7 +183,6 @@ Visit `/admin`:
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `DATABASE_URL` | ✅ | - | PostgreSQL connection string |
 | `AUTH_SECRET` | ✅ | - | NextAuth encryption key (run `openssl rand -base64 32`) |
 | `AUTH_TRUST_HOST` | ✅ | `true` | Trust host header (must be true for Vercel) |
 | `ADMIN_PASSWORD` | ✅ | - | Admin login password |
@@ -202,6 +194,11 @@ Visit `/admin`:
 | `ADMIN_USERNAMES` | ❌ | - | Linux DO admin username whitelist (comma-separated), grants `admin` role |
 | `LINUXDO_CLIENT_ID` | ✅ | - | Linux DO OAuth2 Client ID (required for user orders/queries) |
 | `LINUXDO_CLIENT_SECRET` | ✅ | - | Linux DO OAuth2 Client Secret (required for user orders/queries) |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | ❌ | - | Google OAuth credentials |
+| `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | ❌ | - | GitHub OAuth credentials |
+| `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | ✅ | - | Public Turnstile widget key |
+| `TURNSTILE_SECRET_KEY` | ✅ | - | Turnstile server-side secret |
+| `EMAIL_FROM` | ✅ | - | Sender onboarded in Cloudflare Email Service |
 | `LINUXDO_AUTHORIZATION_URL` | ❌ | - | Custom OAuth2 authorization endpoint |
 | `LINUXDO_TOKEN_URL` | ❌ | - | Custom OAuth2 token endpoint |
 | `LINUXDO_USERINFO_URL` | ❌ | - | Custom OAuth2 user info endpoint |
@@ -212,7 +209,7 @@ Visit `/admin`:
 
 ### 🕒 Time & Statistics
 
-- Database stores timestamps using `timestamp with time zone` (timestamptz), stored internally as UTC
+- D1 stores timestamps as Unix seconds with UTC semantics
 - Frontend displays times in the user's local browser timezone (e.g., order list timestamps)
 - "Today" dashboard stats use the day boundary defined by `STATS_TIMEZONE`, defaulting to China time (`Asia/Shanghai`)
 

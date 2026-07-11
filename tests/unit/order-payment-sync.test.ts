@@ -94,57 +94,19 @@ vi.mock("@/lib/db", () => {
         findFirst: vi.fn(async () => ({ slug: "product-slug" })),
       },
     },
-    transaction: vi.fn(async (fn: (tx: unknown) => unknown) => {
-      const tx = {
-        update: (table: unknown) => ({
-          set: (values: Record<string, unknown>) => {
-            if (table === orders) {
-              return {
-                where: () => ({
-                  returning: async () => {
-                    dbState.status = "completed";
-                    dbState.tradeNo = String(values.tradeNo || "TRADE_1");
-                    return [
-                      {
-                        id: "o1",
-                        orderNo: "ORDER_1",
-                        productId: null,
-                        productName: "商品 A",
-                        quantity: 1,
-                        totalAmount: "10.00",
-                        paymentMethod: "ldc",
-                        username: "tester",
-                        paidAt: new Date("2026-01-01T00:01:00.000Z"),
-                      },
-                    ];
-                  },
-                }),
-              };
-            }
-
-            // cards/products 更新：只要能 await 即可
-            return {
-              where: async () => {
-                if (table === cards) {
-                  dbState.cards = dbState.cards.map((c) => ({ ...c, status: "sold" }));
-                }
-                return [];
-              },
-            };
-          },
-        }),
-        query: {
-          products: {
-            findFirst: vi.fn(async () => ({ slug: "product-slug" })),
-          },
-        },
-      };
-
-      return await fn(tx);
+  };
+  const statement = { bind: vi.fn(() => statement) };
+  const d1 = {
+    prepare: vi.fn(() => statement),
+    batch: vi.fn(async () => {
+      dbState.status = "completed";
+      dbState.tradeNo = "TRADE_1";
+      dbState.cards = dbState.cards.map((c) => ({ ...c, status: "sold" }));
+      return [{ results: [] }, { results: [] }, { results: [{ id: "o1" }] }];
     }),
   };
 
-  return { db, orders, cards, products };
+  return { db, orders, cards, products, getD1Binding: () => d1 };
 });
 
 import { getOrderByNo } from "@/lib/actions/orders";

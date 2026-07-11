@@ -26,6 +26,7 @@ export interface AdminCustomersPageResult {
 function toIsoString(value: unknown): string | null {
   if (!value) return null;
   if (value instanceof Date) return value.toISOString();
+  if (typeof value === "number") return new Date(value * 1000).toISOString();
   if (typeof value === "string") return value;
   const date = new Date(value as string);
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
@@ -57,40 +58,43 @@ export async function getAdminCustomersPage(input: {
   const q = input.filters?.query?.trim();
   const pattern = q ? `%${q}%` : null;
   const whereSql = pattern
-    ? sql`WHERE (user_id ILIKE ${pattern} OR username ILIKE ${pattern})`
+    ? sql`WHERE (user_id LIKE ${pattern} OR username LIKE ${pattern})`
     : sql``;
 
   const [itemsRows, totalRows] = await Promise.all([
-    db.execute(sql`
+    db.all(sql`
       WITH agg AS (
         SELECT
-          user_id,
-          (ARRAY_AGG(username ORDER BY created_at DESC))[1] AS username,
-          (ARRAY_AGG(user_image ORDER BY created_at DESC))[1] AS user_image,
-          COUNT(*)::int AS order_count,
-          COALESCE(SUM(total_amount::numeric), 0)::text AS total_spent,
-          MIN(paid_at) AS first_paid_at,
-          MAX(paid_at) AS last_paid_at
-        FROM orders
-        WHERE status = 'completed' AND user_id IS NOT NULL
-        GROUP BY user_id
+          o.user_id,
+          (SELECT latest.username FROM orders latest
+           WHERE latest.user_id = o.user_id ORDER BY latest.created_at DESC LIMIT 1) AS username,
+          (SELECT latest.user_image FROM orders latest
+           WHERE latest.user_id = o.user_id ORDER BY latest.created_at DESC LIMIT 1) AS user_image,
+          COUNT(*) AS order_count,
+          printf('%.2f', COALESCE(SUM(CAST(o.total_amount AS REAL)), 0)) AS total_spent,
+          MIN(o.paid_at) AS first_paid_at,
+          MAX(o.paid_at) AS last_paid_at
+        FROM orders o
+        WHERE o.status = 'completed' AND o.user_id IS NOT NULL
+        GROUP BY o.user_id
       )
       SELECT user_id, username, user_image, order_count, total_spent, first_paid_at, last_paid_at
       FROM agg
       ${whereSql}
-      ORDER BY total_spent::numeric DESC, order_count DESC, user_id ASC
+      ORDER BY CAST(total_spent AS REAL) DESC, order_count DESC, user_id ASC
       LIMIT ${pageSize} OFFSET ${offset}
     `),
-    db.execute(sql`
+    db.all(sql`
       WITH agg AS (
         SELECT
-          user_id,
-          (ARRAY_AGG(username ORDER BY created_at DESC))[1] AS username
-        FROM orders
-        WHERE status = 'completed' AND user_id IS NOT NULL
-        GROUP BY user_id
+          o.user_id,
+          (SELECT latest.username FROM orders latest
+           WHERE latest.user_id = o.user_id ORDER BY latest.created_at DESC LIMIT 1) AS username
+        FROM orders o
+        WHERE o.status = 'completed' AND o.user_id IS NOT NULL
+        GROUP BY o.user_id
       )
-      SELECT COUNT(*)::int AS count
+      SELECT COUNT(*) AS count
       FROM agg
       ${whereSql}
     `),
@@ -127,4 +131,3 @@ export async function getAdminCustomersPage(input: {
     total,
   };
 }
-

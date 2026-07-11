@@ -100,18 +100,17 @@ export async function recordFailedAttempt(identifier: string): Promise<RateLimit
   const nowMs = Date.now();
   const now = new Date(nowMs);
 
-  return db.transaction(async (tx) => {
-    const existingRows = await tx
+  {
+    const existingRows = await db
       .select()
       .from(loginRateLimits)
-      .where(eq(loginRateLimits.identifier, identifier))
-      .for("update");
+      .where(eq(loginRateLimits.identifier, identifier));
 
     const record = existingRows[0];
 
     // 初次记录
     if (!record) {
-      await tx.insert(loginRateLimits).values({
+      await db.insert(loginRateLimits).values({
         identifier,
         count: 1,
         firstAttemptAt: now,
@@ -148,7 +147,7 @@ export async function recordFailedAttempt(identifier: string): Promise<RateLimit
     const shouldResetWindow = nowMs > windowEndsMs;
 
     if (shouldResetWindow) {
-      await tx
+      await db
         .update(loginRateLimits)
         .set({
           count: 1,
@@ -171,7 +170,7 @@ export async function recordFailedAttempt(identifier: string): Promise<RateLimit
     // 触发封禁
     if (newCount >= CONFIG.MAX_ATTEMPTS) {
       const blockedUntilMs = nowMs + CONFIG.BLOCK_DURATION_MS;
-      await tx
+      await db
         .update(loginRateLimits)
         .set({
           count: newCount,
@@ -191,7 +190,7 @@ export async function recordFailedAttempt(identifier: string): Promise<RateLimit
     }
 
     // 正常累加
-    await tx
+    await db
       .update(loginRateLimits)
       .set({
         count: newCount,
@@ -207,7 +206,7 @@ export async function recordFailedAttempt(identifier: string): Promise<RateLimit
       blocked: false,
       message: remaining <= 2 ? `还剩 ${remaining} 次尝试机会` : undefined,
     };
-  });
+  }
 }
 
 /**

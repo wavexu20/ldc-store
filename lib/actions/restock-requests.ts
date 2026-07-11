@@ -62,7 +62,7 @@ export async function getRestockSummaryForProducts(input: {
       db
         .select({
           productId: restockRequests.productId,
-          count: sql<number>`count(*)::int`,
+          count: sql<number>`count(*)`,
         })
         .from(restockRequests)
         .where(inArray(restockRequests.productId, productIds))
@@ -137,19 +137,30 @@ export async function requestRestock(productId: string): Promise<RequestRestockR
   const userImage = user.image ?? null;
 
   try {
-    // 用 ON CONFLICT 做幂等，并通过 xmax 判断是否为首次插入
-    // xmax = 0 表示新插入的行，xmax > 0 表示更新的行
-    const result = await db.execute<{ id: string; xmax: string }>(sql`
-      INSERT INTO restock_requests (product_id, user_id, username, user_image)
-      VALUES (${safeProductId}, ${user.id}, ${username}, ${userImage})
-      ON CONFLICT (product_id, user_id) DO UPDATE
-      SET user_image = EXCLUDED.user_image
-      RETURNING id, xmax::text
-    `);
-
-    // Neon/Drizzle 返回的是 RowList，可以直接当数组使用
-    const rows = Array.isArray(result) ? result : (result as unknown as { id: string; xmax: string }[]);
-    const isFirstInsert = rows[0]?.xmax === "0";
+    const [inserted] = await db
+      .insert(restockRequests)
+      .values({
+        productId: safeProductId,
+        userId: user.id,
+        username,
+        userImage,
+      })
+      .onConflictDoNothing({
+        target: [restockRequests.productId, restockRequests.userId],
+      })
+      .returning({ id: restockRequests.id });
+    const isFirstInsert = Boolean(inserted);
+    if (!isFirstInsert) {
+      await db
+        .update(restockRequests)
+        .set({ username, userImage })
+        .where(
+          and(
+            eq(restockRequests.productId, safeProductId),
+            eq(restockRequests.userId, user.id)
+          )
+        );
+    }
 
     // 仅首次插入时触发 Telegram 通知（fire-and-forget，不阻塞响应）
     if (isFirstInsert) {
@@ -208,7 +219,7 @@ async function triggerTelegramNotification(
     // 查询可用库存数量
     const [stockInfo] = await db
       .select({
-        count: sql<number>`count(*)::int`,
+        count: sql<number>`count(*)`,
       })
       .from(cards)
       .where(and(eq(cards.productId, productId), eq(cards.status, "available")));

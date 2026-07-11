@@ -1,45 +1,80 @@
-import { sql, type SQL } from "drizzle-orm";
-
 const DEFAULT_STATS_TIMEZONE = "Asia/Shanghai";
 
 function isSafeTimeZoneValue(timeZone: string): boolean {
-  // 仅允许 IANA 时区名常见字符，避免引号/分号等导致 SQL 解析问题
-  // 例：Asia/Shanghai、UTC、America/Los_Angeles
   return /^[A-Za-z0-9_+/.-]+$/.test(timeZone);
 }
 
-/**
- * 获取统计口径时区（用于“今日销售”等报表口径）
- *
- * - 默认：Asia/Shanghai（UTC+8）
- * - 可通过环境变量 STATS_TIMEZONE 覆盖
- */
 export function getStatsTimeZone(): string {
   const raw = process.env.STATS_TIMEZONE?.trim();
-  if (!raw) return DEFAULT_STATS_TIMEZONE;
-  if (!isSafeTimeZoneValue(raw)) return DEFAULT_STATS_TIMEZONE;
-  return raw;
+  if (!raw || !isSafeTimeZoneValue(raw)) return DEFAULT_STATS_TIMEZONE;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: raw }).format(new Date());
+    return raw;
+  } catch {
+    return DEFAULT_STATS_TIMEZONE;
+  }
 }
 
-/**
- * 计算“业务时区的今日”时间范围（半开区间：[start, end)）
- *
- * 说明：
- * - orders.paidAt 等字段为 timestamptz
- * - 通过 AT TIME ZONE 显式指定时区，避免依赖数据库 session TimeZone
- */
-export function getTodayRangeSql(timeZone: string): { start: SQL; end: SQL } {
+function partsAt(date: Date, timeZone: string) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  const value = (type: Intl.DateTimeFormatPartTypes) =>
+    Number(parts.find((part) => part.type === type)?.value || 0);
+  return {
+    year: value("year"),
+    month: value("month"),
+    day: value("day"),
+    hour: value("hour"),
+    minute: value("minute"),
+    second: value("second"),
+  };
+}
+
+function localDateTimeToUtc(
+  local: { year: number; month: number; day: number; hour?: number },
+  timeZone: string
+): Date {
+  const target = Date.UTC(local.year, local.month - 1, local.day, local.hour ?? 0);
+  let guess = target;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const actual = partsAt(new Date(guess), timeZone);
+    const representedAsUtc = Date.UTC(
+      actual.year,
+      actual.month - 1,
+      actual.day,
+      actual.hour,
+      actual.minute,
+      actual.second
+    );
+    guess -= representedAsUtc - target;
+  }
+  return new Date(guess);
+}
+
+export function getTodayRangeSql(
+  timeZone: string,
+  now = new Date()
+): { start: Date; end: Date } {
   const tz = isSafeTimeZoneValue(timeZone) ? timeZone : DEFAULT_STATS_TIMEZONE;
-
-  // NOW() -> timestamptz
-  // NOW() AT TIME ZONE tz -> timestamp（tz 本地时间）
-  // date_trunc('day', ...) -> timestamp（tz 本地日 00:00）
-  // ... AT TIME ZONE tz -> timestamptz（转换回绝对时间戳，便于与 paidAt 比较）
-  const localNow = sql`NOW() AT TIME ZONE ${tz}`;
-  const localDayStart = sql`date_trunc('day', ${localNow})`;
-
-  const start = sql`${localDayStart} AT TIME ZONE ${tz}`;
-  const end = sql`(${localDayStart} + interval '1 day') AT TIME ZONE ${tz}`;
-
-  return { start, end };
+  const local = partsAt(now, tz);
+  const nextDay = new Date(Date.UTC(local.year, local.month - 1, local.day + 1));
+  return {
+    start: localDateTimeToUtc(local, tz),
+    end: localDateTimeToUtc(
+      {
+        year: nextDay.getUTCFullYear(),
+        month: nextDay.getUTCMonth() + 1,
+        day: nextDay.getUTCDate(),
+      },
+      tz
+    ),
+  };
 }

@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 
-const executeMock = vi.fn();
+const allMock = vi.fn();
 
-// 关键：避免在单元测试中初始化真实数据库连接（lib/db 会强依赖 DATABASE_URL）
+// 避免在单元测试中读取真实 D1 Binding。
 vi.mock("@/lib/db", () => ({
   db: {
-    execute: (...args: unknown[]) => executeMock(...args),
+    all: (...args: unknown[]) => allMock(...args),
   },
 }));
 
@@ -22,7 +22,7 @@ import { getCustomersSpendLeaderboard } from "@/lib/actions/customers";
 
 describe("getCustomersSpendLeaderboard", () => {
   it("should clamp limit and map rows", async () => {
-    executeMock.mockResolvedValueOnce([
+    allMock.mockResolvedValueOnce([
       {
         user_id: "u1",
         username: "tester",
@@ -34,8 +34,8 @@ describe("getCustomersSpendLeaderboard", () => {
 
     const result = await getCustomersSpendLeaderboard({ limit: 9999 });
 
-    expect(executeMock).toHaveBeenCalledTimes(1);
-    const sqlArg = executeMock.mock.calls[0]?.[0] as { values?: unknown[] } | undefined;
+    expect(allMock).toHaveBeenCalledTimes(1);
+    const sqlArg = allMock.mock.calls[0]?.[0] as { values?: unknown[] } | undefined;
     expect(sqlArg?.values).toContain(200);
     expect(result).toEqual([
       {
@@ -48,4 +48,3 @@ describe("getCustomersSpendLeaderboard", () => {
     ]);
   });
 });
-

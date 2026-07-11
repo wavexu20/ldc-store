@@ -1,7 +1,7 @@
 "use server";
 
 import { db, products, cards, categories, orders } from "@/lib/db";
-import { eq, and, desc, asc, sql, ilike, or, inArray } from "drizzle-orm";
+import { eq, and, desc, asc, sql, like, or, inArray, lt } from "drizzle-orm";
 import { z } from "zod";
 import {
   createProductSchema,
@@ -35,17 +35,28 @@ async function lazyReleaseExpiredOrders() {
   lastExpireCheck = now;
 
   try {
-    await db.execute(sql`
-      WITH expired AS (
-        UPDATE orders
-        SET status = 'expired', updated_at = NOW()
-        WHERE status = 'pending' AND expired_at < NOW()
-        RETURNING id
-      )
-      UPDATE cards
-      SET status = 'available', order_id = NULL, locked_at = NULL
-      WHERE status = 'locked' AND order_id IN (SELECT id FROM expired)
-    `);
+    const expired = await db
+      .select({ id: orders.id })
+      .from(orders)
+      .where(and(eq(orders.status, "pending"), lt(orders.expiredAt, new Date())));
+    if (expired.length === 0) return;
+    const orderIds = expired.map((order) => order.id);
+    await db.batch([
+      db
+        .update(cards)
+        .set({ status: "available", orderId: null, lockedAt: null })
+        .where(and(eq(cards.status, "locked"), inArray(cards.orderId, orderIds))),
+      db
+        .update(orders)
+        .set({ status: "expired", updatedAt: new Date() })
+        .where(
+          and(
+            eq(orders.status, "pending"),
+            inArray(orders.id, orderIds),
+            lt(orders.expiredAt, new Date())
+          )
+        ),
+    ]);
   } catch (error) {
     console.error("[lazyReleaseExpiredOrders] 释放过期订单失败:", error);
   }
@@ -76,8 +87,8 @@ export async function getActiveProducts(options?: {
   if (search) {
     conditions.push(
       or(
-        ilike(products.name, `%${search}%`),
-        ilike(products.description, `%${search}%`)
+        like(products.name, `%${search}%`),
+        like(products.description, `%${search}%`)
       )!
     );
   }
@@ -129,7 +140,7 @@ export async function getActiveProducts(options?: {
     db
       .select({
         productId: cards.productId,
-        count: sql<number>`count(*)::int`,
+        count: sql<number>`count(*)`,
       })
       .from(cards)
       .where(
@@ -196,7 +207,7 @@ export async function getProductBySlug(slug: string) {
   const [[stockCount], restockSummary] = await Promise.all([
     db
       .select({
-        count: sql<number>`count(*)::int`,
+        count: sql<number>`count(*)`,
       })
       .from(cards)
       .where(and(eq(cards.productId, product.id), eq(cards.status, "available"))),
@@ -240,7 +251,7 @@ export async function getProductById(id: string) {
   // 获取库存数量
   const [stockCount] = await db
     .select({
-      count: sql<number>`count(*)::int`,
+      count: sql<number>`count(*)`,
     })
     .from(cards)
     .where(and(eq(cards.productId, product.id), eq(cards.status, "available")));
@@ -386,8 +397,8 @@ export async function getAllProducts(options?: {
   if (search) {
     conditions.push(
       or(
-        ilike(products.name, `%${search}%`),
-        ilike(products.description, `%${search}%`)
+        like(products.name, `%${search}%`),
+        like(products.description, `%${search}%`)
       )!
     );
   }
@@ -432,7 +443,7 @@ export async function getAllProducts(options?: {
     .select({
       productId: cards.productId,
       status: cards.status,
-      count: sql<number>`count(*)::int`,
+      count: sql<number>`count(*)`,
     })
     .from(cards)
     .where(inArray(cards.productId, productIds))
@@ -453,7 +464,7 @@ export async function getAllProducts(options?: {
 
 /**
  * 搜索商品（前台）
- * - 默认使用 ILIKE 模糊匹配（name/description/content）
+ * - 默认使用 SQLite LIKE 模糊匹配（name/description/content）
  * - 为避免慢查询放大，建议在 UI 层限制最小关键词长度与分页大小
  */
 export async function searchProducts(
@@ -474,9 +485,9 @@ export async function searchProducts(
 
   const pattern = `%${query}%`;
   const matchCondition = or(
-    ilike(products.name, pattern),
-    ilike(products.description, pattern),
-    ilike(products.content, pattern)
+    like(products.name, pattern),
+    like(products.description, pattern),
+    like(products.content, pattern)
   )!;
 
   const conditions = [eq(products.isActive, true), matchCondition];
@@ -489,7 +500,7 @@ export async function searchProducts(
   const [, [{ count }]] = await Promise.all([
     lazyReleaseExpiredOrders(),
     db
-      .select({ count: sql<number>`count(*)::int` })
+      .select({ count: sql<number>`count(*)` })
       .from(products)
       .where(whereClause),
   ]);
@@ -499,17 +510,17 @@ export async function searchProducts(
   }
 
   const relevanceScore = sql<number>`
-    (CASE WHEN ${products.name} ILIKE ${pattern} THEN 3 ELSE 0 END) +
-    (CASE WHEN ${products.description} ILIKE ${pattern} THEN 2 ELSE 0 END) +
-    (CASE WHEN ${products.content} ILIKE ${pattern} THEN 1 ELSE 0 END)
+    (CASE WHEN ${products.name} LIKE ${pattern} THEN 3 ELSE 0 END) +
+    (CASE WHEN ${products.description} LIKE ${pattern} THEN 2 ELSE 0 END) +
+    (CASE WHEN ${products.content} LIKE ${pattern} THEN 1 ELSE 0 END)
   `;
 
   const orderBy = (() => {
     switch (sort) {
       case "price_asc":
-        return [asc(products.price), desc(products.isFeatured), asc(products.sortOrder), desc(products.createdAt)];
+        return [sql`CAST(${products.price} AS REAL) ASC`, desc(products.isFeatured), asc(products.sortOrder), desc(products.createdAt)];
       case "price_desc":
-        return [desc(products.price), desc(products.isFeatured), asc(products.sortOrder), desc(products.createdAt)];
+        return [sql`CAST(${products.price} AS REAL) DESC`, desc(products.isFeatured), asc(products.sortOrder), desc(products.createdAt)];
       case "sales_desc":
         return [desc(products.salesCount), desc(products.isFeatured), asc(products.sortOrder), desc(products.createdAt)];
       case "newest":
@@ -545,7 +556,7 @@ export async function searchProducts(
     db
       .select({
         productId: cards.productId,
-        count: sql<number>`count(*)::int`,
+        count: sql<number>`count(*)`,
       })
       .from(cards)
       .where(and(inArray(cards.productId, productIds), eq(cards.status, "available")))
@@ -803,9 +814,9 @@ export async function getAdminProductsPage(params: {
     const pattern = `%${filters.query}%`;
     conditions.push(
       or(
-        ilike(products.name, pattern),
-        ilike(products.slug, pattern),
-        ilike(products.description, pattern)
+        like(products.name, pattern),
+        like(products.slug, pattern),
+        like(products.description, pattern)
       )!
     );
   }
@@ -857,14 +868,14 @@ export async function getAdminProductsPage(params: {
     }),
     // 总数
     db
-      .select({ count: sql<number>`count(*)::int` })
+      .select({ count: sql<number>`count(*)` })
       .from(products)
       .where(whereClause),
     // 统计
     db
       .select({
-        total: sql<number>`count(*)::int`,
-        active: sql<number>`count(*) filter (where ${products.isActive} = true)::int`,
+        total: sql<number>`count(*)`,
+        active: sql<number>`count(*) filter (where ${products.isActive} = 1)`,
       })
       .from(products),
   ]);
@@ -885,7 +896,7 @@ export async function getAdminProductsPage(params: {
   const stockCounts = await db
     .select({
       productId: cards.productId,
-      count: sql<number>`count(*)::int`,
+      count: sql<number>`count(*)`,
     })
     .from(cards)
     .where(
@@ -904,7 +915,7 @@ export async function getAdminProductsPage(params: {
     const allStockCounts = await db
       .select({
         productId: cards.productId,
-        count: sql<number>`count(*)::int`,
+        count: sql<number>`count(*)`,
       })
       .from(cards)
       .where(

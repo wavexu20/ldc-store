@@ -1,21 +1,28 @@
 # Cloudflare Workers 部署
 
-本分支使用 `@opennextjs/cloudflare` 将 Next.js 16 部署到 Workers。前端、App Router、Server Actions、ISR 和 Route Handlers 均保留。数据库第一阶段继续使用 PostgreSQL，因为发卡库存和余额账本依赖事务与行锁；可直接连接 Neon/Supabase，也可在生产环境配置 Cloudflare Hyperdrive。
+本项目使用 `@opennextjs/cloudflare` 在 Workers 上运行 Next.js 16，并使用 Cloudflare D1、Email Service 与 Turnstile。发卡库存、余额扣款、充值与退款通过 D1 Batch 和条件 SQL 原子提交，不依赖 PostgreSQL 或外部数据库。
 
-## 1. 数据库迁移
+## 1. D1 数据库
 
-在本机或 CI 中设置 `DATABASE_URL` 后执行：
+`wrangler.jsonc` 中的 `DB` Binding 已指向生产 D1。首次部署或新增迁移时执行：
 
 ```bash
 pnpm install
 pnpm db:migrate
+pnpm db:seed
 ```
 
-迁移 `0006_silly_molten_man.sql` 会新增统一用户、OAuth 账号、充值单和钱包流水，并为订单支付方式加入 `balance`；`0007_outstanding_prima.sql` 新增邮箱验证码表。
+本地 Workers 预览使用独立的本地 D1：
+
+```bash
+pnpm db:migrate:local
+pnpm exec wrangler d1 execute ldc-store-production --local --file lib/db/d1-seed.sql
+pnpm preview
+```
 
 ## 2. OAuth 回调地址
 
-在各平台登记以下回调（将域名替换为实际域名）：
+在各平台登记：
 
 ```text
 https://game3dtech.com/api/auth/callback/google
@@ -25,100 +32,51 @@ https://game3dtech.com/api/auth/callback/linux-do
 
 未配置 Client ID/Secret 的 OAuth 按钮不会显示。Email 注册不依赖 OAuth。
 
-## 3. Cloudflare Email Service
+## 3. Email Service 与 Turnstile
 
-Email 注册使用 Wrangler 的 `EMAIL` Send Binding 发送 6 位验证码，未完成验证的 Email 账号不能登录。生产环境需要：
+Email 注册通过 `EMAIL` Send Binding 发送验证码。Cloudflare 账户必须先完成 Email Sending onboarding，并验证 `game3dtech.com` 发件域名；默认发件地址是 `noreply@game3dtech.com`。
 
-1. 在 Cloudflare `Compute > Email Service > Email Sending` 中接入发件域名。
-2. 按 Cloudflare 提示完成 SPF/DKIM 等 DNS 验证。
-3. 确认账户已开通 Email Sending（向任意用户发送事务邮件需要 Workers Paid 计划）。
-4. 发件地址已配置为 `noreply@game3dtech.com`。
-
-`wrangler.jsonc` 已配置：
-
-```jsonc
-"send_email": [{ "name": "EMAIL" }]
-```
-
-`EMAIL_FROM` 是公开发件地址，已作为 Wrangler 普通变量保存，不需要作为 Secret。
-
-## 4. 本地 Workers 预览
-
-Email 注册同时启用了 Cloudflare Turnstile。请在 Cloudflare 控制台创建 Managed Widget，并将 `game3dtech.com` 加入允许的 Hostname：
-
-```env
-NEXT_PUBLIC_TURNSTILE_SITE_KEY="公开的 Site Key"
-TURNSTILE_SECRET_KEY="服务端 Secret Key"
-```
-
-`NEXT_PUBLIC_TURNSTILE_SITE_KEY` 必须同时配置为 Workers Builds 的构建变量，因为 Next.js 会在构建期将它写入注册页面；`TURNSTILE_SECRET_KEY` 必须使用 Secret：
+注册页使用 Managed Turnstile Widget。公开的 Site Key 需要作为构建变量与 Worker 普通变量提供，Secret Key 必须保存为 Worker Secret：
 
 ```bash
 pnpm wrangler secret put TURNSTILE_SECRET_KEY
 ```
 
-注册提交会在服务端调用 Cloudflare Siteverify，并校验 `action=register`。Turnstile Token 只能使用一次且 5 分钟后过期，失败后前端会重新生成挑战。
+注册提交会在服务端校验 Turnstile 的 `action=register`。Token 只能使用一次且会过期，失败后页面会重新生成挑战。
 
-复制 `.dev.vars.example` 为 `.dev.vars` 并填写密钥，然后运行：
+## 4. 生产密钥
 
-```bash
-pnpm preview
-```
-
-普通界面开发仍可使用 `pnpm dev`。涉及运行时兼容性的改动必须用 `pnpm preview` 再验证一次。
-
-## 5. 生产密钥
-
-至少配置以下 Workers secrets：
+部署基础功能至少需要：
 
 ```bash
-pnpm wrangler secret put DATABASE_URL
 pnpm wrangler secret put AUTH_SECRET
 pnpm wrangler secret put ADMIN_PASSWORD
-pnpm wrangler secret put LDC_CLIENT_ID
-pnpm wrangler secret put LDC_CLIENT_SECRET
+pnpm wrangler secret put TURNSTILE_SECRET_KEY
 ```
 
-按需继续写入 `GOOGLE_CLIENT_ID`、`GOOGLE_CLIENT_SECRET`、`GITHUB_CLIENT_ID`、`GITHUB_CLIENT_SECRET`、`LINUXDO_CLIENT_ID` 和 `LINUXDO_CLIENT_SECRET`。
+支付与充值启用时再配置 `LDC_CLIENT_ID`、`LDC_CLIENT_SECRET`；OAuth 按需配置 `GOOGLE_*`、`GITHUB_*`、`LINUXDO_*`。所有 Secret 只能放在 Worker Secrets，不能在后台页面或 Git 仓库中保存。
 
-如果使用 Hyperdrive，在 `wrangler.jsonc` 增加：
+## 5. 支付与充值回调
 
-```jsonc
-"hyperdrive": [
-  {
-    "binding": "HYPERDRIVE",
-    "id": "your-hyperdrive-config-id"
-  }
-]
-```
-
-代码会优先使用 `HYPERDRIVE.connectionString`，否则回退到 `DATABASE_URL`。数据库客户端按请求创建，连接池上限为 1，并设置极短生命周期，避免 Workers 跨请求复用 TCP 连接。
-
-## 6. 支付与充值回调
-
-Linux DO Credit 的 Notify URL 仍为：
+Linux DO Credit Notify URL：
 
 ```text
 https://game3dtech.com/api/payment/notify
 ```
 
-商品订单号使用 `LD` 前缀，余额充值单使用 `RC` 前缀。回调统一校验商户号、金额和 MD5 签名；充值通过唯一幂等键写入钱包流水，支付平台重复通知不会重复增加余额。
+商品订单号使用 `LD` 前缀，余额充值单使用 `RC` 前缀。回调会校验商户号、金额与签名，并通过唯一幂等键防止重复入账。
 
-## 7. 部署
-
-```bash
-pnpm deploy
-```
-
-发布前建议依次运行：
+## 6. 验证与部署
 
 ```bash
 pnpm exec tsc --noEmit
 pnpm exec vitest run
-pnpm build
-pnpm preview
+pnpm lint
+pnpm deploy
 ```
+
+部署完成后需验证首页、Email 注册/验证、三种 OAuth 登录、余额充值、余额下单、卡密交付、退款与后台管理。
 
 ## 授权提醒
 
-上游仓库当前没有附带 `LICENSE` 文件。没有明确许可证并不等于可任意复制或再发布。对外商用或公开分发前，应取得上游作者授权，或只保留经过独立重写的界面结构与交互思路，并替换原项目的图片、品牌和代码资产。
+上游仓库没有附带 `LICENSE` 文件。对外商用或公开分发前，应取得作者授权，或只保留独立重写的界面结构与交互思路，并替换原项目品牌和资产。

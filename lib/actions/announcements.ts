@@ -120,7 +120,7 @@ export async function getAllAnnouncements(options?: {
       : eq(announcements.isActive, status === "active");
 
   const [{ count }] = await db
-    .select({ count: sql<number>`count(*)::int` })
+    .select({ count: sql<number>`count(*)` })
     .from(announcements)
     .where(conditions);
 

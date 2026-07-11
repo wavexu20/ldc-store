@@ -13,15 +13,25 @@
   ],
   "vars": {
     "AUTH_URL": "https://game3dtech.com",
-    "EMAIL_FROM": "noreply@game3dtech.com"
+    "EMAIL_FROM": "noreply@game3dtech.com",
+    "NEXT_PUBLIC_TURNSTILE_SITE_KEY": "0x4AAAAAADzuo3ZhBpLFfnJ1"
   },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "ldc-store-production",
+      "database_id": "160f8693-d6e5-42b6-a3fa-16727cb8b427",
+      "migrations_dir": "lib/db/d1-migrations"
+    }
+  ],
   "assets": {
     "directory": ".open-next/assets",
     "binding": "ASSETS"
   },
   "send_email": [
     {
-      "name": "EMAIL"
+      "name": "EMAIL",
+      "allowed_sender_addresses": ["noreply@game3dtech.com"]
     }
   ],
   "observability": {

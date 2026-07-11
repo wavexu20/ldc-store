@@ -11,7 +11,7 @@ import {
 } from "@/lib/db";
 import { requireAdmin } from "@/lib/auth-utils";
 import { revalidatePath } from "next/cache";
-import { and, eq, ilike, inArray, or, sql, type SQL } from "drizzle-orm";
+import { and, eq, like, inArray, or, sql, type SQL } from "drizzle-orm";
 
 export interface AdminOrdersFilters {
   status?: OrderStatus;
@@ -141,12 +141,12 @@ function buildAdminOrdersWhere(filters: AdminOrdersFilters) {
     // 为什么这样做：后台查单通常需要“一次输入，覆盖多个字段”，减少管理员反复切换筛选器的成本。
     conditions.push(
       or(
-        ilike(orders.orderNo, pattern),
-        ilike(orders.email, pattern),
-        ilike(orders.username, pattern),
-        ilike(orders.userId, pattern),
-        ilike(orders.tradeNo, pattern),
-        ilike(orders.productName, pattern)
+        like(orders.orderNo, pattern),
+        like(orders.email, pattern),
+        like(orders.username, pattern),
+        like(orders.userId, pattern),
+        like(orders.tradeNo, pattern),
+        like(orders.productName, pattern)
       )
     );
   }
@@ -223,14 +223,14 @@ export async function getAdminOrdersPage(input: {
       offset,
     }),
     db
-      .select({ count: sql<number>`count(*)::int` })
+      .select({ count: sql<number>`count(*)` })
       .from(orders)
       .where(where)
       .then((rows) => rows[0]),
     db
       .select({
         status: orders.status,
-        count: sql<number>`count(*)::int`,
+        count: sql<number>`count(*)`,
       })
       .from(orders)
       .where(where)
@@ -264,43 +264,25 @@ export async function deleteAdminOrders(orderIds: string[]): Promise<DeleteAdmin
   }
 
   try {
-    const result = await db.transaction(async (tx) => {
-      const found = await tx
-        .select({ id: orders.id })
-        .from(orders)
-        .where(inArray(orders.id, uniqueIds));
-
-      const foundIdSet = new Set(found.map((row) => row.id));
-      const foundIds = Array.from(foundIdSet);
-      const notFoundIds = uniqueIds.filter((id) => !foundIdSet.has(id));
-
-      if (foundIds.length === 0) {
-        return {
-          deletedCount: 0,
-          notFoundIds,
-        };
-      }
-
-      // 释放未支付订单占用的卡密，避免删除后库存被“锁死”
-      await tx
-        .update(cards)
-        .set({
-          status: "available",
-          orderId: null,
-          lockedAt: null,
-        })
-        .where(and(eq(cards.status, "locked"), inArray(cards.orderId, foundIds)));
-
-      const deleted = await tx
-        .delete(orders)
-        .where(inArray(orders.id, foundIds))
-        .returning({ id: orders.id });
-
-      return {
-        deletedCount: deleted.length,
-        notFoundIds,
-      };
-    });
+    const found = await db
+      .select({ id: orders.id })
+      .from(orders)
+      .where(inArray(orders.id, uniqueIds));
+    const foundIdSet = new Set(found.map((row) => row.id));
+    const foundIds = Array.from(foundIdSet);
+    const notFoundIds = uniqueIds.filter((id) => !foundIdSet.has(id));
+    let deletedRowCount = 0;
+    if (foundIds.length > 0) {
+      const [, deleted] = await db.batch([
+        db
+          .update(cards)
+          .set({ status: "available", orderId: null, lockedAt: null })
+          .where(and(eq(cards.status, "locked"), inArray(cards.orderId, foundIds))),
+        db.delete(orders).where(inArray(orders.id, foundIds)).returning({ id: orders.id }),
+      ]);
+      deletedRowCount = deleted.length;
+    }
+    const result = { deletedCount: deletedRowCount, notFoundIds };
 
     // 动态页通常无需 revalidate，但保留可兼容未来改为缓存页面的场景
     revalidatePath("/admin/orders");
