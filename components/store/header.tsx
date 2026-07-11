@@ -19,7 +19,6 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { LinuxDoLogo } from "@/components/icons/linuxdo-logo";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -29,7 +28,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { useSession, signIn, signOut } from "next-auth/react";
+import { useSession, signOut } from "next-auth/react";
 import { SearchBar } from "@/components/store/search-bar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
@@ -109,12 +108,13 @@ export function Header({ siteName = "LDC Store", siteIcon, siteIconUrl }: Header
     username?: string; 
     provider?: string;
     role?: string;
+    id?: string;
   } | undefined;
-  const isLoggedIn = user?.provider === "linux-do";
+  const isLoggedIn = Boolean(user?.id);
   const isAdmin = user?.role === "admin";
 
   const handleLogin = () => {
-    signIn("linux-do");
+    window.location.assign("/login");
   };
 
   const handleLogout = () => {
@@ -256,6 +256,12 @@ export function Header({ siteName = "LDC Store", siteIcon, siteIconUrl }: Header
                     我的订单
                   </Link>
                 </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/account/wallet" className="cursor-pointer">
+                    <CreditCard className="mr-2 h-4 w-4" />
+                    余额与充值
+                  </Link>
+                </DropdownMenuItem>
                 {isAdmin && (
                   <DropdownMenuItem asChild>
                     <Link href="/admin" className="cursor-pointer">
@@ -279,9 +285,9 @@ export function Header({ siteName = "LDC Store", siteIcon, siteIconUrl }: Header
                 size="icon-sm"
                 className="sm:hidden rounded-full"
                 onClick={handleLogin}
-                aria-label="Linux DO Connect 登录"
+                aria-label="登录或注册"
               >
-                <LinuxDoLogo className="h-4 w-4" />
+                <User className="h-4 w-4" />
               </Button>
               <Button
                 variant="outline"
@@ -289,8 +295,8 @@ export function Header({ siteName = "LDC Store", siteIcon, siteIconUrl }: Header
                 className="hidden sm:inline-flex"
                 onClick={handleLogin}
               >
-                <LinuxDoLogo className="mr-2 h-4 w-4" />
-                Linux DO Connect
+                <User className="mr-2 h-4 w-4" />
+                登录 / 注册
               </Button>
             </>
           )}

@@ -1,0 +1,30 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "ldc-store",
+  "account_id": "b519eb90d2148fbe9655af86640e392a",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-07-11",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "routes": [
+    {
+      "pattern": "game3dtech.com",
+      "custom_domain": true
+    }
+  ],
+  "vars": {
+    "AUTH_URL": "https://game3dtech.com",
+    "EMAIL_FROM": "noreply@game3dtech.com"
+  },
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "send_email": [
+    {
+      "name": "EMAIL"
+    }
+  ],
+  "observability": {
+    "enabled": true
+  }
+}

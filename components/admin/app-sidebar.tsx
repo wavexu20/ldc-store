@@ -18,7 +18,7 @@ import {
   User,
   Megaphone,
 } from "lucide-react";
-import { signOut, useSession } from "next-auth/react";
+import { signOut } from "next-auth/react";
 
 import {
   Sidebar,
@@ -96,11 +96,16 @@ const settingsNavItems = [
   },
 ];
 
-export function AppSidebar() {
+interface AppSidebarUser {
+  name?: string | null;
+  email?: string | null;
+  image?: string | null;
+}
+
+export function AppSidebar({ user }: { user?: AppSidebarUser }) {
   const pathname = usePathname();
   // 为什么这样做：后台路由多为动态 Server Component，主动 prefetch 能把等待从“点击后”前移到“悬停时”，降低体感延迟。
   const router = useRouter();
-  const { data: session } = useSession();
 
   const isActive = (href: string) => {
     if (href === "/admin") {
@@ -196,8 +201,8 @@ export function AppSidebar() {
                 >
                   <Avatar className="h-8 w-8 rounded-lg ring-2 ring-sidebar-border">
                     <AvatarImage
-                      src={session?.user?.image || ""}
-                      alt={session?.user?.name || ""}
+                      src={user?.image || ""}
+                      alt={user?.name || ""}
                     />
                     <AvatarFallback className="rounded-lg bg-primary text-primary-foreground">
                       <User className="size-4" />
@@ -205,7 +210,7 @@ export function AppSidebar() {
                   </Avatar>
                   <div className="grid flex-1 text-left text-sm leading-tight">
                     <span className="truncate font-semibold">
-                      {session?.user?.name || "管理员"}
+                      {user?.name || "管理员"}
                     </span>
                     <div className="flex items-center gap-1.5">
                       <span className="relative flex h-2 w-2">
@@ -230,8 +235,8 @@ export function AppSidebar() {
                   <div className="flex items-center gap-3 rounded-lg bg-muted/50 p-3">
                     <Avatar className="h-10 w-10 rounded-lg ring-2 ring-border">
                       <AvatarImage
-                        src={session?.user?.image || ""}
-                        alt={session?.user?.name || ""}
+                        src={user?.image || ""}
+                        alt={user?.name || ""}
                       />
                       <AvatarFallback className="rounded-lg bg-primary text-primary-foreground">
                         <User className="size-5" />
@@ -240,14 +245,14 @@ export function AppSidebar() {
                     <div className="flex flex-col gap-1">
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-semibold">
-                          {session?.user?.name || "管理员"}
+                          {user?.name || "管理员"}
                         </span>
                         <Badge variant="secondary" className="h-5 text-[10px] font-medium">
                           管理员
                         </Badge>
                       </div>
                       <span className="text-xs text-muted-foreground">
-                        {session?.user?.email || "admin@example.com"}
+                        {user?.email || "admin@example.com"}
                       </span>
                     </div>
                   </div>

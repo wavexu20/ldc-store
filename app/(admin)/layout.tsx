@@ -8,12 +8,20 @@ import { AdminHeader } from "@/components/admin/admin-header";
 import { Toaster } from "@/components/ui/sonner";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertTriangle } from "lucide-react";
+import { redirect } from "next/navigation";
+import { auth } from "@/lib/auth";
 
 export default async function AdminLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const session = await auth();
+  const user = session?.user as
+    | { role?: string; name?: string | null; email?: string | null; image?: string | null }
+    | undefined;
+  if (user?.role !== "admin") redirect("/admin/login");
+
   const cookieStore = await cookies();
   const defaultOpen = cookieStore.get("sidebar_state")?.value !== "false";
 
@@ -28,7 +36,7 @@ export default async function AdminLayout({
 
   return (
     <SidebarProvider defaultOpen={defaultOpen}>
-      <AppSidebar />
+      <AppSidebar user={user} />
       <SidebarInset>
         <AdminHeader />
         <div className="flex-1 p-4 md:p-6">

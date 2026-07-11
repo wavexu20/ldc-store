@@ -31,9 +31,10 @@ const loginSchema = z.object({
 type LoginFormValues = z.infer<typeof loginSchema>
 
 export function LoginForm({
+  linuxDoOAuthEnabled = false,
   className,
   ...props
-}: React.ComponentProps<"div">) {
+}: React.ComponentProps<"div"> & { linuxDoOAuthEnabled?: boolean }) {
   const [isLoading, setIsLoading] = useState(false)
   const [isOAuthLoading, setIsOAuthLoading] = useState(false)
   const [loginError, setLoginError] = useState<string | null>(null)
@@ -109,7 +110,9 @@ export function LoginForm({
                 </div>
                 <h1 className="text-2xl font-bold">管理员登录</h1>
                 <p className="text-muted-foreground text-balance">
-                  请使用管理密码或 Linux DO 账号登录
+                  {linuxDoOAuthEnabled
+                    ? "请使用管理密码或 Linux DO 账号登录"
+                    : "请使用管理密码登录"}
                 </p>
               </div>
               {/* 锁定警告 */}
@@ -162,30 +165,34 @@ export function LoginForm({
                   )}
                 </Button>
               </Field>
-              <FieldSeparator className="*:data-[slot=field-separator-content]:bg-card">
-                或
-              </FieldSeparator>
-              <Field>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-11"
-                  disabled={isDisabled}
-                  onClick={handleLinuxDoLogin}
-                >
-                  {isOAuthLoading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      跳转中...
-                    </>
-                  ) : (
-                    <>
-                      <LinuxDoLogo className="mr-2 h-4 w-4" />
-                      使用 Linux DO 账号登录
-                    </>
-                  )}
-                </Button>
-              </Field>
+              {linuxDoOAuthEnabled ? (
+                <>
+                  <FieldSeparator className="*:data-[slot=field-separator-content]:bg-card">
+                    或
+                  </FieldSeparator>
+                  <Field>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-11"
+                      disabled={isDisabled}
+                      onClick={handleLinuxDoLogin}
+                    >
+                      {isOAuthLoading ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          跳转中...
+                        </>
+                      ) : (
+                        <>
+                          <LinuxDoLogo className="mr-2 h-4 w-4" />
+                          使用 Linux DO 账号登录
+                        </>
+                      )}
+                    </Button>
+                  </Field>
+                </>
+              ) : null}
               <FieldDescription className="text-center text-muted-foreground">
                 仅限管理员账号登录后台管理系统
               </FieldDescription>

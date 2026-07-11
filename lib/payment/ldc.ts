@@ -7,7 +7,7 @@ import crypto from "crypto";
 
 /**
  * 退款模式
- * - 'proxy': 使用服务端代理（需配置 LDC_PROXY_URL）
+ * - 'proxy': 由服务端调用退款接口（配置 LDC_PROXY_URL 时优先使用代理）
  * - 'client': 客户端直接调用（通过浏览器绕过 CF）
  * - 'disabled': 禁用退款
  */
@@ -27,6 +27,10 @@ export function getRefundMode(): RefundMode {
   
   if (envMode === 'client') {
     return 'client';
+  }
+
+  if (envMode === 'proxy') {
+    return 'proxy';
   }
   
   if (process.env.LDC_PROXY_URL) {

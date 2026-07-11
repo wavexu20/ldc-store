@@ -3,6 +3,16 @@
 import { signIn } from "@/lib/auth";
 import { headers } from "next/headers";
 import { z } from "zod";
+import { hash } from "bcryptjs";
+import { and, eq, isNull } from "drizzle-orm";
+import { db, emailVerificationTokens, users } from "@/lib/db";
+import {
+  findValidVerificationToken,
+  hashVerificationCode,
+  issueEmailVerification,
+} from "@/lib/email/verification";
+import { verifyTurnstileToken } from "@/lib/security/turnstile";
+import { passwordContainsIdentity, strongPasswordSchema } from "@/lib/validations/password";
 import {
   checkRateLimit,
   recordFailedAttempt,
@@ -14,11 +24,130 @@ const loginSchema = z.object({
   password: z.string().min(1, "请输入密码"),
 });
 
+const registerSchema = z.object({
+  name: z.string().trim().min(2, "昵称至少 2 个字符").max(50, "昵称不能超过 50 个字符"),
+  email: z.string().email("请输入有效的 Email").transform((value) => value.trim().toLowerCase()),
+  password: strongPasswordSchema,
+}).superRefine((data, context) => {
+  if (passwordContainsIdentity(data.password, data)) {
+    context.addIssue({
+      code: "custom",
+      path: ["password"],
+      message: "密码不能包含邮箱名前缀或昵称",
+    });
+  }
+});
+
 export interface LoginResult {
   success: boolean;
   message: string;
   remaining?: number;
   blocked?: boolean;
+  verificationRequired?: boolean;
+  email?: string;
+}
+
+export async function registerWithEmail(input: {
+  name: string;
+  email: string;
+  password: string;
+  turnstileToken: string;
+}): Promise<LoginResult> {
+  const parsed = registerSchema.safeParse(input);
+  if (!parsed.success) {
+    return { success: false, message: parsed.error.issues[0].message };
+  }
+
+  const headersList = await headers();
+  const turnstile = await verifyTurnstileToken({
+    token: input.turnstileToken,
+    remoteIp: getClientIP(headersList),
+    expectedAction: "register",
+  });
+  if (!turnstile.success) return { success: false, message: turnstile.message };
+
+  const existing = await db.query.users.findFirst({
+    where: eq(users.email, parsed.data.email),
+    columns: { id: true, name: true, email: true, emailVerifiedAt: true },
+  });
+  if (existing?.emailVerifiedAt) return { success: false, message: "该 Email 已注册，可直接登录" };
+  if (existing) {
+    try {
+      await issueEmailVerification({ userId: existing.id, email: existing.email, name: existing.name });
+      return {
+        success: true,
+        message: "验证码已重新发送",
+        verificationRequired: true,
+        email: existing.email,
+      };
+    } catch (error) {
+      return { success: false, message: error instanceof Error ? error.message : "验证码发送失败" };
+    }
+  }
+
+  try {
+    const passwordHash = await hash(parsed.data.password, 12);
+    const [created] = await db.insert(users).values({
+      name: parsed.data.name,
+      email: parsed.data.email,
+      passwordHash,
+    }).returning({ id: users.id, email: users.email, name: users.name });
+    await issueEmailVerification({ userId: created.id, email: created.email, name: created.name });
+    return {
+      success: true,
+      message: "注册成功，验证码已发送",
+      verificationRequired: true,
+      email: created.email,
+    };
+  } catch (error) {
+    const code = (error as { code?: string }).code;
+    if (code === "23505") return { success: false, message: "该 Email 已注册，可直接登录" };
+    console.error("Email 注册失败", error);
+    return { success: false, message: "注册失败，请稍后重试" };
+  }
+}
+
+const verifyEmailSchema = z.object({
+  email: z.string().email().transform((value) => value.trim().toLowerCase()),
+  code: z.string().regex(/^\d{6}$/, "请输入 6 位数字验证码"),
+});
+
+export async function verifyEmailCode(input: { email: string; code: string }): Promise<LoginResult> {
+  const parsed = verifyEmailSchema.safeParse(input);
+  if (!parsed.success) return { success: false, message: parsed.error.issues[0].message };
+  const user = await db.query.users.findFirst({ where: eq(users.email, parsed.data.email) });
+  if (!user) return { success: false, message: "验证码无效或已过期" };
+  if (user.emailVerifiedAt) return { success: true, message: "邮箱已验证" };
+
+  const tokenHash = await hashVerificationCode(parsed.data.email, parsed.data.code);
+  const token = await findValidVerificationToken(user.id, tokenHash);
+  if (!token) return { success: false, message: "验证码无效或已过期" };
+
+  await db.transaction(async (tx) => {
+    await tx.update(users).set({ emailVerifiedAt: new Date(), updatedAt: new Date() })
+      .where(eq(users.id, user.id));
+    await tx.update(emailVerificationTokens).set({ consumedAt: new Date() })
+      .where(and(
+        eq(emailVerificationTokens.userId, user.id),
+        isNull(emailVerificationTokens.consumedAt)
+      ));
+  });
+  return { success: true, message: "邮箱验证成功" };
+}
+
+export async function resendEmailVerification(email: string): Promise<LoginResult> {
+  const normalized = z.string().email().safeParse(email.trim().toLowerCase());
+  if (!normalized.success) return { success: false, message: "请输入有效的 Email" };
+  const user = await db.query.users.findFirst({ where: eq(users.email, normalized.data) });
+  if (!user || user.emailVerifiedAt) {
+    return { success: true, message: "如果该邮箱需要验证，验证码将会发送" };
+  }
+  try {
+    await issueEmailVerification({ userId: user.id, email: user.email, name: user.name });
+    return { success: true, message: "验证码已发送" };
+  } catch (error) {
+    return { success: false, message: error instanceof Error ? error.message : "验证码发送失败" };
+  }
 }
 
 /**

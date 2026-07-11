@@ -26,23 +26,27 @@ import { adminCompleteOrder, approveRefund, rejectRefund } from "@/lib/actions/o
 import { deleteAdminOrders } from "@/lib/actions/admin-orders";
 import { toast } from "sonner";
 import type { RefundMode } from "@/lib/payment/ldc";
+import { shouldUseClientRefund } from "./order-meta";
 
 interface OrderActionsProps {
   orderId: string;
   orderNo: string;
   status: string;
+  paymentMethod: string;
   refundReason?: string | null;
   refundEnabled?: boolean;
   refundMode?: RefundMode;
 }
 
-export function OrderActions({ orderId, orderNo, status, refundReason, refundEnabled = false, refundMode = 'disabled' }: OrderActionsProps) {
+export function OrderActions({ orderId, orderNo, status, paymentMethod, refundReason, refundEnabled = false, refundMode = 'disabled' }: OrderActionsProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [refundDialogOpen, setRefundDialogOpen] = useState(false);
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
+  const isBalanceRefund = paymentMethod === "balance";
+  const usesClientRefund = shouldUseClientRefund(paymentMethod, refundMode);
 
   const handleComplete = () => {
     if (!confirm("确定要手动完成此订单吗？此操作将发放卡密。")) {
@@ -96,7 +100,7 @@ export function OrderActions({ orderId, orderNo, status, refundReason, refundEna
   }, [orderId]);
 
   const handleApproveRefund = () => {
-    if (refundMode === 'client') {
+    if (usesClientRefund) {
       // 客户端模式：打开新窗口处理退款
       handleClientRefund();
     } else {
@@ -218,7 +222,7 @@ export function OrderActions({ orderId, orderNo, status, refundReason, refundEna
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               确认通过退款
-              {refundMode === 'client' && (
+              {usesClientRefund && (
                 <span className="inline-flex items-center gap-1 text-xs font-normal bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 px-2 py-0.5 rounded-full">
                   <Globe className="h-3 w-3" />
                   客户端模式
@@ -226,7 +230,9 @@ export function OrderActions({ orderId, orderNo, status, refundReason, refundEna
               )}
             </DialogTitle>
             <DialogDescription>
-              {refundMode === 'client' 
+              {isBalanceRefund
+                ? "通过后将把款项退回用户账户余额"
+                : usesClientRefund
                 ? "将通过浏览器直接调用支付平台退款接口（可绕过 CF 验证）"
                 : "通过后将调用支付平台退款接口，退还用户积分"
               }
@@ -237,7 +243,7 @@ export function OrderActions({ orderId, orderNo, status, refundReason, refundEna
               <p className="font-medium mb-1">退款原因：</p>
               <p className="text-muted-foreground">{refundReason || "未填写"}</p>
             </div>
-            {refundMode === 'client' && (
+            {usesClientRefund && (
               <div className="rounded-lg bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 p-3 text-sm text-amber-800 dark:text-amber-200">
                 <p className="font-medium mb-1">⚠️ 客户端模式说明：</p>
                 <ul className="list-disc list-inside space-y-1 text-xs">

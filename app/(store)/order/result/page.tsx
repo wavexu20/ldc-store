@@ -125,8 +125,8 @@ export default function OrderResultPage({ searchParams }: OrderResultPageProps) 
   const pollTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // 检查是否是 Linux DO 登录用户
-  const user = session?.user as { provider?: string } | undefined;
-  const isLoggedIn = user?.provider === "linux-do";
+  const user = session?.user as { id?: string } | undefined;
+  const isLoggedIn = Boolean(user?.id);
 
   // 如果 URL 没有订单号参数，尝试从 localStorage 读取
   useEffect(() => {

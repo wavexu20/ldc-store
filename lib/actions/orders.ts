@@ -10,7 +10,7 @@
  * - 前端显示时浏览器自动转换为用户本地时区
  */
 
-import { db, orders, cards, products } from "@/lib/db";
+import { db, orders, cards, products, users, walletTransactions } from "@/lib/db";
 import { eq, and, sql, desc, inArray } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { headers } from "next/headers";
@@ -89,13 +89,14 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
   const session = await auth();
   const user = session?.user as { id?: string; username?: string; image?: string; provider?: string } | undefined;
 
-  if (!user?.id || user.provider !== "linux-do") {
+  if (!user?.id || user.id === "admin") {
     log.warn("未登录用户尝试创建订单");
     return {
       success: false,
       message: "请先登录后再下单",
     };
   }
+  const userId = user.id;
 
   // 2. 验证输入
   const validationResult = createOrderSchema.safeParse(input);
@@ -151,8 +152,18 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
       const cardIds = availableCards.map((c) => c.id);
       const orderNo = generateOrderNo();
       const totalAmount = parseFloat(product.price) * quantity;
+      const totalCents = Math.round(totalAmount * 100);
       // 计算订单过期时间（UTC 时间戳，存入数据库时自动转换）
       const expiredAt = getExpireTime(orderExpireMinutes);
+
+      let balanceAfterCents: number | null = null;
+      if (paymentMethod === "balance") {
+        const [walletUser] = await tx.select().from(users)
+          .where(eq(users.id, userId)).for("update");
+        if (!walletUser) throw new Error("账号不存在");
+        if (walletUser.balanceCents < totalCents) throw new Error("账户余额不足，请先充值");
+        balanceAfterCents = walletUser.balanceCents - totalCents;
+      }
 
       // 3.2 创建订单
       const [newOrder] = await tx
@@ -165,7 +176,10 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
           quantity,
           totalAmount: totalAmount.toFixed(2),
           paymentMethod,
-          userId: user.id,
+          status: paymentMethod === "balance" ? "completed" : "pending",
+          tradeNo: paymentMethod === "balance" ? `BALANCE-${orderNo}` : null,
+          paidAt: paymentMethod === "balance" ? new Date() : null,
+          userId,
           username: user.username,
           userImage: user.image || null,
           expiredAt,
@@ -176,9 +190,10 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
       await tx
         .update(cards)
         .set({
-          status: "locked",
+          status: paymentMethod === "balance" ? "sold" : "locked",
           orderId: newOrder.id,
-          lockedAt: new Date(),
+          lockedAt: paymentMethod === "balance" ? null : new Date(),
+          soldAt: paymentMethod === "balance" ? new Date() : null,
         })
         .where(
           and(
@@ -187,6 +202,25 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
             inArray(cards.id, cardIds)
           )
         );
+
+      if (paymentMethod === "balance" && balanceAfterCents !== null) {
+        await tx.update(users).set({ balanceCents: balanceAfterCents, updatedAt: new Date() })
+          .where(eq(users.id, userId));
+        await tx.insert(walletTransactions).values({
+          userId,
+          type: "purchase",
+          amountCents: -totalCents,
+          balanceAfterCents,
+          referenceType: "order",
+          referenceId: newOrder.id,
+          idempotencyKey: `purchase:${newOrder.id}`,
+          description: `购买 ${product.name}`,
+        });
+        await tx.update(products).set({
+          salesCount: sql`${products.salesCount} + ${quantity}`,
+          updatedAt: new Date(),
+        }).where(eq(products.id, productId));
+      }
 
       return { order: newOrder, totalAmount };
     });
@@ -510,7 +544,7 @@ export async function getUserOrders() {
     const session = await auth();
     const user = session?.user as { id?: string; username?: string; provider?: string } | undefined;
 
-    if (!user?.id || user.provider !== "linux-do") {
+    if (!user?.id || user.id === "admin") {
       return { success: false, message: "请先登录", data: [] };
     }
 
@@ -573,7 +607,7 @@ export async function getOrderByNo(orderNo: string) {
     const session = await auth();
     const user = session?.user as { id?: string; provider?: string } | undefined;
 
-    if (!user?.id || user.provider !== "linux-do") {
+    if (!user?.id || user.id === "admin") {
       return { success: false, message: "请先登录" };
     }
 
@@ -699,7 +733,7 @@ export async function getOrderReceiptByNo(
     const session = await auth();
     const user = session?.user as { id?: string; provider?: string } | undefined;
 
-    if (!user?.id || user.provider !== "linux-do") {
+    if (!user?.id || user.id === "admin") {
       log.warn("未登录用户尝试获取支付成功凭证");
       return { success: false, message: "请先登录" };
     }
@@ -770,7 +804,7 @@ export async function requestRefund(
     const session = await auth();
     const user = session?.user as { id?: string; provider?: string } | undefined;
 
-    if (!user?.id || user.provider !== "linux-do") {
+    if (!user?.id || user.id === "admin") {
       log.warn("未登录用户尝试申请退款");
       return { success: false, message: "请先登录" };
     }
@@ -853,11 +887,6 @@ export async function approveRefund(
   orderId: string,
   adminRemark?: string
 ): Promise<{ success: boolean; message: string }> {
-  // 检查退款功能是否启用
-  if (!isRefundEnabled()) {
-    return { success: false, message: "退款功能未启用，请配置 LDC_PROXY_URL" };
-  }
-
   try {
     await requireAdmin();
   } catch {
@@ -881,6 +910,46 @@ export async function approveRefund(
     if (order.status !== "refund_pending") {
       log.warn({ status: order.status, orderNo: order.orderNo }, "审批退款：订单状态不允许");
       return { success: false, message: "该订单不在退款审核中" };
+    }
+
+    if (order.paymentMethod === "balance") {
+      if (!order.userId) return { success: false, message: "余额订单缺少用户信息" };
+      const refundCents = Math.round(parseFloat(order.totalAmount) * 100);
+      await db.transaction(async (tx) => {
+        const [walletUser] = await tx.select().from(users)
+          .where(eq(users.id, order.userId!)).for("update");
+        if (!walletUser) throw new Error("退款用户不存在");
+        const balanceAfterCents = walletUser.balanceCents + refundCents;
+        await tx.update(users).set({ balanceCents: balanceAfterCents, updatedAt: new Date() })
+          .where(eq(users.id, walletUser.id));
+        await tx.insert(walletTransactions).values({
+          userId: walletUser.id,
+          type: "refund",
+          amountCents: refundCents,
+          balanceAfterCents,
+          referenceType: "order",
+          referenceId: order.id,
+          idempotencyKey: `refund:${order.id}`,
+          description: `订单 ${order.orderNo} 退款`,
+        });
+        await tx.update(orders).set({
+          status: "refunded",
+          adminRemark: adminRemark || "退款已原路退回账户余额",
+          refundedAt: new Date(),
+          updatedAt: new Date(),
+        }).where(eq(orders.id, order.id));
+        await tx.update(cards).set({ status: "refunded" }).where(eq(cards.orderId, order.id));
+      });
+      revalidatePath("/admin/orders");
+      revalidatePath("/order/my");
+      revalidatePath("/account/wallet");
+      log.info({ orderNo: order.orderNo }, "余额退款成功");
+      return { success: true, message: "退款已退回用户余额" };
+    }
+
+    // 外部支付退款才依赖 LDC 退款模式；余额退款始终可以在本地完成。
+    if (!isRefundEnabled()) {
+      return { success: false, message: "外部支付退款功能未启用" };
     }
 
     if (!order.tradeNo) {

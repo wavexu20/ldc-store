@@ -17,6 +17,8 @@ pnpm-lock.yaml
 
 # next.js
 /.next/
+/.open-next/
+/.wrangler/
 /out/
 
 # production

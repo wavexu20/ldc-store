@@ -57,6 +57,7 @@ export function HomeCategoryFilter({ categories, children }: HomeCategoryFilterP
               !selectedCategoryId ? "shadow-md shadow-primary/20" : "hover:bg-muted"
             }`}
             onClick={() => setSelectedCategoryId(null)}
+            aria-pressed={!selectedCategoryId}
           >
             全部商品
           </Button>
@@ -73,6 +74,7 @@ export function HomeCategoryFilter({ categories, children }: HomeCategoryFilterP
                   : "hover:bg-muted"
               }`}
               onClick={() => setSelectedCategoryId(category.id)}
+              aria-pressed={selectedCategoryId === category.id}
             >
               {category.name}
             </Button>
@@ -106,4 +108,3 @@ export function FilterableProductItem({
 
   return children;
 }
-

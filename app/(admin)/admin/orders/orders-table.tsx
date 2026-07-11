@@ -29,7 +29,7 @@ import { LocalTime } from "@/components/time/local-time";
 import type { RefundMode } from "@/lib/payment/ldc";
 import { deleteAdminOrders, type AdminOrderListItem } from "@/lib/actions/admin-orders";
 
-import { orderStatusConfig, paymentMethodLabels } from "./order-meta";
+import { canApproveRefund, orderStatusConfig, paymentMethodLabels } from "./order-meta";
 import { OrderActions } from "./order-actions";
 import { buildAdminOrdersExportUrl } from "./orders-url";
 
@@ -310,8 +310,9 @@ function OrdersTableView({
                     orderId={order.id}
                     orderNo={order.orderNo}
                     status={order.status}
+                    paymentMethod={order.paymentMethod}
                     refundReason={order.refundReason}
-                    refundEnabled={refundEnabled}
+                    refundEnabled={canApproveRefund(order.paymentMethod, refundEnabled)}
                     refundMode={refundMode}
                   />
                 </TableCell>
