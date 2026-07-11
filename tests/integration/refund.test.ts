@@ -39,6 +39,16 @@ describe("refund mode", () => {
     });
   });
 
+  it("显式 proxy 应强制使用服务端退款模式", async () => {
+    await withEnv(
+      { LDC_REFUND_MODE: "proxy", LDC_PROXY_URL: undefined },
+      async () => {
+        expect(getRefundMode()).toBe("proxy");
+        expect(isRefundEnabled()).toBe(true);
+      }
+    );
+  });
+
   it("显式 disabled 应禁用退款", async () => {
     await withEnv({ LDC_REFUND_MODE: "disabled" }, async () => {
       expect(getRefundMode()).toBe("disabled");
@@ -127,4 +137,3 @@ describe("refundOrder", () => {
     );
   });
 });
-

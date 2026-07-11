@@ -1,26 +1,25 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
+import GitHub from "next-auth/providers/github";
+import Google from "next-auth/providers/google";
+import { compare } from "bcryptjs";
+import { and, eq } from "drizzle-orm";
 import { z } from "zod";
+import { db, oauthAccounts, users } from "@/lib/db";
 
-const loginSchema = z.object({
-  password: z.string().min(1),
+const adminLoginSchema = z.object({ password: z.string().min(1) });
+const emailLoginSchema = z.object({
+  email: z.string().email().transform((value) => value.trim().toLowerCase()),
+  password: z.string().min(8).max(128),
 });
 
-/**
- * 获取管理员用户名白名单
- * 从环境变量 ADMIN_USERNAMES 读取，逗号分隔
- * 例如: ADMIN_USERNAMES="admin1,admin2,kong"
- */
 function getAdminUsernames(): string[] {
-  const adminUsernames = process.env.ADMIN_USERNAMES;
-  if (!adminUsernames) {
-    return [];
-  }
-  return adminUsernames.split(",").map((name) => name.trim()).filter(Boolean);
+  return (process.env.ADMIN_USERNAMES || "")
+    .split(",")
+    .map((name) => name.trim().toLowerCase())
+    .filter(Boolean);
 }
 
-// Linux DO OAuth2 Provider 配置
-// 文档: https://connect.linux.do
 const LinuxDoProvider = {
   id: "linux-do",
   name: "Linux DO",
@@ -29,23 +28,10 @@ const LinuxDoProvider = {
     url: process.env.LINUXDO_AUTHORIZATION_URL || "https://connect.linux.do/oauth2/authorize",
     params: { scope: "user" },
   },
-  token: {
-    url: process.env.LINUXDO_TOKEN_URL || "https://connect.linux.do/oauth2/token",
-  },
-  userinfo: {
-    url: process.env.LINUXDO_USERINFO_URL || "https://connect.linux.do/api/user",
-  },
+  token: { url: process.env.LINUXDO_TOKEN_URL || "https://connect.linux.do/oauth2/token" },
+  userinfo: { url: process.env.LINUXDO_USERINFO_URL || "https://connect.linux.do/api/user" },
   clientId: process.env.LINUXDO_CLIENT_ID,
   clientSecret: process.env.LINUXDO_CLIENT_SECRET,
-  // 用户信息字段参考文档:
-  // id - 用户唯一标识（不可变）
-  // username - 论坛用户名
-  // name - 论坛用户昵称（可变）
-  // avatar_template - 用户头像模板URL（支持多种尺寸）
-  // active - 账号活跃状态
-  // trust_level - 信任等级（0-4）
-  // silenced - 禁言状态
-  // external_ids - 外部ID关联信息
   profile(profile: {
     id: number;
     username: string;
@@ -55,22 +41,12 @@ const LinuxDoProvider = {
     trust_level?: number;
     silenced?: boolean;
   }) {
-    // 处理头像URL模板，替换 {size} 为实际尺寸
-    const avatarUrl = profile.avatar_template
-      ? profile.avatar_template.replace("{size}", "120")
-      : undefined;
-    
-    // 重要：Linux DO 的用户 ID（数字）转为字符串
-    // NextAuth v5 会覆盖 id 字段为内部 UUID，所以我们需要用自定义字段 linuxDoId 来保存真正的用户 ID
-    const linuxDoId = String(profile.id);
-    
+    const username = profile.username.toLowerCase();
     return {
-      id: linuxDoId,
+      id: String(profile.id),
       name: profile.name || profile.username,
-      email: `${profile.username}@linux.do`,
-      image: avatarUrl,
-      // 自定义字段（不会被 NextAuth 覆盖）
-      linuxDoId,
+      email: `${username}@linux.do`,
+      image: profile.avatar_template?.replace("{size}", "120"),
       username: profile.username,
       trustLevel: profile.trust_level,
       active: profile.active,
@@ -79,102 +55,162 @@ const LinuxDoProvider = {
   },
 };
 
+type AuthUser = {
+  id?: string;
+  email?: string | null;
+  name?: string | null;
+  image?: string | null;
+  username?: string;
+  role?: "user" | "admin";
+  provider?: string;
+  trustLevel?: number;
+  active?: boolean;
+  silenced?: boolean;
+};
+
+async function resolveOAuthUser(
+  user: AuthUser,
+  provider: string,
+  providerAccountId: string
+) {
+  const existingAccount = await db.query.oauthAccounts.findFirst({
+    where: and(
+      eq(oauthAccounts.provider, provider),
+      eq(oauthAccounts.providerAccountId, providerAccountId)
+    ),
+    with: { user: true },
+  });
+
+  if (existingAccount) {
+    await db.update(users).set({
+      name: user.name || existingAccount.user.name,
+      image: user.image || existingAccount.user.image,
+      updatedAt: new Date(),
+    }).where(eq(users.id, existingAccount.user.id));
+    return existingAccount.user;
+  }
+
+  const email = (user.email || `${provider}-${providerAccountId}@oauth.local`).toLowerCase();
+  let localUser = await db.query.users.findFirst({ where: eq(users.email, email) });
+
+  if (!localUser) {
+    const [created] = await db.insert(users).values({
+      email,
+      name: user.name,
+      image: user.image,
+      emailVerifiedAt: new Date(),
+    }).onConflictDoNothing({ target: users.email }).returning();
+    localUser = created || await db.query.users.findFirst({ where: eq(users.email, email) });
+  }
+
+  if (!localUser) throw new Error("无法创建本地用户");
+
+  await db.insert(oauthAccounts).values({
+    userId: localUser.id,
+    provider,
+    providerAccountId,
+    username: user.username,
+  }).onConflictDoNothing();
+
+  return localUser;
+}
+
 export const { handlers, signIn, signOut, auth } = NextAuth({
   providers: [
-    // Linux DO OAuth2 登录（仅在配置了相关环境变量时启用）
-    ...(process.env.LINUXDO_CLIENT_ID && process.env.LINUXDO_CLIENT_SECRET
-      ? [LinuxDoProvider]
+    ...(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
+      ? [Google({ clientId: process.env.GOOGLE_CLIENT_ID, clientSecret: process.env.GOOGLE_CLIENT_SECRET })]
       : []),
-    // 管理员密码登录
+    ...(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET
+      ? [GitHub({ clientId: process.env.GITHUB_CLIENT_ID, clientSecret: process.env.GITHUB_CLIENT_SECRET })]
+      : []),
+    ...(process.env.LINUXDO_CLIENT_ID && process.env.LINUXDO_CLIENT_SECRET ? [LinuxDoProvider] : []),
     Credentials({
-      name: "credentials",
+      id: "email-password",
+      name: "Email",
       credentials: {
+        email: { label: "Email", type: "email" },
         password: { label: "密码", type: "password" },
       },
       async authorize(credentials) {
-        const parsed = loginSchema.safeParse(credentials);
-        if (!parsed.success) {
-          return null;
-        }
-
-        const { password } = parsed.data;
-        const adminPassword = process.env.ADMIN_PASSWORD;
-
-        if (!adminPassword) {
-          console.error("ADMIN_PASSWORD 环境变量未设置");
-          return null;
-        }
-
-        // 直接比较密码（明文）
-        if (password !== adminPassword) {
-          return null;
-        }
-
-        // 返回固定的管理员用户
+        const parsed = emailLoginSchema.safeParse(credentials);
+        if (!parsed.success) return null;
+        const localUser = await db.query.users.findFirst({
+          where: eq(users.email, parsed.data.email),
+        });
+        if (!localUser?.passwordHash || localUser.status !== "active" || !localUser.emailVerifiedAt) return null;
+        if (!(await compare(parsed.data.password, localUser.passwordHash))) return null;
+        return {
+          id: localUser.id,
+          email: localUser.email,
+          name: localUser.name,
+          image: localUser.image,
+          role: localUser.role,
+          provider: "email-password",
+        };
+      },
+    }),
+    Credentials({
+      id: "credentials",
+      name: "Admin password",
+      credentials: { password: { label: "密码", type: "password" } },
+      async authorize(credentials) {
+        const parsed = adminLoginSchema.safeParse(credentials);
+        if (!parsed.success || !process.env.ADMIN_PASSWORD) return null;
+        if (parsed.data.password !== process.env.ADMIN_PASSWORD) return null;
         return {
           id: "admin",
           email: "admin@localhost",
           name: "管理员",
           role: "admin",
+          provider: "credentials",
         };
       },
     }),
   ],
   callbacks: {
+    async signIn({ user, account }) {
+      if (!account || account.type === "credentials") return true;
+      const authUser = user as AuthUser;
+      const localUser = await resolveOAuthUser(authUser, account.provider, account.providerAccountId);
+      authUser.id = localUser.id;
+      authUser.role = localUser.role;
+      authUser.provider = account.provider;
+      if (account.provider === "linux-do" && authUser.username &&
+          getAdminUsernames().includes(authUser.username.toLowerCase())) {
+        authUser.role = "admin";
+        await db.update(users).set({ role: "admin", updatedAt: new Date() }).where(eq(users.id, localUser.id));
+      }
+      return localUser.status === "active";
+    },
     async jwt({ token, user, account }) {
       if (user) {
-        // 获取自定义字段 linuxDoId（不会被 NextAuth 覆盖）
-        const linuxDoId = (user as { linuxDoId?: string }).linuxDoId;
-        
-        // 重要：使用 linuxDoId 作为稳定的用户 ID
-        // NextAuth v5 会将 user.id 替换为内部 UUID，所以我们使用自定义字段
-        const stableUserId = linuxDoId || account?.providerAccountId || user.id;
-        
-        // 设置 token 中的用户 ID（用于后续请求）
-        token.id = stableUserId;
-        token.sub = stableUserId;
-        token.role = (user as { role?: string }).role;
-        
-        // 保存 OAuth 用户的额外信息
-        if (account?.provider === "linux-do") {
-          const username = (user as { username?: string }).username;
-          token.username = username;
-          token.trustLevel = (user as { trustLevel?: number }).trustLevel;
-          token.active = (user as { active?: boolean }).active;
-          token.silenced = (user as { silenced?: boolean }).silenced;
-          token.provider = "linux-do";
-          
-          // 检查用户名是否在管理员白名单中
-          const adminUsernames = getAdminUsernames();
-          if (username && adminUsernames.includes(username)) {
-            token.role = "admin";
-          }
-        }
+        const authUser = user as AuthUser;
+        token.id = authUser.id;
+        token.sub = authUser.id;
+        token.role = authUser.role || "user";
+        token.provider = account?.provider || authUser.provider;
+        token.username = authUser.username || user.name || user.email?.split("@")[0];
+        token.trustLevel = authUser.trustLevel;
+        token.active = authUser.active;
+        token.silenced = authUser.silenced;
       }
       return token;
     },
     async session({ session, token }) {
       if (session.user) {
-        // 使用 token.id 或 token.sub 作为用户 ID（确保兼容性）
         session.user.id = (token.id || token.sub) as string;
-        (session.user as { role?: string }).role = token.role as string;
-        // 传递 OAuth 用户信息到 session
-        (session.user as { username?: string }).username = token.username as string;
-        (session.user as { trustLevel?: number }).trustLevel = token.trustLevel as number;
-        (session.user as { active?: boolean }).active = token.active as boolean;
-        (session.user as { silenced?: boolean }).silenced = token.silenced as boolean;
-        (session.user as { provider?: string }).provider = token.provider as string;
+        const sessionUser = session.user as AuthUser;
+        sessionUser.role = token.role as "user" | "admin";
+        sessionUser.provider = token.provider as string;
+        sessionUser.username = token.username as string;
+        sessionUser.trustLevel = token.trustLevel as number;
+        sessionUser.active = token.active as boolean;
+        sessionUser.silenced = token.silenced as boolean;
       }
       return session;
     },
   },
-  pages: {
-    signIn: "/admin/login",
-  },
-  session: {
-    strategy: "jwt",
-  },
-  // Vercel 部署必需：信任代理主机
+  pages: { signIn: "/login" },
+  session: { strategy: "jwt" },
   trustHost: true,
 });
-

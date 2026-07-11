@@ -10,6 +10,7 @@ import { db, orders } from "@/lib/db";
 import { eq } from "drizzle-orm";
 import { logger } from "@/lib/logger";
 import { parseWalletAmount } from "@/lib/money";
+import { handleRechargePaymentSuccess } from "@/lib/wallet-service";
 
 function toCents(value: string): number | null {
   const amount = parseWalletAmount(value);
@@ -118,6 +119,24 @@ export async function GET(request: NextRequest) {
     return new NextResponse("fail", { status: 400 });
   }
 
+  const receivedCents = toCents(params.money);
+  if (receivedCents === null) {
+    return new NextResponse("fail", { status: 400 });
+  }
+
+  // 充值单和商品订单共用支付回调；充值号使用 RC 前缀并由独立账本幂等入账。
+  if (params.out_trade_no.startsWith("RC")) {
+    const recharge = await handleRechargePaymentSuccess(
+      params.out_trade_no,
+      params.trade_no,
+      receivedCents
+    );
+    if (!recharge.found) return new NextResponse("fail", { status: 400 });
+    return new NextResponse(recharge.success ? "success" : "fail", {
+      status: recharge.success ? 200 : 400,
+    });
+  }
+
   // 验证订单与金额（防御式校验）
   const order = await db.query.orders.findFirst({
     where: eq(orders.orderNo, params.out_trade_no),
@@ -154,7 +173,6 @@ export async function GET(request: NextRequest) {
   }
 
   const expectedCents = toCents(order.totalAmount);
-  const receivedCents = toCents(params.money);
   if (expectedCents === null || receivedCents === null || expectedCents !== receivedCents) {
     log.warn(
       {

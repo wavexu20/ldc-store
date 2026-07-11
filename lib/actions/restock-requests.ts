@@ -124,7 +124,7 @@ export async function requestRestock(productId: string): Promise<RequestRestockR
     | undefined;
 
   // 关键：只允许 Linux DO 登录用户参与，避免游客刷量 + 方便展示头像 group
-  if (!user?.id || user.provider !== "linux-do") {
+  if (!user?.id || user.id === "admin") {
     return { success: false, message: "请先使用 Linux DO 登录后再催补货" };
   }
 

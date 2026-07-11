@@ -105,8 +105,8 @@ export default function MyOrdersPage() {
   const [isPending, startTransition] = useTransition();
   const [refundEnabled, setRefundEnabled] = useState(false);
 
-  const user = session?.user as { provider?: string } | undefined;
-  const isLoggedIn = user?.provider === "linux-do";
+  const user = session?.user as { id?: string } | undefined;
+  const isLoggedIn = Boolean(user?.id);
 
   const loadOrders = useCallback(async (showRefreshState = false) => {
     if (showRefreshState) {

@@ -35,9 +35,104 @@ export const orderStatusEnum = pgEnum("order_status", [
 
 export const paymentMethodEnum = pgEnum("payment_method", [
   "ldc",       // Linux DO Credit
+  "balance",   // 账户余额
   "alipay",    // 支付宝（预留）
   "wechat",    // 微信支付（预留）
   "usdt",      // USDT（预留）
+]);
+
+export const userRoleEnum = pgEnum("user_role", ["user", "admin"]);
+export const userStatusEnum = pgEnum("user_status", ["active", "disabled"]);
+export const walletTransactionTypeEnum = pgEnum("wallet_transaction_type", [
+  "recharge",
+  "purchase",
+  "refund",
+  "adjustment",
+]);
+export const rechargeStatusEnum = pgEnum("recharge_status", [
+  "pending",
+  "paid",
+  "expired",
+  "cancelled",
+]);
+
+// ============================================
+// Users & linked identities
+// ============================================
+
+export const users = pgTable("users", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  email: text("email").notNull().unique(),
+  name: text("name"),
+  image: text("image"),
+  passwordHash: text("password_hash"),
+  role: userRoleEnum("role").default("user").notNull(),
+  status: userStatusEnum("status").default("active").notNull(),
+  balanceCents: integer("balance_cents").default(0).notNull(),
+  emailVerifiedAt: timestamp("email_verified_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  index("users_role_idx").on(table.role),
+  index("users_status_idx").on(table.status),
+]);
+
+export const oauthAccounts = pgTable("oauth_accounts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  provider: text("provider").notNull(),
+  providerAccountId: text("provider_account_id").notNull(),
+  username: text("username"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("oauth_accounts_provider_account_idx").on(table.provider, table.providerAccountId),
+  index("oauth_accounts_user_id_idx").on(table.userId),
+]);
+
+export const walletTransactions = pgTable("wallet_transactions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").references(() => users.id, { onDelete: "restrict" }).notNull(),
+  type: walletTransactionTypeEnum("type").notNull(),
+  amountCents: integer("amount_cents").notNull(),
+  balanceAfterCents: integer("balance_after_cents").notNull(),
+  referenceType: text("reference_type"),
+  referenceId: text("reference_id"),
+  idempotencyKey: text("idempotency_key").notNull().unique(),
+  description: text("description"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  index("wallet_transactions_user_created_idx").on(table.userId, table.createdAt),
+  index("wallet_transactions_reference_idx").on(table.referenceType, table.referenceId),
+]);
+
+export const rechargeOrders = pgTable("recharge_orders", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  rechargeNo: text("recharge_no").notNull().unique(),
+  userId: uuid("user_id").references(() => users.id, { onDelete: "restrict" }).notNull(),
+  amountCents: integer("amount_cents").notNull(),
+  provider: text("provider").default("ldc").notNull(),
+  status: rechargeStatusEnum("status").default("pending").notNull(),
+  tradeNo: text("trade_no").unique(),
+  expiredAt: timestamp("expired_at", { withTimezone: true }).notNull(),
+  paidAt: timestamp("paid_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  index("recharge_orders_user_created_idx").on(table.userId, table.createdAt),
+  index("recharge_orders_status_idx").on(table.status),
+]);
+
+export const emailVerificationTokens = pgTable("email_verification_tokens", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  tokenHash: text("token_hash").notNull().unique(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  consumedAt: timestamp("consumed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  index("email_verification_tokens_user_created_idx").on(table.userId, table.createdAt),
+  index("email_verification_tokens_expires_idx").on(table.expiresAt),
 ]);
 
 // ============================================
@@ -264,6 +359,29 @@ export const restockRequestsRelations = relations(restockRequests, ({ one }) => 
   }),
 }));
 
+export const usersRelations = relations(users, ({ many }) => ({
+  oauthAccounts: many(oauthAccounts),
+  walletTransactions: many(walletTransactions),
+  rechargeOrders: many(rechargeOrders),
+  emailVerificationTokens: many(emailVerificationTokens),
+}));
+
+export const oauthAccountsRelations = relations(oauthAccounts, ({ one }) => ({
+  user: one(users, { fields: [oauthAccounts.userId], references: [users.id] }),
+}));
+
+export const walletTransactionsRelations = relations(walletTransactions, ({ one }) => ({
+  user: one(users, { fields: [walletTransactions.userId], references: [users.id] }),
+}));
+
+export const rechargeOrdersRelations = relations(rechargeOrders, ({ one }) => ({
+  user: one(users, { fields: [rechargeOrders.userId], references: [users.id] }),
+}));
+
+export const emailVerificationTokensRelations = relations(emailVerificationTokens, ({ one }) => ({
+  user: one(users, { fields: [emailVerificationTokens.userId], references: [users.id] }),
+}));
+
 // ============================================
 // Type Exports
 // ============================================
@@ -288,6 +406,13 @@ export type NewAnnouncement = typeof announcements.$inferInsert;
 
 export type RestockRequest = typeof restockRequests.$inferSelect;
 export type NewRestockRequest = typeof restockRequests.$inferInsert;
+
+export type User = typeof users.$inferSelect;
+export type NewUser = typeof users.$inferInsert;
+export type OauthAccount = typeof oauthAccounts.$inferSelect;
+export type WalletTransaction = typeof walletTransactions.$inferSelect;
+export type RechargeOrder = typeof rechargeOrders.$inferSelect;
+export type EmailVerificationToken = typeof emailVerificationTokens.$inferSelect;
 
 export type CardStatus = (typeof cardStatusEnum.enumValues)[number];
 export type OrderStatus = (typeof orderStatusEnum.enumValues)[number];

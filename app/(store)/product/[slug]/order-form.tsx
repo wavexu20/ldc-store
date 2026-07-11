@@ -1,18 +1,17 @@
 "use client";
 
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { useSession, signIn } from "next-auth/react";
+import { useSession } from "next-auth/react";
 import { createOrder } from "@/lib/actions/orders";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Loader2, Minus, Plus, CheckCircle2 } from "lucide-react";
-import { LinuxDoLogo } from "@/components/icons/linuxdo-logo";
+import { Loader2, Minus, Plus, CheckCircle2, WalletCards } from "lucide-react";
 
 const orderFormSchema = z.object({
   quantity: z.number().int().min(1),
@@ -38,13 +37,14 @@ export function OrderForm({
   maxQuantity,
 }: OrderFormProps) {
   const [isPending, startTransition] = useTransition();
+  const [paymentMethod, setPaymentMethod] = useState<"ldc" | "balance">("ldc");
   const router = useRouter();
   const { data: session, status } = useSession();
   const effectiveMax = Math.min(maxQuantity, stock);
 
   // 检查是否是 Linux DO 登录用户
-  const user = session?.user as { username?: string; provider?: string } | undefined;
-  const isLoggedIn = user?.provider === "linux-do";
+  const user = session?.user as { id?: string; username?: string; name?: string } | undefined;
+  const isLoggedIn = Boolean(user?.id);
 
   const form = useForm<OrderFormValues>({
     resolver: zodResolver(orderFormSchema),
@@ -64,7 +64,7 @@ export function OrderForm({
   };
 
   const handleLogin = () => {
-    signIn("linux-do");
+    router.push("/login");
   };
 
   const onSubmit = (values: OrderFormValues) => {
@@ -77,7 +77,7 @@ export function OrderForm({
       const result = await createOrder({
         productId,
         quantity: values.quantity,
-        paymentMethod: "ldc",
+        paymentMethod,
       });
 
       if (result.success) {
@@ -134,8 +134,7 @@ export function OrderForm({
           </p>
         </div>
         <Button onClick={handleLogin} className="w-full">
-          <LinuxDoLogo className="mr-2 h-4 w-4" />
-          Linux DO Connect
+          登录或创建账号
         </Button>
       </div>
     );
@@ -147,8 +146,16 @@ export function OrderForm({
       <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300">
         <CheckCircle2 className="h-4 w-4 flex-shrink-0" />
         <span>
-          已登录为 <strong>{user?.username}</strong>，支付完成后可在「我的订单」查看卡密
+          已登录为 <strong>{user?.name || user?.username}</strong>，支付完成后可在「我的订单」查看卡密
         </span>
+      </div>
+
+      <div className="space-y-2">
+        <Label>支付方式</Label>
+        <div className="grid grid-cols-2 gap-2">
+          <Button type="button" variant={paymentMethod === "ldc" ? "default" : "outline"} onClick={() => setPaymentMethod("ldc")}>Linux DO Credit</Button>
+          <Button type="button" variant={paymentMethod === "balance" ? "default" : "outline"} onClick={() => setPaymentMethod("balance")}><WalletCards />账户余额</Button>
+        </div>
       </div>
 
       {/* Quantity */}

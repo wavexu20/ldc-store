@@ -78,7 +78,7 @@ export function SearchBar({
     }
     next.delete("page");
 
-    router.push(buildSearchUrl(next));
+    router.replace(buildSearchUrl(next));
     onAfterSubmit?.();
   };
 
@@ -93,6 +93,8 @@ export function SearchBar({
 
   return (
     <form
+      action="/search"
+      method="get"
       className={className}
       onSubmit={(e) => {
         e.preventDefault();
@@ -102,13 +104,23 @@ export function SearchBar({
       <div className="relative">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
+          name="q"
           value={value}
           onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              submit();
+            }
+          }}
           placeholder={placeholder}
           className="pl-9 pr-9"
           autoFocus={autoFocus}
           aria-label="搜索商品"
         />
+        <button type="button" className="sr-only" onClick={submit}>
+          提交搜索
+        </button>
         {value ? (
           <Button
             type="button"

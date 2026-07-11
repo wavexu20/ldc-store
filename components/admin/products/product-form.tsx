@@ -12,14 +12,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectSeparator,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Form,
   FormControl,
   FormDescription,
@@ -185,34 +177,31 @@ export function ProductForm({
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>商品分类</FormLabel>
-                        <Select
-                          value={field.value ?? "none"}
-                          onValueChange={(value) =>
-                            field.onChange(value === "none" ? null : value)
-                          }
-                        >
-                          <FormControl>
-                            <SelectTrigger className="w-full">
-                              <SelectValue placeholder="选择分类（可选）" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent align="start">
-                            <SelectItem value="none">未分类</SelectItem>
-                            <SelectSeparator />
-                            {categories.length > 0 ? (
-                              categories.map((category) => (
-                                <SelectItem key={category.id} value={category.id}>
-                                  {category.name}
-                                  {!category.isActive ? "（已隐藏）" : ""}
-                                </SelectItem>
-                              ))
-                            ) : (
-                              <SelectItem value="__empty__" disabled>
-                                暂无分类
-                              </SelectItem>
-                            )}
-                          </SelectContent>
-                        </Select>
+                        <FormControl>
+                          <select
+                            aria-label="商品分类"
+                            className="border-input bg-background ring-offset-background focus-visible:ring-ring flex h-9 w-full rounded-md border px-3 py-1 text-sm shadow-xs outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50"
+                            value={field.value ?? "none"}
+                            onChange={(event) =>
+                              field.onChange(
+                                event.target.value === "none"
+                                  ? null
+                                  : event.target.value
+                              )
+                            }
+                            onBlur={field.onBlur}
+                            name={field.name}
+                            ref={field.ref}
+                          >
+                            <option value="none">未分类</option>
+                            {categories.map((category) => (
+                              <option key={category.id} value={category.id}>
+                                {category.name}
+                                {!category.isActive ? "（已隐藏）" : ""}
+                              </option>
+                            ))}
+                          </select>
+                        </FormControl>
                         <FormDescription>
                           用于前台筛选与商品展示（可不选）
                         </FormDescription>

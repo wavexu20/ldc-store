@@ -6,3 +6,19 @@ const isSet = Reflect.set(process.env, "NODE_ENV", "test");
 if (!isSet) {
   throw new Error("无法在测试环境中设置 NODE_ENV");
 }
+
+// Node 25 may expose an unusable localStorage placeholder unless a backing file is configured.
+if (!globalThis.localStorage) {
+  const values = new Map<string, string>();
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: {
+      get length() { return values.size; },
+      clear: () => values.clear(),
+      getItem: (key: string) => values.get(key) ?? null,
+      key: (index: number) => [...values.keys()][index] ?? null,
+      removeItem: (key: string) => values.delete(key),
+      setItem: (key: string, value: string) => values.set(key, String(value)),
+    } satisfies Storage,
+  });
+}

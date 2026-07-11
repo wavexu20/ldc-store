@@ -1,4 +1,19 @@
 import type { OrderStatus, PaymentMethod } from "@/lib/db";
+import type { RefundMode } from "@/lib/payment/ldc";
+
+export function shouldUseClientRefund(
+  paymentMethod: string,
+  refundMode: RefundMode
+): boolean {
+  return paymentMethod !== "balance" && refundMode === "client";
+}
+
+export function canApproveRefund(
+  paymentMethod: string,
+  externalRefundEnabled: boolean
+): boolean {
+  return paymentMethod === "balance" || externalRefundEnabled;
+}
 
 export const orderStatusConfig: Record<
   OrderStatus,
@@ -36,8 +51,8 @@ export const orderStatusConfig: Record<
 
 export const paymentMethodLabels: Record<PaymentMethod, string> = {
   ldc: "LDC 积分",
+  balance: "账户余额",
   alipay: "支付宝",
   wechat: "微信",
   usdt: "USDT",
 };
-

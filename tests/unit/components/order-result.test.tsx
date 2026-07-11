@@ -62,7 +62,7 @@ beforeEach(() => {
 describe("OrderResultPage", () => {
   it("应展示 pending 状态与轮询提示", async () => {
     authMocks.useSession.mockReturnValue({
-      data: { user: { provider: "linux-do" } },
+      data: { user: { id: "u1", provider: "linux-do" } },
       status: "authenticated",
     });
 
@@ -92,7 +92,7 @@ describe("OrderResultPage", () => {
     ["refunded", "已退款"],
   ] satisfies Array<[OrderStatus, string]>)("应展示 %s 状态文案", async (status, label) => {
     authMocks.useSession.mockReturnValue({
-      data: { user: { provider: "linux-do" } },
+      data: { user: { id: "u1", provider: "linux-do" } },
       status: "authenticated",
     });
 

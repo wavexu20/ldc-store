@@ -58,7 +58,7 @@ describe("RestockRequestInline", () => {
     fireEvent.click(screen.getByRole("button", { name: /登录后催补货/i }));
 
     expect(sonnerMock.toast.error).toHaveBeenCalled();
-    expect(authMocks.signIn).toHaveBeenCalledWith("linux-do");
+    expect(authMocks.signIn).toHaveBeenCalledWith(undefined, { callbackUrl: window.location.href });
     expect(actionMocks.requestRestock).not.toHaveBeenCalled();
   });
 

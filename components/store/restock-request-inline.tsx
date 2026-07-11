@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useSyncExternalStore, useTransition } from "react";
-import { useSession, signIn } from "next-auth/react";
+import { signIn, useSession } from "next-auth/react";
 import { BellRing, CheckCircle2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -84,7 +84,7 @@ export function RestockRequestInline({
   const user = session?.user as
     | { id?: string; username?: string; name?: string; image?: string; provider?: string }
     | undefined;
-  const isLoggedIn = user?.provider === "linux-do";
+  const isLoggedIn = Boolean(user?.id);
 
   const displayedRequesters = useMemo(() => {
     return requesters.slice(0, Math.max(1, maxAvatars));
@@ -98,7 +98,7 @@ export function RestockRequestInline({
   const handleRequest = () => {
     if (!isLoggedIn) {
       toast.error("请先登录后再催补货");
-      signIn("linux-do");
+      signIn(undefined, { callbackUrl: window.location.href });
       return;
     }
 
