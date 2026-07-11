@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { db, orders, cards, products } from "@/lib/db";
-import { eq, sql, and } from "drizzle-orm";
+import { eq, sql, and, gte, lt } from "drizzle-orm";
 import {
   Card,
   CardAction,
@@ -132,39 +132,40 @@ async function getDashboardStats() {
   ] = await Promise.all([
     db
       .select({
-        count: sql<number>`count(*)::int`,
-        total: sql<string>`COALESCE(sum(total_amount::numeric), 0)::text`,
+        count: sql<number>`count(*)`,
+        total: sql<string>`printf('%.2f', COALESCE(sum(CAST(total_amount AS REAL)), 0))`,
       })
       .from(orders)
       .where(
         and(
           eq(orders.status, "completed"),
-          sql`${orders.paidAt} >= ${todayStart} AND ${orders.paidAt} < ${tomorrowStart}`
+          gte(orders.paidAt, todayStart),
+          lt(orders.paidAt, tomorrowStart)
         )
       ),
     // 待支付订单
     db
-      .select({ count: sql<number>`count(*)::int` })
+      .select({ count: sql<number>`count(*)` })
       .from(orders)
       .where(eq(orders.status, "pending")),
     // 待退款订单
     db
-      .select({ count: sql<number>`count(*)::int` })
+      .select({ count: sql<number>`count(*)` })
       .from(orders)
       .where(eq(orders.status, "refund_pending")),
     // 总商品数（上架中）
     db
-      .select({ count: sql<number>`count(*)::int` })
+      .select({ count: sql<number>`count(*)` })
       .from(products)
       .where(eq(products.isActive, true)),
     // 总可用库存
     db
-      .select({ count: sql<number>`count(*)::int` })
+      .select({ count: sql<number>`count(*)` })
       .from(cards)
       .where(eq(cards.status, "available")),
     // 库存预警（可用库存少于阈值的商品）
-    db.execute(sql`
-      SELECT p.id, p.name, COUNT(c.id)::int as stock
+    db.all(sql`
+      SELECT p.id, p.name, COUNT(c.id) as stock
       FROM products p
       LEFT JOIN cards c ON c.product_id = p.id AND c.status = 'available'
       WHERE p.is_active = true
@@ -187,46 +188,41 @@ async function getDashboardStats() {
       orderBy: (o, { desc }) => [desc(o.createdAt)],
       limit: 8,
     }),
-    // 最近 N 天销售额（按统计口径时区补齐缺失日期）
-    db.execute(sql`
-      WITH days AS (
-        SELECT generate_series(
-          date_trunc('day', NOW() AT TIME ZONE ${statsTimeZone}) - (${LAST_N_DAYS - 1} * interval '1 day'),
-          date_trunc('day', NOW() AT TIME ZONE ${statsTimeZone}),
-          interval '1 day'
-        ) AS local_day
+    db.query.orders.findMany({
+      where: and(
+        eq(orders.status, "completed"),
+        gte(
+          orders.paidAt,
+          new Date(todayStart.getTime() - LAST_N_DAYS * 24 * 60 * 60 * 1000)
+        )
       ),
-      agg AS (
-        SELECT
-          date_trunc('day', ${orders.paidAt} AT TIME ZONE ${statsTimeZone}) AS local_day,
-          count(*)::int AS count,
-          COALESCE(sum(${orders.totalAmount}::numeric), 0)::text AS total
-        FROM ${orders}
-        WHERE ${orders.status} = 'completed'
-          AND ${orders.paidAt} >= (
-            date_trunc('day', NOW() AT TIME ZONE ${statsTimeZone}) - (${LAST_N_DAYS - 1} * interval '1 day')
-          ) AT TIME ZONE ${statsTimeZone}
-          AND ${orders.paidAt} < (
-            date_trunc('day', NOW() AT TIME ZONE ${statsTimeZone}) + interval '1 day'
-          ) AT TIME ZONE ${statsTimeZone}
-        GROUP BY 1
-      )
-      SELECT
-        to_char(days.local_day, 'MM-DD') AS day,
-        COALESCE(agg.count, 0)::int AS count,
-        COALESCE(agg.total, '0') AS total
-      FROM days
-      LEFT JOIN agg ON agg.local_day = days.local_day
-      ORDER BY days.local_day ASC
-    `),
+      columns: { paidAt: true, totalAmount: true },
+    }),
   ]);
 
-  const salesRows =
-    (salesLastNDays as unknown as Array<{
-      day: string;
-      count: number;
-      total: string;
-    }>) ?? [];
+  const dayFormatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: statsTimeZone,
+    month: "2-digit",
+    day: "2-digit",
+  });
+  const labelFor = (date: Date) => dayFormatter.format(date).replace("/", "-");
+  const labels = Array.from({ length: LAST_N_DAYS }, (_, index) =>
+    labelFor(new Date(Date.now() - (LAST_N_DAYS - 1 - index) * 24 * 60 * 60 * 1000))
+  );
+  const salesByDay = new Map<string, { count: number; total: number }>();
+  for (const order of salesLastNDays) {
+    if (!order.paidAt) continue;
+    const label = labelFor(order.paidAt);
+    const current = salesByDay.get(label) ?? { count: 0, total: 0 };
+    current.count += 1;
+    current.total += Number.parseFloat(order.totalAmount);
+    salesByDay.set(label, current);
+  }
+  const salesRows = labels.map((day) => ({
+    day,
+    count: salesByDay.get(day)?.count ?? 0,
+    total: (salesByDay.get(day)?.total ?? 0).toFixed(2),
+  }));
 
   const todayTotal = Number.parseFloat(todaySales[0]?.total || "0");
   const yesterdayTotal =

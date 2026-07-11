@@ -1,36 +1,44 @@
 import { cache } from "react";
-import postgres from "postgres";
-import { drizzle, type PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import { drizzle, type DrizzleD1Database } from "drizzle-orm/d1";
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 import * as schema from "./schema";
 
-type HyperdriveBinding = { connectionString: string };
+type DrizzleD1Binding = Parameters<typeof drizzle>[0];
 
-function getConnectionString() {
-  try {
-    const { env } = getCloudflareContext();
-    const hyperdrive = (env as unknown as { HYPERDRIVE?: HyperdriveBinding }).HYPERDRIVE;
-    if (hyperdrive?.connectionString) return hyperdrive.connectionString;
-  } catch {
-    // next build and ordinary Node.js development do not have a Workers request context.
-  }
-  if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL environment variable is not set");
-  return process.env.DATABASE_URL;
+export interface D1BatchResult<T = Record<string, unknown>> {
+  results: T[];
+  success: boolean;
+  meta?: Record<string, unknown>;
 }
 
-/** Create a request-scoped client; Workers must not share live DB connections. */
-export const getDb = cache((): PostgresJsDatabase<typeof schema> => {
-  const client = postgres(getConnectionString(), {
-    max: 1,
-    idle_timeout: 1,
-    max_lifetime: 1,
-    connect_timeout: 10,
-  });
-  return drizzle(client, { schema });
-});
+interface D1PreparedStatement {
+  bind(...values: unknown[]): D1PreparedStatement;
+}
 
-export const db: PostgresJsDatabase<typeof schema> = new Proxy(
-  {} as PostgresJsDatabase<typeof schema>,
+export interface D1Binding {
+  prepare(query: string): D1PreparedStatement;
+  batch<T = Record<string, unknown>>(
+    statements: D1PreparedStatement[]
+  ): Promise<D1BatchResult<T>[]>;
+}
+
+export function getD1Binding(): DrizzleD1Binding & D1Binding {
+  try {
+    const { env } = getCloudflareContext();
+    const binding = (env as unknown as { DB?: DrizzleD1Binding & D1Binding }).DB;
+    if (binding) return binding;
+  } catch {
+    // Next build and ordinary Node.js development do not have a Workers request context.
+  }
+  throw new Error("Cloudflare D1 binding DB is not available");
+}
+
+export const getDb = cache(
+  (): DrizzleD1Database<typeof schema> => drizzle(getD1Binding(), { schema })
+);
+
+export const db: DrizzleD1Database<typeof schema> = new Proxy(
+  {} as DrizzleD1Database<typeof schema>,
   {
     get(_target, prop: string | symbol) {
       const database = getDb();

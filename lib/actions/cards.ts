@@ -310,7 +310,7 @@ export async function getCardStats(productId: string) {
   const stats = await db
     .select({
       status: cards.status,
-      count: sql<number>`count(*)::int`,
+      count: sql<number>`count(*)`,
     })
     .from(cards)
     .where(eq(cards.productId, productId))
@@ -452,7 +452,7 @@ export async function cleanDuplicateCards(productId: string) {
 
   try {
     // 找出重复的卡密
-    const duplicates = await db.execute(sql`
+    const duplicates = await db.all(sql`
       WITH duplicates AS (
         SELECT id, content, 
                ROW_NUMBER() OVER (PARTITION BY content ORDER BY created_at ASC) as rn

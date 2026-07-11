@@ -123,15 +123,15 @@ export async function verifyEmailCode(input: { email: string; code: string }): P
   const token = await findValidVerificationToken(user.id, tokenHash);
   if (!token) return { success: false, message: "验证码无效或已过期" };
 
-  await db.transaction(async (tx) => {
-    await tx.update(users).set({ emailVerifiedAt: new Date(), updatedAt: new Date() })
-      .where(eq(users.id, user.id));
-    await tx.update(emailVerificationTokens).set({ consumedAt: new Date() })
+  await db.batch([
+    db.update(users).set({ emailVerifiedAt: new Date(), updatedAt: new Date() })
+      .where(eq(users.id, user.id)),
+    db.update(emailVerificationTokens).set({ consumedAt: new Date() })
       .where(and(
         eq(emailVerificationTokens.userId, user.id),
         isNull(emailVerificationTokens.consumedAt)
-      ));
-  });
+      )),
+  ]);
   return { success: true, message: "邮箱验证成功" };
 }
 

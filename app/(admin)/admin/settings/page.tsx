@@ -6,9 +6,8 @@ import { Settings, Globe, CreditCard, CheckCircle, XCircle } from "lucide-react"
 import Link from "next/link";
 
 async function getDbSystemSettingsOrNull() {
-  if (!process.env.DATABASE_URL) return null;
   try {
-    // 为什么这样做：该页面用于“环境检查”；当 DATABASE_URL 未配置时也应可打开，因此用动态 import 避免在模块加载阶段直接抛错。
+    // D1 binding 只在 Workers 请求上下文中可用；失败时仍允许状态页展示其他配置。
     const { getSystemSettings } = await import("@/lib/actions/system-settings");
     return await getSystemSettings();
   } catch (error) {
@@ -24,7 +23,7 @@ export default async function SystemStatusPage() {
   const siteDescription = process.env.NEXT_PUBLIC_SITE_DESCRIPTION || "未配置";
 
   // 检查数据库配置
-  const isDatabaseConfigured = !!process.env.DATABASE_URL;
+  const isDatabaseConfigured = dbSettings !== null;
 
   // 检查认证配置
   const isAuthSecretConfigured = !!process.env.AUTH_SECRET;
@@ -45,9 +44,9 @@ export default async function SystemStatusPage() {
   const configStatus = [
     {
       title: "数据库",
-      env: "DATABASE_URL",
+      env: "D1 binding: DB",
       ok: isDatabaseConfigured,
-      hint: "连接 PostgreSQL",
+      hint: "Cloudflare D1",
     },
     {
       title: "NextAuth 密钥",
@@ -266,8 +265,8 @@ LDC_GATEWAY=https://credit.linux.do/epay`}
           <CardContent>
             <div className="rounded-lg border bg-muted/50 p-4">
               <pre className="text-xs bg-zinc-900 text-zinc-100 p-3 rounded-md overflow-x-auto">
-{`# 数据库
-DATABASE_URL=postgresql://user:pass@host:5432/dbname
+{`# Cloudflare D1
+# binding 名称：DB（在 wrangler.jsonc 中配置）
 
 # NextAuth 认证密钥
 AUTH_SECRET=your_auth_secret

@@ -1,5 +1,4 @@
 NEXTJS_ENV=development
-DATABASE_URL="postgresql://user:password@host/database?sslmode=require"
 AUTH_SECRET="replace-with-openssl-rand-base64-32"
 AUTH_URL="https://game3dtech.com"
 ADMIN_PASSWORD="replace-with-a-strong-password"

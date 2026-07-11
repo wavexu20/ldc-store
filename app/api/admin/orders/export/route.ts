@@ -7,7 +7,7 @@ import {
   type OrderStatus,
   type PaymentMethod,
 } from "@/lib/db";
-import { and, eq, ilike, inArray, or, type SQL } from "drizzle-orm";
+import { and, eq, like, inArray, or, type SQL } from "drizzle-orm";
 
 function csvEscape(value: unknown): string {
   if (value === null || value === undefined) return "";
@@ -52,12 +52,12 @@ function buildWhere(filters: {
     const pattern = `%${q}%`;
     conditions.push(
       or(
-        ilike(orders.orderNo, pattern),
-        ilike(orders.email, pattern),
-        ilike(orders.username, pattern),
-        ilike(orders.userId, pattern),
-        ilike(orders.tradeNo, pattern),
-        ilike(orders.productName, pattern)
+        like(orders.orderNo, pattern),
+        like(orders.email, pattern),
+        like(orders.username, pattern),
+        like(orders.userId, pattern),
+        like(orders.tradeNo, pattern),
+        like(orders.productName, pattern)
       )
     );
   }

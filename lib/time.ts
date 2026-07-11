@@ -3,12 +3,12 @@
  *
  * 设计原则：
  * 1. 服务端：JavaScript Date 对象内部存储 UTC 时间戳
- * 2. 数据库：使用 timestamp with time zone，PostgreSQL 自动以 UTC 存储
+ * 2. 数据库：D1 使用 Unix 秒时间戳，以 UTC 语义存储
  * 3. 前端：浏览器自动将 UTC 时间转换为用户本地时区显示
  *
  * 注意事项：
  * - 服务端时间计算应避免使用 setHours() 等本地时区方法
- * - 数据库时间比较建议使用 SQL 函数（如 NOW()、date_trunc()）确保一致性
+ * - 数据库时间比较使用显式 Unix 时间戳参数，避免运行时与时区歧义
  * - 前端显示时间使用 toLocaleString() 或 date-fns 格式化
  */
 
