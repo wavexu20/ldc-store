@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
-import { Github, Loader2, Mail, Store } from "lucide-react";
+import { Github, Loader2, Mail, MailCheck, Store } from "lucide-react";
 import { SiDiscord, SiHuggingface, SiSteam } from "@icons-pack/react-simple-icons";
 import { toast } from "sonner";
 import { registerWithEmail, resendEmailVerification, verifyEmailCode } from "@/lib/actions/auth";
@@ -157,14 +157,15 @@ export function AccountLoginForm({ providers, turnstileSiteKey }: {
       <CardContent className="space-y-5">
         {verificationEmail ? (
           <form className="space-y-5" onSubmit={verifyEmail}>
-            <div className="rounded-lg border bg-muted/40 p-4 text-sm">
-              {t("codeSentTo", { email: verificationEmail })}
+            <div className="flex items-center gap-3 rounded-lg border bg-muted/30 px-3 py-2.5 text-sm">
+              <MailCheck className="size-4 shrink-0" />
+              <span className="min-w-0 flex-1 truncate">{t("codeSentTo", { email: verificationEmail })}</span>
             </div>
             <div className="space-y-2">
               <Label htmlFor="verification-code">{t("verificationCode")}</Label>
-              <Input id="verification-code" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} className="text-center text-2xl tracking-[0.5em]" value={verificationCode} onChange={(event) => setVerificationCode(event.target.value.replace(/\D/g, ""))} required autoFocus />
+              <Input id="verification-code" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} placeholder="000000" className="h-12 text-center font-mono text-xl tracking-[0.35em]" value={verificationCode} onChange={(event) => setVerificationCode(event.target.value.replace(/\D/g, ""))} required autoFocus />
             </div>
-            <Button className="w-full" disabled={!!loading || verificationCode.length !== 6} type="submit">
+            <Button className="h-11 w-full" disabled={!!loading || verificationCode.length !== 6} type="submit">
               {loading === "verify-email" ? <Loader2 className="animate-spin" /> : <Mail />}{loading === "verify-email" ? t("verifying") : t("verifyAndLogin")}
             </Button>
             <div className="flex justify-between">
