@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { updateCard } from "@/lib/actions/cards";
 import { toast } from "sonner";
 import { Loader2, Pencil } from "lucide-react";
@@ -21,6 +22,8 @@ import { Loader2, Pencil } from "lucide-react";
 interface EditCardDialogProps {
   cardId: string;
   currentContent: string;
+  currentVariantId: string | null;
+  variants: Array<{ id: string; name: string }>;
   disabled?: boolean;
   children?: React.ReactNode;
 }
@@ -28,12 +31,15 @@ interface EditCardDialogProps {
 export function EditCardDialog({
   cardId,
   currentContent,
+  currentVariantId,
+  variants,
   disabled = false,
   children,
 }: EditCardDialogProps) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [content, setContent] = useState(currentContent);
+  const [variantId, setVariantId] = useState(currentVariantId ?? "public");
   const [isPending, startTransition] = useTransition();
 
   const handleUpdate = () => {
@@ -42,8 +48,14 @@ export function EditCardDialog({
       return;
     }
 
-    if (content === currentContent) {
-      toast.info("内容未修改");
+    const nextVariantId = variants.length > 0 ? variantId : "public";
+    if (variants.length > 0 && nextVariantId === "public") {
+      toast.error("请选择卡密归属的规格");
+      return;
+    }
+
+    if (content === currentContent && nextVariantId === (currentVariantId ?? "public")) {
+      toast.info("内容和库存归属均未修改");
       setOpen(false);
       return;
     }
@@ -52,6 +64,7 @@ export function EditCardDialog({
       const result = await updateCard({
         cardId,
         content: content.trim(),
+        variantId: nextVariantId === "public" ? null : nextVariantId,
       });
 
       if (result.success) {
@@ -70,6 +83,7 @@ export function EditCardDialog({
     if (newOpen) {
       // 重置为当前内容
       setContent(currentContent);
+      setVariantId(currentVariantId ?? "public");
     }
   };
 
@@ -109,6 +123,16 @@ export function EditCardDialog({
               onChange={(e) => setContent(e.target.value)}
               className="font-mono text-sm"
             />
+          </div>
+          <div className="space-y-2">
+            <Label>库存归属</Label>
+            <Select value={variantId} onValueChange={setVariantId}>
+              <SelectTrigger><SelectValue placeholder="选择库存归属" /></SelectTrigger>
+              <SelectContent>
+                {variants.length === 0 ? <SelectItem value="public">公共库存</SelectItem> : variants.map((variant) => <SelectItem key={variant.id} value={variant.id}>{variant.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">单规格使用公共库存；多规格必须归属到具体规格。</p>
           </div>
         </div>
 

@@ -39,6 +39,8 @@ export interface AdminCardListItem {
   status: CardStatus;
   createdAt: Date;
   orderId: string | null;
+  variantId?: string | null;
+  variant?: { id: string; name: string } | null;
   order?: { id: string; orderNo: string } | null;
 }
 
@@ -283,7 +285,7 @@ function ConfirmDialog({
   );
 }
 
-export function CardsTable({ items }: { items: AdminCardListItem[] }) {
+export function CardsTable({ items, variants = [] }: { items: AdminCardListItem[]; variants?: Array<{ id: string; name: string }> }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [deleteIds, setDeleteIds] = useState<string[] | null>(null);
@@ -455,6 +457,7 @@ export function CardsTable({ items }: { items: AdminCardListItem[] }) {
                 />
               </TableHead>
               <TableHead>卡密内容</TableHead>
+              <TableHead>库存归属</TableHead>
               <TableHead className="text-center">状态</TableHead>
               <TableHead>订单</TableHead>
               <TableHead>创建时间</TableHead>
@@ -482,6 +485,9 @@ export function CardsTable({ items }: { items: AdminCardListItem[] }) {
                     ) : (
                       <span title={card.content}>{card.content}</span>
                     )}
+                  </TableCell>
+                  <TableCell className="text-sm">
+                    {card.variant?.name ?? (card.variantId ? "已停用规格" : "公共库存")}
                   </TableCell>
                   <TableCell className="text-center">
                     <Badge className={status.className}>{status.label}</Badge>
@@ -514,6 +520,8 @@ export function CardsTable({ items }: { items: AdminCardListItem[] }) {
                         <EditCardDialog
                           cardId={card.id}
                           currentContent={card.content}
+                          currentVariantId={card.variantId ?? null}
+                          variants={variants}
                         />
                       ) : null}
                       {card.status === "locked" ? (

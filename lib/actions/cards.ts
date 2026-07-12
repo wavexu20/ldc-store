@@ -235,7 +235,7 @@ export async function updateCard(input: UpdateCardInput) {
     };
   }
 
-  const { cardId, content } = validationResult.data;
+  const { cardId, content, variantId } = validationResult.data;
 
   try {
     // 查找卡密
@@ -252,10 +252,32 @@ export async function updateCard(input: UpdateCardInput) {
       return { success: false, message: "仅可编辑未锁定且未售出的可用卡密" };
     }
 
-    // 检查新内容是否与同商品下其他卡密重复
+    const variants = await db.query.productVariants.findMany({
+      where: and(
+        eq(productVariants.productId, card.productId),
+        eq(productVariants.isActive, true)
+      ),
+      columns: { id: true },
+    });
+    const requestedVariantId = variantId === undefined ? card.variantId : variantId;
+    const targetVariant = requestedVariantId
+      ? variants.find((variant) => variant.id === requestedVariantId)
+      : null;
+    if (variants.length > 0 && !targetVariant) {
+      return { success: false, message: "多规格商品必须把卡密归属到一个有效规格" };
+    }
+    if (variants.length === 0 && requestedVariantId) {
+      return { success: false, message: "单规格商品的卡密必须归属公共库存" };
+    }
+    const targetVariantCondition = targetVariant
+      ? eq(cards.variantId, targetVariant.id)
+      : isNull(cards.variantId);
+
+    // 同一规格内强制唯一；不同规格允许使用相同的供应商卡密文本。
     const duplicateCard = await db.query.cards.findFirst({
       where: and(
         eq(cards.productId, card.productId),
+        targetVariantCondition,
         eq(cards.content, content),
       ),
     });
@@ -267,7 +289,7 @@ export async function updateCard(input: UpdateCardInput) {
     // 更新卡密
     await db
       .update(cards)
-      .set({ content })
+      .set({ content, variantId: targetVariant?.id ?? null })
       .where(eq(cards.id, cardId));
 
     await revalidateCardCache();

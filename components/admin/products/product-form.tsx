@@ -27,8 +27,14 @@ import {
 } from "@/components/ui/form";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { toast } from "sonner";
-import { Loader2, ArrowLeft, Package, Save, Copy, Languages, Eye, ImagePlus, Link2, Trash2, Upload, Layers3, Plus, Check } from "lucide-react";
+import { Loader2, ArrowLeft, Package, Save, Copy, Languages, Eye, ImagePlus, Link2, Trash2, Upload, Layers3, Plus, Check, Boxes, ExternalLink } from "lucide-react";
 import Link from "next/link";
+
+export interface ProductFormInventory {
+  publicStock: number;
+  inactiveStock: number;
+  variantStock: Record<string, number>;
+}
 
 interface ProductFormProps {
   initialData?: Partial<ProductInput>;
@@ -36,6 +42,8 @@ interface ProductFormProps {
   onSubmit: (values: ProductInput) => Promise<{ success: boolean; message?: string }>;
   isEdit?: boolean;
   templateInfo?: { name: string } | null;
+  productId?: string;
+  inventory?: ProductFormInventory;
 }
 
 const defaultValues: ProductInput = {
@@ -64,6 +72,8 @@ export function ProductForm({
   onSubmit,
   isEdit = false,
   templateInfo = null,
+  productId,
+  inventory,
 }: ProductFormProps) {
   const [isPending, startTransition] = useTransition();
   const [isImagePending, startImageTransition] = useTransition();
@@ -82,6 +92,22 @@ export function ProductForm({
   const images = form.watch("images") ?? [];
   const variants = form.watch("variants") ?? [];
   const usesVariantPricing = variants.length > 0;
+  const publicStock = inventory?.publicStock ?? 0;
+  const initialUsesVariantPricing = (initialData?.variants?.length ?? 0) > 0;
+  const initialVariantStock = Object.values(inventory?.variantStock ?? {}).reduce(
+    (sum, stock) => sum + stock,
+    0
+  );
+  const activeVariantStock = variants.reduce(
+    (sum, variant) => sum + (variant.id ? inventory?.variantStock[variant.id] ?? 0 : 0),
+    0
+  );
+  const knownAvailableStock = (inventory?.inactiveStock ?? 0)
+    + (initialUsesVariantPricing ? initialVariantStock : publicStock);
+  const inactiveStock = Math.max(
+    0,
+    knownAvailableStock - (usesVariantPricing ? activeVariantStock : publicStock)
+  );
   const generateSlug = () => {
     const slug = watchName
       .toLowerCase()
@@ -158,12 +184,22 @@ export function ProductForm({
   };
 
   const removeVariant = (index: number) => {
+    const variant = variants[index];
+    const stock = variant?.id ? inventory?.variantStock[variant.id] ?? 0 : 0;
+    if (stock > 0 && !window.confirm(`规格「${variant.name}」还有 ${stock} 个可用卡密。移除后这些卡密不会计入可售库存，确定继续吗？`)) return;
     form.setValue("variants", variants.filter((_, itemIndex) => itemIndex !== index).map((variant, itemIndex) => ({ ...variant, sortOrder: itemIndex })), { shouldDirty: true, shouldValidate: true });
+  };
+
+  const useVariantPrice = () => {
+    if (usesVariantPricing) return;
+    if (publicStock > 0 && !window.confirm(`当前公共库存还有 ${publicStock} 个可用卡密。切换为多规格后，需要在卡密管理中把库存归属到具体规格，确定继续吗？`)) return;
+    addVariant();
   };
 
   const useSinglePrice = () => {
     if (!usesVariantPricing) return;
-    if (!window.confirm("切换为单一售价会停用当前所有规格。已按规格关联的卡密将不再作为可售规格显示，确定继续吗？")) return;
+    const stockWarning = activeVariantStock > 0 ? `当前规格库存共有 ${activeVariantStock} 个可用卡密。` : "";
+    if (!window.confirm(`${stockWarning}切换为单一售价会停用当前所有规格，规格卡密不会计入公共库存，确定继续吗？`)) return;
     const lowestVariantPrice = Math.min(...variants.map((variant) => variant.price));
     form.setValue("price", lowestVariantPrice, { shouldDirty: true, shouldValidate: true });
     form.setValue("originalPrice", undefined, { shouldDirty: true, shouldValidate: true });
@@ -408,10 +444,15 @@ export function ProductForm({
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <div className="grid gap-3 sm:grid-cols-2" aria-label="定价方式">
-                    <button type="button" aria-pressed={!usesVariantPricing} onClick={useSinglePrice} className={`cursor-pointer rounded-lg border p-3 text-left transition-colors ${!usesVariantPricing ? "border-zinc-900 bg-zinc-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900" : "border-border bg-background hover:bg-muted/50"}`}><span className="flex items-center gap-2 text-sm font-semibold">{!usesVariantPricing ? <Check className="size-4" /> : null}单一售价</span><span className={`mt-1 block text-xs ${!usesVariantPricing ? "text-white/70 dark:text-zinc-600" : "text-muted-foreground"}`}>所有用户按同一个价格购买；在下方填写售价与原价。</span></button>
-                    <button type="button" aria-pressed={usesVariantPricing} onClick={() => { if (!usesVariantPricing) addVariant(); }} className={`cursor-pointer rounded-lg border p-3 text-left transition-colors ${usesVariantPricing ? "border-zinc-900 bg-zinc-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900" : "border-border bg-background hover:bg-muted/50"}`}><span className="flex items-center gap-2 text-sm font-semibold">{usesVariantPricing ? <Check className="size-4" /> : null}多规格定价</span><span className={`mt-1 block text-xs ${usesVariantPricing ? "text-white/70 dark:text-zinc-600" : "text-muted-foreground"}`}>例如月卡、年卡；每个规格独立设置售价、原价与卡密库存。</span></button>
+                    <button type="button" aria-pressed={!usesVariantPricing} onClick={useSinglePrice} className={`cursor-pointer rounded-lg border p-3 text-left transition-colors ${!usesVariantPricing ? "border-zinc-900 bg-zinc-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900" : "border-border bg-background hover:bg-muted/50"}`}><span className="flex items-center gap-2 text-sm font-semibold">{!usesVariantPricing ? <Check className="size-4" /> : null}单一售价 + 公共库存</span><span className={`mt-1 block text-xs ${!usesVariantPricing ? "text-white/70 dark:text-zinc-600" : "text-muted-foreground"}`}>一个售价；只销售未绑定规格的公共卡密。</span></button>
+                    <button type="button" aria-pressed={usesVariantPricing} onClick={useVariantPrice} className={`cursor-pointer rounded-lg border p-3 text-left transition-colors ${usesVariantPricing ? "border-zinc-900 bg-zinc-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900" : "border-border bg-background hover:bg-muted/50"}`}><span className="flex items-center gap-2 text-sm font-semibold">{usesVariantPricing ? <Check className="size-4" /> : null}多规格定价 + 独立库存</span><span className={`mt-1 block text-xs ${usesVariantPricing ? "text-white/70 dark:text-zinc-600" : "text-muted-foreground"}`}>每个规格独立售价，并只销售归属于该规格的卡密。</span></button>
                   </div>
-                  {usesVariantPricing ? <><div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100"><span className="font-medium">当前生效：多规格定价。</span><span className="text-amber-800 dark:text-amber-200"> 下方规格价格是唯一价格来源。</span></div>{variants.map((variant, index) => <div className="grid gap-3 rounded-lg border p-3 md:grid-cols-[minmax(0,1fr)_160px_160px_auto] md:items-end" key={variant.id || `new-${index}`}><div className="space-y-1"><Label htmlFor={`variant-name-${index}`}>规格名称</Label><Input id={`variant-name-${index}`} value={variant.name} onChange={(event) => updateVariant(index, { name: event.target.value })} placeholder="例如：月卡" /></div><div className="space-y-1"><Label htmlFor={`variant-price-${index}`}>售价</Label><Input id={`variant-price-${index}`} type="number" min="0.01" step="0.01" value={variant.price} onChange={(event) => updateVariant(index, { price: Number.isFinite(event.target.valueAsNumber) ? event.target.valueAsNumber : 0 })} /></div><div className="space-y-1"><Label htmlFor={`variant-original-price-${index}`}>原价</Label><Input id={`variant-original-price-${index}`} type="number" min="0.01" step="0.01" value={variant.originalPrice || ""} onChange={(event) => updateVariant(index, { originalPrice: Number.isFinite(event.target.valueAsNumber) ? event.target.valueAsNumber : undefined })} /></div><Button type="button" size="icon" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => removeVariant(index)} aria-label={`删除规格 ${variant.name || index + 1}`}><Trash2 className="size-4" /></Button></div>)}</> : <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground"><span className="font-medium text-foreground">当前生效：单一售价。</span> 请在下方填写商品售价与原价；需要不同规格不同价格时，选择上方“多规格定价”。</div>}
+                  {usesVariantPricing ? <><div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100"><span className="font-medium">当前生效：多规格定价与独立库存。</span><span className="text-amber-800 dark:text-amber-200"> 每行的售价和可售卡密数量只属于该规格。</span></div>{variants.map((variant, index) => { const variantStock = variant.id ? inventory?.variantStock[variant.id] ?? 0 : 0; return <div className="grid gap-3 rounded-lg border p-3 md:grid-cols-[minmax(0,1fr)_140px_140px_110px_auto] md:items-end" key={variant.id || `new-${index}`}><div className="space-y-1"><Label htmlFor={`variant-name-${index}`}>规格名称</Label><Input id={`variant-name-${index}`} value={variant.name} onChange={(event) => updateVariant(index, { name: event.target.value })} placeholder="例如：月卡" /></div><div className="space-y-1"><Label htmlFor={`variant-price-${index}`}>售价</Label><Input id={`variant-price-${index}`} type="number" min="0.01" step="0.01" value={variant.price} onChange={(event) => updateVariant(index, { price: Number.isFinite(event.target.valueAsNumber) ? event.target.valueAsNumber : 0 })} /></div><div className="space-y-1"><Label htmlFor={`variant-original-price-${index}`}>原价</Label><Input id={`variant-original-price-${index}`} type="number" min="0.01" step="0.01" value={variant.originalPrice || ""} onChange={(event) => updateVariant(index, { originalPrice: Number.isFinite(event.target.valueAsNumber) ? event.target.valueAsNumber : undefined })} /></div><div className="space-y-1"><Label>可售库存</Label><div className="flex h-9 items-center rounded-md border bg-muted/40 px-3 text-sm font-medium tabular-nums">{variant.id ? `${variantStock} 个` : "保存后导入"}</div></div><Button type="button" size="icon" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => removeVariant(index)} aria-label={`删除规格 ${variant.name || index + 1}`}><Trash2 className="size-4" /></Button></div>; })}</> : <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground"><span className="font-medium text-foreground">当前生效：单一售价与公共库存。</span> 下方售价适用于全部订单，可售库存只计算未绑定规格的卡密。</div>}
+                  <div className="flex flex-col gap-3 rounded-lg border bg-muted/20 p-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex items-start gap-3"><Boxes className="mt-0.5 size-4 shrink-0" /><div><p className="text-sm font-medium">{usesVariantPricing ? `规格可售库存 ${activeVariantStock} 个` : `公共可售库存 ${publicStock} 个`}</p><p className="mt-1 text-xs text-muted-foreground">库存由“可用”卡密数量自动计算，不能手工填写。{productId ? "在卡密管理中导入或调整归属。" : "请先保存商品，再导入卡密。"}</p></div></div>
+                    {productId ? <Button asChild type="button" size="sm" variant="outline"><Link href={`/admin/cards?product=${productId}`}><ExternalLink />管理卡密库存</Link></Button> : null}
+                  </div>
+                  {inactiveStock > 0 ? <Alert variant="destructive"><AlertTitle>有 {inactiveStock} 个卡密未计入可售库存</AlertTitle><AlertDescription>这些卡密属于旧的定价模式或已停用规格。请到卡密管理检查并重新归属，系统不会用它们完成新订单。</AlertDescription></Alert> : null}
                   <div className="space-y-4 border-t pt-4">
                     <div><p className="text-sm font-medium">{usesVariantPricing ? "购买数量" : "价格与购买数量"}</p><p className="mt-1 text-xs text-muted-foreground">{usesVariantPricing ? `当前售价区间 ¥${Math.min(...variants.map((variant) => variant.price)).toFixed(2)} – ¥${Math.max(...variants.map((variant) => variant.price)).toFixed(2)}；数量限制适用于每个规格。` : "原价留空则不显示折扣。"}</p></div>
                     {!usesVariantPricing ? <div className="grid gap-4 sm:grid-cols-2"><FormField control={form.control} name="price" render={({ field }) => <FormItem><FormLabel>售价 *</FormLabel><FormControl><Input type="number" step={0.01} min={0.01} placeholder="0" {...field} onChange={(e) => field.onChange(Number.isFinite(e.target.valueAsNumber) ? e.target.valueAsNumber : 0)} /></FormControl><FormMessage /></FormItem>} /><FormField control={form.control} name="originalPrice" render={({ field }) => <FormItem><FormLabel>原价（划线价）</FormLabel><FormControl><Input type="number" step={0.01} min={0.01} placeholder="0" value={field.value || ""} onChange={(e) => { const val = e.target.valueAsNumber; field.onChange(Number.isFinite(val) ? val : undefined); }} /></FormControl><FormMessage /></FormItem>} /></div> : null}

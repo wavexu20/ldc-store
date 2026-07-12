@@ -48,10 +48,16 @@ export function OrderForm({
   const [paymentMethod, setPaymentMethod] = useState<"gateway" | "balance">("gateway");
   const [usePoints, setUsePoints] = useState(false);
   const [selectedVoucherId, setSelectedVoucherId] = useState("");
-  const [selectedVariantId, setSelectedVariantId] = useState(() => variants[0]?.id || "");
+  const [selectedVariantId, setSelectedVariantId] = useState(
+    () => variants.find((variant) => variant.stock >= minQuantity)?.id || variants[0]?.id || ""
+  );
   const router = useRouter();
   const { data: session, status } = useSession();
-  const selectedVariant = variants.length > 0 ? variants.find((variant) => variant.id === selectedVariantId) ?? variants[0] : null;
+  const selectedVariant = variants.length > 0
+    ? variants.find((variant) => variant.id === selectedVariantId)
+      ?? variants.find((variant) => variant.stock >= minQuantity)
+      ?? variants[0]
+    : null;
   const activePrice = selectedVariant ? Number(selectedVariant.price) : price;
   const activeStock = selectedVariant ? selectedVariant.stock : stock;
   const effectiveMax = Math.min(maxQuantity, activeStock);

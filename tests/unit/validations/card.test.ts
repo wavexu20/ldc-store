@@ -87,4 +87,17 @@ describe("validations/card", () => {
     });
     expect(result.success).toBe(false);
   });
+
+  it("updateCardSchema 应接受有效规格归属或公共库存", () => {
+    const base = {
+      cardId: "00000000-0000-0000-0000-000000000000",
+      content: "card-001",
+    };
+    expect(updateCardSchema.safeParse({
+      ...base,
+      variantId: "11111111-1111-4111-8111-111111111111",
+    }).success).toBe(true);
+    expect(updateCardSchema.safeParse({ ...base, variantId: null }).success).toBe(true);
+    expect(updateCardSchema.safeParse({ ...base, variantId: "invalid" }).success).toBe(false);
+  });
 });

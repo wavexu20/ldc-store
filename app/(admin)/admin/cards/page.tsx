@@ -133,8 +133,12 @@ async function getCardsPage(
         status: true,
         createdAt: true,
         orderId: true,
+        variantId: true,
       },
       with: {
+        variant: {
+          columns: { id: true, name: true },
+        },
         order: {
           columns: {
             id: true,
@@ -298,6 +302,7 @@ export default async function CardsPage({ searchParams }: CardsPageProps) {
                 q={q}
                 status={status}
                 orderNo={orderNo}
+                variants={selectedProduct?.variants ?? []}
               />
             ) : (
               <div className="py-12 text-center">

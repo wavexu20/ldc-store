@@ -26,6 +26,7 @@ export const cardOperationSchema = z.object({
 export const updateCardSchema = z.object({
   cardId: z.string().uuid("无效的卡密ID"),
   content: z.string().trim().min(1, "卡密内容不能为空").max(1000, "卡密内容过长"),
+  variantId: z.string().uuid("无效的商品规格").nullable().optional(),
 });
 
 // 批量卡密操作验证

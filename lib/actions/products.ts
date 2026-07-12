@@ -19,6 +19,10 @@ import {
   type RestockSummary,
 } from "@/lib/actions/restock-requests";
 import { generateProductTranslations } from "@/lib/ai/product-translation";
+import {
+  saleableCardInventoryCondition,
+  summarizeAvailableInventory,
+} from "@/lib/inventory";
 
 async function syncProductVariants(productId: string, variants: NonNullable<ProductInput["variants"]>) {
   const now = new Date();
@@ -164,7 +168,8 @@ export async function getActiveProducts(options?: {
       .where(
         and(
           inArray(cards.productId, productIds),
-          eq(cards.status, "available")
+          eq(cards.status, "available"),
+          saleableCardInventoryCondition
         )
       )
       .groupBy(cards.productId),
@@ -233,7 +238,7 @@ export async function getProductBySlug(slug: string) {
         count: sql<number>`count(*)`,
       })
       .from(cards)
-      .where(and(eq(cards.productId, product.id), eq(cards.status, "available"))),
+      .where(and(eq(cards.productId, product.id), eq(cards.status, "available"), saleableCardInventoryCondition)),
     db
       .select({ variantId: cards.variantId, count: sql<number>`count(*)` })
       .from(cards)
@@ -271,7 +276,10 @@ export async function getProductById(id: string) {
     where: eq(products.id, id),
     with: {
       category: true,
-      variants: { orderBy: [asc(productVariants.sortOrder), asc(productVariants.createdAt)] },
+      variants: {
+        where: eq(productVariants.isActive, true),
+        orderBy: [asc(productVariants.sortOrder), asc(productVariants.createdAt)],
+      },
     },
   });
 
@@ -279,17 +287,29 @@ export async function getProductById(id: string) {
     return null;
   }
 
-  // 获取库存数量
-  const [stockCount] = await db
+  // 同时保留公共库存、各规格库存和旧模式遗留库存，供编辑页明确展示库存归属。
+  const stockRows = await db
     .select({
+      variantId: cards.variantId,
       count: sql<number>`count(*)`,
     })
     .from(cards)
-    .where(and(eq(cards.productId, product.id), eq(cards.status, "available")));
+    .where(and(eq(cards.productId, product.id), eq(cards.status, "available")))
+    .groupBy(cards.variantId);
+  const inventory = summarizeAvailableInventory(
+    stockRows,
+    product.variants.map((variant) => variant.id)
+  );
 
   return {
     ...product,
-    stock: stockCount?.count || 0,
+    variants: product.variants.map((variant) => ({
+      ...variant,
+      stock: inventory.variantStock[variant.id] ?? 0,
+    })),
+    stock: inventory.saleableStock,
+    publicStock: inventory.publicStock,
+    inactiveStock: inventory.inactiveStock,
   };
 }
 
@@ -592,7 +612,7 @@ export async function searchProducts(
         count: sql<number>`count(*)`,
       })
       .from(cards)
-      .where(and(inArray(cards.productId, productIds), eq(cards.status, "available")))
+      .where(and(inArray(cards.productId, productIds), eq(cards.status, "available"), saleableCardInventoryCondition))
       .groupBy(cards.productId),
     getRestockSummaryForProducts({
       productIds,
@@ -1008,7 +1028,7 @@ export async function getAdminProductsPage(params: {
     })
     .from(cards)
     .where(
-      and(inArray(cards.productId, productIds), eq(cards.status, "available"))
+      and(inArray(cards.productId, productIds), eq(cards.status, "available"), saleableCardInventoryCondition)
     )
     .groupBy(cards.productId);
 
@@ -1029,7 +1049,8 @@ export async function getAdminProductsPage(params: {
       .where(
         and(
           inArray(cards.productId, allProductIds.map((p) => p.id)),
-          eq(cards.status, "available")
+          eq(cards.status, "available"),
+          saleableCardInventoryCondition
         )
       )
       .groupBy(cards.productId);
