@@ -316,9 +316,9 @@ export default function OrderResultPage({ searchParams }: OrderResultPageProps) 
         description: t(hasCards ? "deliveryReady" : "deliveryPreparing"),
         icon: <CheckCircle2 className="h-5 w-5" />,
         iconClassName:
-          "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+          "bg-success/10 text-success",
         badgeClassName:
-          "bg-emerald-600 text-white hover:bg-emerald-600/90",
+          "bg-success text-success-foreground hover:bg-success/90",
       };
     }
 
@@ -336,9 +336,9 @@ export default function OrderResultPage({ searchParams }: OrderResultPageProps) 
             <Clock className="h-5 w-5" />
           ),
           iconClassName:
-            "bg-amber-500/10 text-amber-700 dark:text-amber-300",
+            "bg-warning/10 text-warning-foreground dark:text-warning",
           badgeClassName:
-            "bg-amber-500 text-white hover:bg-amber-500/90",
+            "bg-warning text-warning-foreground hover:bg-warning/90",
         };
       case "expired":
         return {
@@ -356,9 +356,9 @@ export default function OrderResultPage({ searchParams }: OrderResultPageProps) 
           description: t("refundSubmitted"),
           icon: <Clock className="h-5 w-5" />,
           iconClassName:
-            "bg-amber-500/10 text-amber-700 dark:text-amber-300",
+            "bg-warning/10 text-warning-foreground dark:text-warning",
           badgeClassName:
-            "bg-amber-500 text-white hover:bg-amber-500/90",
+            "bg-warning text-warning-foreground hover:bg-warning/90",
         };
       case "refund_rejected":
         return {
@@ -522,9 +522,9 @@ export default function OrderResultPage({ searchParams }: OrderResultPageProps) 
           {/* Cards / Secure Notice */}
           {isPaid ? (
             hasCards ? (
-              <div className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-4 dark:border-emerald-900/60 dark:bg-emerald-950/30">
+              <div className="rounded-2xl border border-success/25 bg-success/10 p-4">
                 <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2 text-sm font-medium text-emerald-800 dark:text-emerald-200">
+                  <div className="flex items-center gap-2 text-sm font-medium text-success">
                     <Package className="h-4 w-4" />
                     {t("deliveryInfo")}
                     <Badge variant="secondary" className="ml-1">
@@ -582,8 +582,8 @@ export default function OrderResultPage({ searchParams }: OrderResultPageProps) 
           ) : null}
 
           {order.deliveryLocked ? (
-            <div className="flex flex-col gap-3 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm dark:border-amber-900 dark:bg-amber-950/40 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-center gap-2 font-medium text-amber-900 dark:text-amber-100"><ShieldCheck className="size-4 shrink-0" />卡密已受二次验证保护</div>
+            <div className="flex flex-col gap-3 rounded-2xl border border-warning/30 bg-warning/10 p-4 text-sm sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-2 font-medium text-warning-foreground dark:text-warning"><ShieldCheck className="size-4 shrink-0" />卡密已受二次验证保护</div>
               <Button asChild size="sm"><Link href={`/account/verify-2fa?callbackUrl=${encodeURIComponent(`/order/result?out_trade_no=${order.orderNo}`)}`}>验证后查看</Link></Button>
             </div>
           ) : null}

@@ -68,7 +68,7 @@ const statusConfig: Record<
     label: "completed",
     variant: "default",
     icon: <CheckCircle2 className="h-3 w-3" />,
-    className: "bg-green-600 hover:bg-green-600/90",
+    className: "bg-success text-success-foreground hover:bg-success/90",
   },
   expired: {
     label: "expired",
@@ -79,7 +79,7 @@ const statusConfig: Record<
     label: "refundPending",
     variant: "outline",
     icon: <RotateCcw className="h-3 w-3" />,
-    className: "border-amber-500 text-amber-600",
+    className: "border-warning text-warning-foreground dark:text-warning",
   },
   refund_rejected: {
     label: "refundRejected",
@@ -355,15 +355,15 @@ export default function MyOrdersPage() {
                     )}
 
                     {order.deliveryLocked && (
-                      <div className="mt-3 flex flex-col gap-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-900 dark:bg-amber-950/40 sm:flex-row sm:items-center sm:justify-between">
-                        <div className="flex items-center gap-2 text-amber-900 dark:text-amber-100"><ShieldCheck className="size-4 shrink-0" />卡密已受二次验证保护</div>
+                      <div className="mt-3 flex flex-col gap-3 rounded-lg border border-warning/30 bg-warning/10 p-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+                        <div className="flex items-center gap-2 text-warning-foreground dark:text-warning"><ShieldCheck className="size-4 shrink-0" />卡密已受二次验证保护</div>
                         <Button asChild size="sm"><Link href="/account/verify-2fa?callbackUrl=%2Forder%2Fmy">验证后查看</Link></Button>
                       </div>
                     )}
 
                     {/* Pending Notice */}
                     {order.status === "pending" && (
-                      <div className="mt-3 p-2 rounded bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 text-xs">
+                      <div className="mt-3 rounded bg-warning/10 p-2 text-xs text-warning-foreground dark:text-warning">
                         {t("orderPendingHint")}
                       </div>
                     )}
@@ -388,14 +388,14 @@ export default function MyOrdersPage() {
 
                     {/* Refund Pending Notice */}
                     {order.status === "refund_pending" && (
-                      <div className="mt-3 p-2 rounded bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 text-xs">
+                      <div className="mt-3 rounded bg-warning/10 p-2 text-xs text-warning-foreground dark:text-warning">
                         {t("refundSubmitted")}
                       </div>
                     )}
 
                     {/* Refund Rejected Notice */}
                     {order.status === "refund_rejected" && (
-                      <div className="mt-3 p-2 rounded bg-red-50 dark:bg-red-950/50 text-red-700 dark:text-red-300 text-xs">
+                      <div className="mt-3 rounded bg-destructive/10 p-2 text-xs text-destructive">
                         {t("refundRejected")}
                       </div>
                     )}

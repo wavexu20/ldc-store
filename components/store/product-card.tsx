@@ -96,7 +96,7 @@ export function ProductCard({
             </Badge>
           )}
           {hasDiscount && (
-            <Badge className="border-rose-500/20 bg-rose-500/10 text-rose-700 shadow-sm backdrop-blur-sm dark:text-rose-300">
+            <Badge className="border-destructive/20 bg-destructive/10 text-destructive shadow-sm backdrop-blur-sm">
               -{discountPercent}%
             </Badge>
           )}
@@ -169,13 +169,13 @@ export function ProductCard({
         {/* Footer */}
         <div className="mt-auto flex flex-wrap items-center gap-x-2 gap-y-1 pt-2 text-xs">
           {salesCount !== undefined && salesCount > 0 && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-1 text-emerald-700 tabular-nums dark:text-emerald-400">
+            <span className="inline-flex items-center gap-1 rounded-full bg-success/10 px-2 py-1 text-success tabular-nums">
               <TrendingUp className="h-3.5 w-3.5" />
               {t("sold", { count: salesCount })}
             </span>
           )}
           {!isOutOfStock && stock > 0 && stock <= 10 && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-1 text-amber-800 tabular-nums dark:text-amber-400">
+            <span className="inline-flex items-center gap-1 rounded-full bg-warning/10 px-2 py-1 text-warning-foreground tabular-nums dark:text-warning">
               <Sparkles className="h-3.5 w-3.5" />
               {t("onlyLeft", { count: stock })}
             </span>

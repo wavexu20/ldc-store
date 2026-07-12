@@ -101,7 +101,7 @@ export function SupportWidget({ siteName }: { siteName: string }) {
           aria-label={t("supportChat")}
           className="flex h-[min(680px,calc(100dvh-24px))] w-[min(390px,calc(100vw-24px))] flex-col overflow-hidden rounded-3xl border bg-background shadow-2xl"
         >
-          <header className="relative overflow-hidden border-b bg-gradient-to-br from-blue-600 to-indigo-600 px-5 pb-5 pt-4 text-white">
+          <header className="relative overflow-hidden border-b bg-gradient-to-br from-brand to-brand/85 px-5 pb-5 pt-4 text-brand-foreground">
             <div className="absolute inset-0 opacity-15 [background-image:radial-gradient(circle_at_20%_20%,white_0_1px,transparent_1px)] [background-size:18px_18px]" />
             <div className="relative flex items-center justify-between">
               <div className="flex items-center gap-2 text-sm font-semibold">
@@ -123,8 +123,8 @@ export function SupportWidget({ siteName }: { siteName: string }) {
               </div>
               <div>
                 <div className="font-semibold">{t("supportQuestion")}</div>
-                <div className="mt-0.5 flex items-center gap-1.5 text-xs text-blue-100">
-                  <span className={cn("size-2 rounded-full", agentOnline ? "bg-emerald-300" : "bg-amber-300")} />
+                <div className="mt-0.5 flex items-center gap-1.5 text-xs text-brand-foreground/75">
+                  <span className={cn("size-2 rounded-full", agentOnline ? "bg-success" : "bg-warning")} />
                   {!connected ? t("supportConnecting") : agentOnline ? t("supportOnline") : t("supportAway")}
                 </div>
               </div>
@@ -133,7 +133,7 @@ export function SupportWidget({ siteName }: { siteName: string }) {
 
           <div className="flex-1 space-y-3 overflow-y-auto bg-muted/20 p-4" aria-live="polite">
             <div className="flex items-end gap-2">
-              <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-blue-500 text-white"><MessageCircle className="size-4" /></div>
+              <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-brand text-brand-foreground"><MessageCircle className="size-4" /></div>
               <div className="max-w-[82%] rounded-2xl rounded-bl-md bg-muted px-4 py-3 text-sm leading-relaxed">
                 {t("supportWelcome", { site: siteName })}
               </div>
@@ -142,9 +142,9 @@ export function SupportWidget({ siteName }: { siteName: string }) {
               const mine = message.senderType === "visitor";
               return (
                 <div key={message.id} className={cn("flex", mine ? "justify-end" : "justify-start")}>
-                  <div className={cn("max-w-[82%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed", mine ? "rounded-br-md bg-blue-600 text-white" : "rounded-bl-md bg-muted")}>
+                  <div className={cn("max-w-[82%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed", mine ? "rounded-br-md bg-brand text-brand-foreground" : "rounded-bl-md bg-muted")}>
                     <div className="whitespace-pre-wrap break-words">{message.content}</div>
-                    <div className={cn("mt-1 text-[10px]", mine ? "text-blue-100" : "text-muted-foreground")}>
+                    <div className={cn("mt-1 text-[10px]", mine ? "text-brand-foreground/70" : "text-muted-foreground")}>
                       {new Date(message.createdAt).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" })}
                     </div>
                   </div>
@@ -156,7 +156,7 @@ export function SupportWidget({ siteName }: { siteName: string }) {
           </div>
 
           <div className="border-t bg-background p-3">
-            <div className="rounded-2xl border bg-background p-2 shadow-sm focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/15">
+            <div className="rounded-2xl border bg-background p-2 shadow-sm focus-within:border-brand focus-within:ring-2 focus-within:ring-brand/15">
               <Textarea
                 value={draft}
                 onChange={(event) => setDraft(event.target.value.slice(0, 2000))}
@@ -186,10 +186,10 @@ export function SupportWidget({ siteName }: { siteName: string }) {
           type="button"
           onClick={() => setOpen(true)}
           aria-label={t("openSupport")}
-          className="relative flex size-14 cursor-pointer items-center justify-center rounded-full bg-blue-600 text-white shadow-xl shadow-blue-600/25 transition-colors hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 sm:size-16"
+          className="relative flex size-14 cursor-pointer items-center justify-center rounded-full bg-brand text-brand-foreground shadow-xl shadow-brand/25 transition-colors hover:bg-brand/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 sm:size-16"
         >
           <MessageCircle className="size-6 sm:size-7" />
-          {unread > 0 ? <span className="absolute -right-1 -top-1 flex min-w-5 items-center justify-center rounded-full bg-rose-500 px-1.5 text-[11px] font-semibold ring-2 ring-background">{Math.min(unread, 99)}</span> : null}
+          {unread > 0 ? <span className="absolute -right-1 -top-1 flex min-w-5 items-center justify-center rounded-full bg-destructive px-1.5 text-[11px] font-semibold text-white ring-2 ring-background">{Math.min(unread, 99)}</span> : null}
         </button>
       )}
     </div>
