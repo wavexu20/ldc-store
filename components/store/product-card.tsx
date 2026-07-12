@@ -66,14 +66,14 @@ export function ProductCard({
 
       <div className="relative z-20 flex flex-col pointer-events-none">
       {/* Cover：图像层级更“干净”，内容层与图像层用柔和分割，避免信息挤在同一层导致阅读压力 */}
-      <div className="relative aspect-[4/3] overflow-hidden bg-gradient-to-br from-muted/40 via-muted/20 to-muted/40">
+      <div className="relative aspect-video overflow-hidden bg-gradient-to-br from-muted/40 via-muted/20 to-muted/40">
         {coverImage ? (
           <Image
             src={coverImage}
             alt={name}
             fill
             sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-            className="object-cover transition-transform duration-500 motion-safe:group-hover:scale-105 motion-safe:group-focus-within:scale-105 motion-reduce:transform-none"
+            className="object-contain transition-transform duration-500 motion-safe:group-hover:scale-[1.02] motion-safe:group-focus-within:scale-[1.02] motion-reduce:transform-none"
             unoptimized={coverImage.startsWith("/api/product-images/")}
           />
         ) : (
@@ -90,6 +90,11 @@ export function ProductCard({
 
         {/* Badges overlay */}
         <div className="absolute left-3 top-3 flex flex-col gap-1.5">
+          {isOutOfStock && (
+            <Badge variant="secondary" className="border bg-background/90 text-xs shadow-sm backdrop-blur-sm">
+              {t("soldOut")}
+            </Badge>
+          )}
           {isFeatured && (
             <Badge className="border-0 bg-gradient-to-r from-orange-500 via-amber-500 to-yellow-500 text-white shadow-lg shadow-orange-500/25 ring-1 ring-white/20 gap-1">
               <Flame className="h-3 w-3 drop-shadow-sm" />
@@ -102,29 +107,6 @@ export function ProductCard({
             </Badge>
           )}
         </div>
-
-        {/* Stock badge */}
-        {isOutOfStock && (
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-background/80 backdrop-blur-sm">
-            <div className="pointer-events-auto w-[calc(100%-1.5rem)] max-w-[18rem] rounded-xl border bg-background/90 p-3 shadow-sm shadow-primary/10 backdrop-blur">
-              <div className="flex items-center justify-between gap-2">
-                <Badge variant="secondary" className="text-xs font-medium px-3 py-1">
-                  {t("soldOut")}
-                </Badge>
-                <span className="text-xs text-muted-foreground">{t("wantRestock")}</span>
-              </div>
-              <div className="mt-2">
-                <RestockRequestInline
-                  productId={id}
-                  productName={name}
-                  initialCount={restockRequestCount}
-                  initialRequesters={restockRequesters}
-                  maxAvatars={4}
-                />
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Category tag */}
         {category && (
@@ -164,7 +146,7 @@ export function ProductCard({
 
         {/* Description */}
         {description && (
-          <p className="text-sm text-muted-foreground line-clamp-2">{description}</p>
+          <p className="text-sm text-muted-foreground line-clamp-1">{description}</p>
         )}
 
         {/* Footer */}
@@ -182,6 +164,18 @@ export function ProductCard({
             </span>
           )}
         </div>
+
+        {isOutOfStock && (
+          <div className="pointer-events-auto mt-1 border-t pt-3">
+            <RestockRequestInline
+              productId={id}
+              productName={name}
+              initialCount={restockRequestCount}
+              initialRequesters={restockRequesters}
+              maxAvatars={4}
+            />
+          </div>
+        )}
       </div>
       </div>
 
