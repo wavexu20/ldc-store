@@ -5,7 +5,7 @@ import { requireAdmin } from "@/lib/auth-utils";
 import { categories, db, productPreviews } from "@/lib/db";
 import { productPreviewSchema, type ProductInput } from "@/lib/validations/product";
 
-const previewLifetimeMs = 24 * 60 * 60 * 1000;
+const previewLifetimeMs = 2 * 60 * 60 * 1000;
 const previewTokenPattern = /^[a-f0-9]{32}$/;
 
 export async function createProductPreview(input: ProductInput) {

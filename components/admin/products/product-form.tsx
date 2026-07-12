@@ -142,7 +142,7 @@ export function ProductForm({
         return;
       }
       setPreviewUrl(result.url);
-      toast.success("临时预览链接已生成，有效期 24 小时");
+      toast.success("临时预览链接已生成，有效期 2 小时");
     });
   };
 
@@ -602,7 +602,7 @@ export function ProductForm({
             <div className="space-y-6">
               <Card>
                 <CardHeader><CardTitle className="flex items-center gap-2 text-base"><Eye className="size-4" />临时预览</CardTitle></CardHeader>
-                <CardContent className="space-y-3"><p className="text-sm text-muted-foreground">保存前可生成当前表单的只读预览链接，有效期 24 小时。</p><Button type="button" variant="outline" className="w-full" disabled={isPreviewPending} onClick={createPreview}>{isPreviewPending ? <><Loader2 className="animate-spin" />生成中...</> : <><Eye />生成预览链接</>}</Button>{previewUrl ? <div className="space-y-2 rounded-lg border bg-muted/20 p-2"><Input readOnly value={previewUrl} className="h-8 text-xs" /><div className="grid grid-cols-2 gap-2"><Button type="button" size="sm" variant="secondary" onClick={() => navigator.clipboard.writeText(previewUrl).then(() => toast.success("预览链接已复制"))}><Copy />复制</Button><Button asChild type="button" size="sm" variant="secondary"><a href={previewUrl} target="_blank" rel="noreferrer"><Eye />打开</a></Button></div></div> : null}</CardContent>
+                <CardContent className="space-y-3"><p className="text-sm text-muted-foreground">保存前可生成当前表单的只读预览链接，有效期 2 小时。</p><Button type="button" variant="outline" className="w-full" disabled={isPreviewPending} onClick={createPreview}>{isPreviewPending ? <><Loader2 className="animate-spin" />生成中...</> : <><Eye />生成预览链接</>}</Button>{previewUrl ? <div className="space-y-2 rounded-lg border bg-muted/20 p-2"><Input readOnly value={previewUrl} className="h-8 text-xs" /><div className="grid grid-cols-2 gap-2"><Button type="button" size="sm" variant="secondary" onClick={() => navigator.clipboard.writeText(previewUrl).then(() => toast.success("预览链接已复制"))}><Copy />复制</Button><Button asChild type="button" size="sm" variant="secondary"><a href={previewUrl} target="_blank" rel="noreferrer"><Eye />打开</a></Button></div></div> : null}</CardContent>
               </Card>
               <Button
                 type="submit"
