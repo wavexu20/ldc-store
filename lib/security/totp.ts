@@ -1,4 +1,6 @@
 const BASE32_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+const TOTP_PERIOD_MS = 30_000;
+const TOTP_ALLOWED_DRIFT_STEPS = 1;
 
 function base64Url(bytes: Uint8Array) {
   let binary = "";
@@ -48,7 +50,7 @@ function decodeBase32(secret: string) {
 }
 
 export async function createTotp(secret: string, timestamp = Date.now()) {
-  const counter = Math.floor(timestamp / 30_000);
+  const counter = Math.floor(timestamp / TOTP_PERIOD_MS);
   const counterBytes = new Uint8Array(8);
   let current = counter;
   for (let index = 7; index >= 0; index -= 1) {
@@ -62,12 +64,26 @@ export async function createTotp(secret: string, timestamp = Date.now()) {
   return String(value % 1_000_000).padStart(6, "0");
 }
 
-export async function verifyTotp(secret: string, code: string) {
+function constantTimeEqual(left: string, right: string) {
+  if (left.length !== right.length) return false;
+  let difference = 0;
+  for (let index = 0; index < left.length; index += 1) {
+    difference |= left.charCodeAt(index) ^ right.charCodeAt(index);
+  }
+  return difference === 0;
+}
+
+export async function verifyTotp(secret: string, code: string, timestamp = Date.now()) {
   const normalized = code.replace(/\s/g, "");
   if (!/^\d{6}$/.test(normalized)) return false;
-  const now = Date.now();
-  const candidates = await Promise.all([-1, 0, 1].map((offset) => createTotp(secret, now + offset * 30_000)));
-  return candidates.includes(normalized);
+  const currentCounter = Math.floor(timestamp / TOTP_PERIOD_MS);
+  const candidates = await Promise.all(
+    Array.from({ length: TOTP_ALLOWED_DRIFT_STEPS * 2 + 1 }, (_, index) => {
+      const offset = index - TOTP_ALLOWED_DRIFT_STEPS;
+      return createTotp(secret, (currentCounter + offset) * TOTP_PERIOD_MS);
+    }),
+  );
+  return candidates.some((candidate) => constantTimeEqual(candidate, normalized));
 }
 
 async function encryptionKey() {

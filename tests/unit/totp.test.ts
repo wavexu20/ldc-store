@@ -7,16 +7,13 @@ describe("TOTP", () => {
     expect(await createTotp(secret, 59_000)).toBe("287082");
   });
 
-  it("accepts an adjacent 30-second window for small clock drift", async () => {
+  it("accepts either adjacent 30-second window for small clock drift", async () => {
     const secret = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ";
-    const originalNow = Date.now;
-    Date.now = () => 90_000;
-    try {
-      expect(await verifyTotp(secret, await createTotp(secret, 60_000))).toBe(true);
-      expect(await verifyTotp(secret, "000000")).toBe(false);
-    } finally {
-      Date.now = originalNow;
-    }
+    const currentTimestamp = 90_000;
+    expect(await verifyTotp(secret, await createTotp(secret, 60_000), currentTimestamp)).toBe(true);
+    expect(await verifyTotp(secret, await createTotp(secret, 120_000), currentTimestamp)).toBe(true);
+    expect(await verifyTotp(secret, await createTotp(secret, 30_000), currentTimestamp)).toBe(false);
+    expect(await verifyTotp(secret, "000000", currentTimestamp)).toBe(false);
   });
 
   it("creates ten unique, human-readable recovery codes", () => {
