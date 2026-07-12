@@ -389,6 +389,16 @@ export function ProductForm({
                   </div>
                 </CardContent>
               </Card>
+
+              <Card>
+                <CardHeader className="flex flex-col gap-3 space-y-0 sm:flex-row sm:items-start sm:justify-between">
+                  <div><CardTitle className="flex items-center gap-2 text-base"><Layers3 className="size-4" />商品规格</CardTitle><p className="mt-1 text-xs text-muted-foreground">留空即为单规格；开启后每个规格独立定价和卡密库存。</p></div>
+                  <Button type="button" size="sm" variant="outline" className="self-start" onClick={addVariant}><Plus />添加规格</Button>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {variants.length === 0 ? <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">当前为单规格商品，使用右侧基础售价和库存。</div> : variants.map((variant, index) => <div className="grid gap-3 rounded-lg border p-3 md:grid-cols-[minmax(0,1fr)_160px_160px_auto] md:items-end" key={variant.id || `new-${index}`}><div className="space-y-1"><Label htmlFor={`variant-name-${index}`}>规格名称</Label><Input id={`variant-name-${index}`} value={variant.name} onChange={(event) => updateVariant(index, { name: event.target.value })} placeholder="例如：月卡" /></div><div className="space-y-1"><Label htmlFor={`variant-price-${index}`}>售价</Label><Input id={`variant-price-${index}`} type="number" min="0.01" step="0.01" value={variant.price} onChange={(event) => updateVariant(index, { price: Number.isFinite(event.target.valueAsNumber) ? event.target.valueAsNumber : 0 })} /></div><div className="space-y-1"><Label htmlFor={`variant-original-price-${index}`}>原价</Label><Input id={`variant-original-price-${index}`} type="number" min="0.01" step="0.01" value={variant.originalPrice || ""} onChange={(event) => updateVariant(index, { originalPrice: Number.isFinite(event.target.valueAsNumber) ? event.target.valueAsNumber : undefined })} /></div><Button type="button" size="icon" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => removeVariant(index)} aria-label={`删除规格 ${variant.name || index + 1}`}><Trash2 className="size-4" /></Button></div>)}
+                </CardContent>
+              </Card>
             </div>
 
             <div className="space-y-6">
@@ -491,16 +501,6 @@ export function ProductForm({
                     />
                   </div>
                   <FormDescription>原价留空则不显示折扣</FormDescription>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0">
-                  <div><CardTitle className="flex items-center gap-2 text-base"><Layers3 className="size-4" />商品规格</CardTitle><p className="mt-1 text-xs text-muted-foreground">留空即为单规格；开启后每个规格独立定价和卡密库存。</p></div>
-                  <Button type="button" size="sm" variant="outline" onClick={addVariant}><Plus />添加规格</Button>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {variants.length === 0 ? <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">当前为单规格商品，使用上方基础售价和库存。</div> : variants.map((variant, index) => <div className="grid gap-2 rounded-lg border p-3 sm:grid-cols-[minmax(0,1fr)_120px_120px_auto] sm:items-end" key={variant.id || `new-${index}`}><div className="space-y-1"><Label htmlFor={`variant-name-${index}`}>规格名称</Label><Input id={`variant-name-${index}`} value={variant.name} onChange={(event) => updateVariant(index, { name: event.target.value })} placeholder="例如：月卡" /></div><div className="space-y-1"><Label htmlFor={`variant-price-${index}`}>售价</Label><Input id={`variant-price-${index}`} type="number" min="0.01" step="0.01" value={variant.price} onChange={(event) => updateVariant(index, { price: Number.isFinite(event.target.valueAsNumber) ? event.target.valueAsNumber : 0 })} /></div><div className="space-y-1"><Label htmlFor={`variant-original-price-${index}`}>原价</Label><Input id={`variant-original-price-${index}`} type="number" min="0.01" step="0.01" value={variant.originalPrice || ""} onChange={(event) => updateVariant(index, { originalPrice: Number.isFinite(event.target.valueAsNumber) ? event.target.valueAsNumber : undefined })} /></div><Button type="button" size="icon" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => removeVariant(index)} aria-label={`删除规格 ${variant.name || index + 1}`}><Trash2 className="size-4" /></Button></div>)}
                 </CardContent>
               </Card>
 
