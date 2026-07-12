@@ -33,6 +33,7 @@ export function ProductImageGallery({
           sizes="(max-width: 768px) 100vw, 50vw"
           className="object-cover"
           priority
+          unoptimized={displayUrl.startsWith("/api/product-images/")}
         />
       </div>
 
@@ -59,6 +60,7 @@ export function ProductImageGallery({
                   fill
                   sizes="64px"
                   className="object-cover"
+                  unoptimized={url.startsWith("/api/product-images/")}
                 />
               </button>
             );

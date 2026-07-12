@@ -74,6 +74,7 @@ export function ProductCard({
             fill
             sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
             className="object-cover transition-transform duration-500 motion-safe:group-hover:scale-105 motion-safe:group-focus-within:scale-105 motion-reduce:transform-none"
+            unoptimized={coverImage.startsWith("/api/product-images/")}
           />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center">
