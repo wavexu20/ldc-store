@@ -12,6 +12,7 @@ import { auth } from "@/lib/auth";
 import { db, oauthAccounts, users } from "@/lib/db";
 import { eq } from "drizzle-orm";
 import { hasVerifiedRealEmail } from "@/lib/email-address";
+import { isSecondFactorVerificationRequired } from "@/lib/security/two-factor-session";
 
 // 强制动态渲染，避免构建时查询数据库
 export const dynamic = "force-dynamic";
@@ -40,6 +41,7 @@ export default async function StoreLayout({
   const { siteName, siteIcon, siteIconUrl } = await getSystemSettingsCached();
   const session = await auth();
   if (session?.user?.id && session.user.id !== "admin") {
+    if (await isSecondFactorVerificationRequired(session.user.id)) redirect("/account/verify-2fa");
     const [user, oauth] = await Promise.all([
       db.query.users.findFirst({ where: eq(users.id, session.user.id), columns: { email: true, emailVerifiedAt: true } }),
       db.query.oauthAccounts.findFirst({ where: eq(oauthAccounts.userId, session.user.id), columns: { id: true } }),

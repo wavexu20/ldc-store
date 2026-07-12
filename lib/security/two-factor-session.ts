@@ -3,7 +3,11 @@ import { db, users } from "@/lib/db";
 import { eq } from "drizzle-orm";
 
 const GRANT_COOKIE = "g3d_2fa_grant";
-const MAX_AGE_SECONDS = 12 * 60 * 60;
+const LOGIN_CHALLENGE_COOKIE = "g3d_2fa_login_pending";
+// Keep the login grant for the same lifetime as the default Auth.js JWT session.
+// A new sign-in creates a fresh login challenge, so sensitive actions do not ask again mid-session.
+const MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
+const LOGIN_CHALLENGE_MAX_AGE_SECONDS = 10 * 60;
 export const SECOND_FACTOR_REQUIRED_MESSAGE = "请先完成二次验证";
 
 function base64Url(value: Uint8Array) {
@@ -56,11 +60,34 @@ export async function grantSecondFactor(userId: string) {
   const value = `${payload}.${await sign(payload)}`;
   const store = await cookies();
   store.set(GRANT_COOKIE, value, { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/", maxAge: MAX_AGE_SECONDS });
+  store.set(LOGIN_CHALLENGE_COOKIE, "", { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/", maxAge: 0 });
 }
 
 export async function clearSecondFactorGrant() {
   const store = await cookies();
   store.set(GRANT_COOKIE, "", { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/", maxAge: 0 });
+}
+
+/** Mark a just-created authenticated session as requiring its one login verification. */
+export async function beginSecondFactorLogin(userId: string) {
+  const payload = base64Url(new TextEncoder().encode(JSON.stringify({ userId, expiresAt: Date.now() + LOGIN_CHALLENGE_MAX_AGE_SECONDS * 1000 })));
+  const value = `${payload}.${await sign(payload)}`;
+  const store = await cookies();
+  store.set(LOGIN_CHALLENGE_COOKIE, value, { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/", maxAge: LOGIN_CHALLENGE_MAX_AGE_SECONDS });
+}
+
+async function hasSecondFactorLoginChallenge(userId: string) {
+  const store = await cookies();
+  const value = store.get(LOGIN_CHALLENGE_COOKIE)?.value;
+  if (!value) return false;
+  const [payload, signature] = value.split(".");
+  if (!payload || !signature || !equal(fromBase64Url(signature), fromBase64Url(await sign(payload)))) return false;
+  try {
+    const parsed = JSON.parse(new TextDecoder().decode(fromBase64Url(payload))) as { userId?: string; expiresAt?: number };
+    return parsed.userId === userId && typeof parsed.expiresAt === "number" && parsed.expiresAt > Date.now();
+  } catch {
+    return false;
+  }
 }
 
 export async function hasSecondFactorGrant(userId: string) {
@@ -83,9 +110,12 @@ export async function requiresSecondFactor(userId: string) {
   return Boolean(user?.twoFactorEnabledAt);
 }
 
-/** True when this account has 2FA enabled but the current browser session has not passed it yet. */
+/**
+ * True only for a fresh login that has not completed its one required 2FA check.
+ * This intentionally does not re-prompt during routine actions in an established session.
+ */
 export async function isSecondFactorVerificationRequired(userId: string) {
-  return (await requiresSecondFactor(userId)) && !(await hasSecondFactorGrant(userId));
+  return (await requiresSecondFactor(userId)) && (await hasSecondFactorLoginChallenge(userId)) && !(await hasSecondFactorGrant(userId));
 }
 
 export async function requireSecondFactor(userId: string) {

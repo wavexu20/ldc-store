@@ -11,6 +11,7 @@ import { db, oauthAccounts, users } from "@/lib/db";
 import { verifySteamTicket } from "@/lib/auth/steam";
 import { createMemberNo } from "@/lib/membership";
 import { isPlaceholderEmail } from "@/lib/email-address";
+import { beginSecondFactorLogin } from "@/lib/security/two-factor-session";
 
 const adminLoginSchema = z.object({ password: z.string().min(1) });
 const emailLoginSchema = z.object({
@@ -275,6 +276,16 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         sessionUser.silenced = token.silenced as boolean;
       }
       return session;
+    },
+  },
+  events: {
+    async signIn({ user }) {
+      if (!user.id || user.id === "admin") return;
+      const localUser = await db.query.users.findFirst({
+        where: eq(users.id, user.id),
+        columns: { twoFactorEnabledAt: true },
+      });
+      if (localUser?.twoFactorEnabledAt) await beginSecondFactorLogin(user.id);
     },
   },
   pages: { signIn: "/login" },
