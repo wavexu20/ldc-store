@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 310 80" role="img" aria-labelledby="title">
+  <title id="title">链动小铺</title>
+  <g fill="#ff4a13">
+    <path d="M25 15h31L34 55H3z"/>
+    <path d="M68 15h39c15 0 23 9 21 22-2 11-10 18-25 18H70l6-10h26c8 0 13-4 14-10 1-6-3-10-10-10H73z"/>
+    <path d="M42 25h64c8 0 12 4 10 11-1 5-5 9-12 9H33z"/>
+    <path d="M9 60h113l-10 10H0z"/>
+  </g>
+  <g fill="#ff4a13" font-family="Arial, 'PingFang SC', 'Microsoft YaHei', sans-serif">
+    <text x="139" y="43" font-size="34" font-weight="700" letter-spacing="1">链动小铺</text>
+    <text x="179" y="65" font-size="15" font-weight="600" letter-spacing="5">ldxp.cn</text>
+  </g>
+</svg>
