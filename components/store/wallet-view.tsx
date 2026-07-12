@@ -36,7 +36,7 @@ export function WalletView({ data }: { data: WalletData }) {
   const tierVisual = tierVisuals[membership.tier.key];
   const membershipProgressWidth = membership.nextTier ? Math.max(3, Math.round(membership.progress)) : 100;
   const externalStores = [
-    { label: "闲鱼", href: data.externalStoreLinks.xianyu },
+    { label: "闲鱼", href: data.externalStoreLinks.xianyu, logo: "/brands/xianyu.svg" },
     { label: "链动小铺", href: data.externalStoreLinks.liandong, logo: "/brands/liandong.svg" },
     { label: "Plati", href: data.externalStoreLinks.plati, logo: "/brands/plati.svg" },
   ].filter((store) => Boolean(store.href));

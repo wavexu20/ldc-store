@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 184 102" role="img" aria-labelledby="title">
+  <title id="title">闲鱼</title>
+  <rect width="184" height="102" rx="8" fill="#ffed16"/>
+  <g fill="#172132" stroke="#172132" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M17 18v68M29 18v68M42 30h38v56M42 46h28M55 30v56M68 46v40" fill="none" stroke-width="8"/>
+    <circle cx="17" cy="18" r="5" stroke="none"/>
+    <path d="M104 18h60M104 31v55M104 47h59M123 31v55M150 31v55M104 86c21-9 40-8 60 0" fill="none" stroke-width="9"/>
+  </g>
+</svg>
