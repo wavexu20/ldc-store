@@ -10,8 +10,8 @@
  * - 前端显示时浏览器自动转换为用户本地时区
  */
 
-import { db, getD1Binding, orders, cards, products, users, vouchers } from "@/lib/db";
-import { eq, and, desc, inArray, lt } from "drizzle-orm";
+import { db, getD1Binding, orders, cards, products, productVariants, users, vouchers } from "@/lib/db";
+import { eq, and, desc, inArray, isNull, lt } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { headers } from "next/headers";
 import { after } from "next/server";
@@ -119,7 +119,7 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     return { success: false, message: error instanceof Error ? error.message : SECOND_FACTOR_REQUIRED_MESSAGE, requiresSecondFactor: true };
   }
 
-  const { productId, quantity, paymentMethod, usePoints, voucherId } = validationResult.data;
+  const { productId, variantId, quantity, paymentMethod, usePoints, voucherId } = validationResult.data;
 
   try {
     log.info({ userId: user.id, productId, quantity, paymentMethod }, "开始创建订单");
@@ -136,6 +136,17 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
       return { success: false, message: "商品不存在或已下架" };
     }
 
+    const activeVariants = await db.query.productVariants.findMany({
+      where: and(eq(productVariants.productId, productId), eq(productVariants.isActive, true)),
+      orderBy: [productVariants.sortOrder],
+    });
+    const selectedVariant = variantId ? activeVariants.find((variant) => variant.id === variantId) : null;
+    if (activeVariants.length > 0 && !selectedVariant) return { success: false, message: "请选择有效的商品规格" };
+    if (activeVariants.length === 0 && variantId) return { success: false, message: "该商品当前不支持规格选择" };
+    const cardVariantCondition = selectedVariant ? eq(cards.variantId, selectedVariant.id) : isNull(cards.variantId);
+    const unitPrice = selectedVariant?.price ?? product.price;
+    const variantLabel = selectedVariant ? ` · ${selectedVariant.name}` : "";
+
     // 验证购买数量限制
     if (quantity < product.minQuantity || quantity > product.maxQuantity) {
       return {
@@ -149,7 +160,7 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     const availableCards = await db
       .select({ id: cards.id })
       .from(cards)
-      .where(and(eq(cards.productId, productId), eq(cards.status, "available")))
+      .where(and(eq(cards.productId, productId), cardVariantCondition, eq(cards.status, "available")))
       .limit(quantity);
     if (availableCards.length < quantity) {
       throw new Error(`库存不足，当前仅剩 ${availableCards.length} 件`);
@@ -159,7 +170,7 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     const orderId = crypto.randomUUID();
     const walletTransactionId = crypto.randomUUID();
     const orderNo = generateOrderNo();
-    const totalAmount = parseFloat(product.price) * quantity;
+    const totalAmount = parseFloat(unitPrice) * quantity;
     const totalCents = Math.round(totalAmount * 100);
     const createdAt = new Date();
     const expiredAt = getExpireTime(orderExpireMinutes);
@@ -206,15 +217,15 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     const statements = [
       d1.prepare(`
         INSERT INTO orders (
-          id, order_no, product_id, product_name, product_price, quantity,
+          id, order_no, product_id, product_variant_id, product_variant_name, product_name, product_price, quantity,
           total_amount, original_amount, cash_spent_cents, bonus_spent_cents, points_redeemed, points_earned,
           payment_method, status, trade_no, user_id, username,
           user_image, paid_at, expired_at, created_at, updated_at
         )
-        SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+        SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
         WHERE (
           SELECT COUNT(*) FROM cards
-          WHERE product_id = ? AND status = 'available' AND id IN (${placeholders})
+          WHERE product_id = ? AND ${selectedVariant ? "variant_id = ?" : "variant_id IS NULL"} AND status = 'available' AND id IN (${placeholders})
         ) = ?
         AND (? <> 'balance' OR EXISTS (
           SELECT 1 FROM users WHERE id = ? AND balance_cents >= ? AND bonus_balance_cents >= ? AND points_balance >= ?
@@ -224,25 +235,25 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
         ))
         RETURNING id, order_no
       `).bind(
-        orderId, orderNo, productId, product.name, product.price, quantity,
+        orderId, orderNo, productId, selectedVariant?.id ?? null, selectedVariant?.name ?? null, product.name, unitPrice, quantity,
         (payableCents / 100).toFixed(2), totalAmount.toFixed(2), cashSpentCents, bonusSpentCents, redemption.points, pointsEarned,
         effectivePaymentMethod,
         isImmediateCompletion ? "completed" : "pending",
         isImmediateCompletion ? `${effectivePaymentMethod.toUpperCase()}-${orderNo}` : null,
         userId, user.username ?? null, user.image ?? null,
         isImmediateCompletion ? createdEpoch : null, expiredEpoch, createdEpoch, createdEpoch,
-        productId, ...cardIds, quantity, effectivePaymentMethod, userId, cashSpentCents, bonusSpentCents, redemption.points,
+        productId, ...(selectedVariant ? [selectedVariant.id] : []), ...cardIds, quantity, effectivePaymentMethod, userId, cashSpentCents, bonusSpentCents, redemption.points,
         voucherId ?? null, voucherId ?? "", userId
       ),
       d1.prepare(`
         UPDATE cards SET status = ?, order_id = ?, locked_at = ?, sold_at = ?
-        WHERE product_id = ? AND status = 'available'
+        WHERE product_id = ? AND ${selectedVariant ? "variant_id = ?" : "variant_id IS NULL"} AND status = 'available'
           AND id IN (${placeholders})
           AND EXISTS (SELECT 1 FROM orders WHERE id = ?)
       `).bind(
         isImmediateCompletion ? "sold" : "locked", orderId,
         isImmediateCompletion ? null : createdEpoch, isImmediateCompletion ? createdEpoch : null,
-        productId, ...cardIds, orderId
+        productId, ...(selectedVariant ? [selectedVariant.id] : []), ...cardIds, orderId
       ),
       d1.prepare(`
         UPDATE vouchers
@@ -270,14 +281,14 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
         ON CONFLICT(idempotency_key) DO NOTHING
         `).bind(
         walletTransactionId, -cashSpentCents, orderId, `purchase:${orderId}`,
-        `购买 ${product.name}`, createdEpoch, userId, effectivePaymentMethod, orderId
+        `购买 ${product.name}${variantLabel}`, createdEpoch, userId, effectivePaymentMethod, orderId
       ),
       d1.prepare(`
         INSERT INTO member_transactions (id,user_id,asset,type,amount,balance_after,reference_type,reference_id,idempotency_key,description,created_at)
         SELECT ?,id,'bonus','purchase',?,bonus_balance_cents,'order',?,?,?,? FROM users
         WHERE id = ? AND ? = 'balance' AND ? > 0 AND EXISTS (SELECT 1 FROM orders WHERE id = ?)
         ON CONFLICT(idempotency_key) DO NOTHING
-      `).bind(crypto.randomUUID(), -bonusSpentCents, orderId, `bonus:purchase:${orderId}`, `购买 ${product.name}`, createdEpoch, userId, effectivePaymentMethod, bonusSpentCents, orderId),
+      `).bind(crypto.randomUUID(), -bonusSpentCents, orderId, `bonus:purchase:${orderId}`, `购买 ${product.name}${variantLabel}`, createdEpoch, userId, effectivePaymentMethod, bonusSpentCents, orderId),
       d1.prepare(`
         INSERT INTO member_transactions (id,user_id,asset,type,amount,balance_after,reference_type,reference_id,idempotency_key,description,created_at)
         SELECT ?,id,'points','purchase',?,points_balance,'order',?,?,?,? FROM users
@@ -313,13 +324,13 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
           ? await createGatewayPayment({
               orderId: result.order.orderNo,
               amount: result.totalAmount,
-              productName: product.name,
+              productName: `${product.name}${variantLabel}`,
               productDescription: product.description || undefined,
               siteUrl,
               successPath: `/order/result?out_trade_no=${encodeURIComponent(result.order.orderNo)}`,
               cancelPath: `/order/result?out_trade_no=${encodeURIComponent(result.order.orderNo)}&cancelled=1`,
             })
-          : createPayment(result.order.orderNo, result.totalAmount, product.name, siteUrl);
+          : createPayment(result.order.orderNo, result.totalAmount, `${product.name}${variantLabel}`, siteUrl);
       } catch (error) {
         // 支付接口调用失败，但订单已创建
         log.error(
@@ -338,7 +349,7 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
       {
         orderNo: result.order.orderNo,
         userId: user.id,
-        productId,
+        productId, variantId: selectedVariant?.id,
         quantity,
         totalAmount: result.totalAmount,
         paymentMethod: effectivePaymentMethod,
@@ -352,7 +363,7 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
         const config = await getTelegramConfigWithToggles();
         const payload: NewOrderNotificationPayload = {
           orderNo: result.order.orderNo,
-          productName: product.name,
+          productName: `${product.name}${variantLabel}`,
           quantity,
           totalAmount: result.totalAmount.toFixed(2),
           paymentMethod: effectivePaymentMethod,

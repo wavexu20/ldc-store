@@ -3,6 +3,7 @@ import { z } from "zod";
 // 创建订单验证（仅登录用户可下单）
 export const createOrderSchema = z.object({
   productId: z.string().uuid("无效的商品ID"),
+  variantId: z.string().uuid("无效的商品规格").optional(),
   quantity: z.number().int().min(1, "数量至少为1").max(100, "数量不能超过100"),
   paymentMethod: z.enum(["gateway", "ldc", "balance", "alipay", "wechat", "usdt", "voucher"]).default("gateway"),
   usePoints: z.boolean().default(false),

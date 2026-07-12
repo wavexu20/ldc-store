@@ -29,6 +29,7 @@ interface OrderFormProps {
   stock: number;
   minQuantity: number;
   maxQuantity: number;
+  variants?: Array<{ id: string; name: string; price: string; originalPrice: string | null; stock: number }>;
   membership?: { balanceCents: number; bonusBalanceCents: number; pointsBalance: number; discountVouchers: Array<{ id: string; code: string; discountAmountCents: number; minOrderCents: number; expiresAt: Date | null }> };
 }
 
@@ -39,6 +40,7 @@ export function OrderForm({
   stock,
   minQuantity,
   maxQuantity,
+  variants = [],
   membership,
 }: OrderFormProps) {
   const [isPending, startTransition] = useTransition();
@@ -46,9 +48,13 @@ export function OrderForm({
   const [paymentMethod, setPaymentMethod] = useState<"gateway" | "balance">("gateway");
   const [usePoints, setUsePoints] = useState(false);
   const [selectedVoucherId, setSelectedVoucherId] = useState("");
+  const [selectedVariantId, setSelectedVariantId] = useState(() => variants[0]?.id || "");
   const router = useRouter();
   const { data: session, status } = useSession();
-  const effectiveMax = Math.min(maxQuantity, stock);
+  const selectedVariant = variants.length > 0 ? variants.find((variant) => variant.id === selectedVariantId) ?? variants[0] : null;
+  const activePrice = selectedVariant ? Number(selectedVariant.price) : price;
+  const activeStock = selectedVariant ? selectedVariant.stock : stock;
+  const effectiveMax = Math.min(maxQuantity, activeStock);
 
   // 检查是否是 Linux DO 登录用户
   const user = session?.user as { id?: string; username?: string; name?: string } | undefined;
@@ -62,8 +68,8 @@ export function OrderForm({
   });
 
   const quantity = form.watch("quantity");
-  const totalPrice = (price * quantity).toFixed(2);
-  const totalCents = Math.round(price * quantity * 100);
+  const totalPrice = (activePrice * quantity).toFixed(2);
+  const totalCents = Math.round(activePrice * quantity * 100);
   const selectedVoucher = membership?.discountVouchers.find((voucher) => voucher.id === selectedVoucherId);
   const voucherDiscountCents = selectedVoucher && totalCents >= selectedVoucher.minOrderCents ? Math.min(totalCents, selectedVoucher.discountAmountCents) : 0;
   const afterVoucherCents = totalCents - voucherDiscountCents;
@@ -89,6 +95,7 @@ export function OrderForm({
     startTransition(async () => {
       const result = await createOrder({
         productId,
+        variantId: selectedVariant?.id || undefined,
         quantity: values.quantity,
         paymentMethod,
         usePoints: paymentMethod === "balance" && usePoints,
@@ -176,6 +183,8 @@ export function OrderForm({
         </span>
       </div>
 
+      {variants.length > 0 ? <div className="space-y-2"><Label>选择规格</Label><div className="flex flex-wrap gap-2">{variants.map((variant) => { const selected = selectedVariant?.id === variant.id; const unavailable = variant.stock < minQuantity; return <Button key={variant.id} type="button" size="sm" variant={selected ? "default" : "outline"} disabled={unavailable} onClick={() => { setSelectedVariantId(variant.id); form.setValue("quantity", minQuantity); }}>{variant.name}<span className="ml-1 tabular-nums">¥{Number(variant.price).toFixed(2)}</span>{unavailable ? <span className="ml-1 text-xs opacity-70">缺货</span> : null}</Button>; })}</div>{selectedVariant ? <p className="text-xs text-muted-foreground">已选 {selectedVariant.name} · 可用 {selectedVariant.stock} 件</p> : null}</div> : null}
+
       <div className="space-y-2">
         <Label>{t("paymentMethod")}</Label>
         <div className="grid grid-cols-2 gap-2">
@@ -243,11 +252,11 @@ export function OrderForm({
       {/* Total & Submit */}
       <div className="flex items-center justify-between pt-2">
         <div>
-          <span className="text-sm text-muted-foreground">{productName} × {quantity}</span>
+          <span className="text-sm text-muted-foreground">{productName}{selectedVariant ? ` · ${selectedVariant.name}` : ""} × {quantity}</span>
           <div className="text-xl font-bold">¥{((afterVoucherCents - redemption.discountCents) / 100).toFixed(2)}</div>
           {voucherDiscountCents > 0 ? <p className="text-xs text-muted-foreground">已使用满减券 -¥{(voucherDiscountCents / 100).toFixed(2)}</p> : null}
         </div>
-        <Button type="submit" disabled={isPending}>
+        <Button type="submit" disabled={isPending || effectiveMax < minQuantity}>
           {isPending ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />

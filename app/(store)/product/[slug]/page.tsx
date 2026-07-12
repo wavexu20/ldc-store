@@ -143,6 +143,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
             stock={product.stock}
             minQuantity={product.minQuantity}
             maxQuantity={product.maxQuantity}
+            variants={product.variants}
             membership={membership || undefined}
           />
         </div>

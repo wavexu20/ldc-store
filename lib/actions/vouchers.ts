@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { nanoid } from "nanoid";
 import { auth } from "@/lib/auth";
 import { requireAdmin } from "@/lib/auth-utils";
-import { db, cards, getD1Binding, products, users, voucherBatches, vouchers } from "@/lib/db";
+import { db, cards, getD1Binding, products, productVariants, users, voucherBatches, vouchers } from "@/lib/db";
 import { requireSecondFactor, SECOND_FACTOR_REQUIRED_MESSAGE } from "@/lib/security/two-factor-session";
 import { createVoucherBatchSchema, type CreateVoucherBatchInput } from "@/lib/validations/voucher";
 
@@ -36,9 +36,14 @@ export async function createVoucherBatch(input: CreateVoucherBatchInput) {
   const data = parsed.data;
   const expiresAt = data.expiresAt ? new Date(data.expiresAt) : null;
   let product: { id: string; name: string } | null = null;
+  let variant: { id: string; name: string } | null = null;
   if (data.type === "product") {
     product = await db.query.products.findFirst({ where: eq(products.id, data.productId!), columns: { id: true, name: true } }) || null;
     if (!product) return { success: false as const, message: "绑定的商品不存在" };
+    const variants = await db.query.productVariants.findMany({ where: and(eq(productVariants.productId, product.id), eq(productVariants.isActive, true)), columns: { id: true, name: true } });
+    variant = data.productVariantId ? variants.find((item) => item.id === data.productVariantId) || null : null;
+    if (variants.length > 0 && !variant) return { success: false as const, message: "多规格商品的兑换券必须绑定一个规格" };
+    if (variants.length === 0 && data.productVariantId) return { success: false as const, message: "所选商品不支持该规格" };
   }
 
   const batchId = crypto.randomUUID();
@@ -56,6 +61,8 @@ export async function createVoucherBatch(input: CreateVoucherBatchInput) {
         minOrderCents: data.type === "discount" ? data.minOrderCents : 0,
         productId: product?.id || null,
         productName: product?.name || null,
+        productVariantId: variant?.id || null,
+        productVariantName: variant?.name || null,
         expiresAt,
         createdBy: admin.user.id,
         createdAt: now,
@@ -69,6 +76,8 @@ export async function createVoucherBatch(input: CreateVoucherBatchInput) {
         minOrderCents: data.type === "discount" ? data.minOrderCents : 0,
         productId: product?.id || null,
         productName: product?.name || null,
+        productVariantId: variant?.id || null,
+        productVariantName: variant?.name || null,
         expiresAt,
         createdAt: now,
       }))),
@@ -180,16 +189,19 @@ export async function redeemVoucher(rawCode: string): Promise<{ success: boolean
   if (!voucher.productId) return { success: false, message: "该商品兑换券配置不完整，请联系客服" };
   const product = await db.query.products.findFirst({ where: and(eq(products.id, voucher.productId), eq(products.isActive, true)) });
   if (!product) return { success: false, message: "兑换商品已下架，请联系客服" };
-  const [card] = await db.select({ id: cards.id }).from(cards).where(and(eq(cards.productId, product.id), eq(cards.status, "available"))).limit(1);
+  const variant = voucher.productVariantId ? await db.query.productVariants.findFirst({ where: and(eq(productVariants.id, voucher.productVariantId), eq(productVariants.isActive, true)), columns: { id: true, name: true, price: true } }) : null;
+  if (voucher.productVariantId && !variant) return { success: false, message: "兑换券绑定的商品规格已下架，请联系客服" };
+  const cardVariantCondition = variant ? eq(cards.variantId, variant.id) : isNull(cards.variantId);
+  const [card] = await db.select({ id: cards.id }).from(cards).where(and(eq(cards.productId, product.id), cardVariantCondition, eq(cards.status, "available"))).limit(1);
   if (!card) return { success: false, message: "兑换商品暂时缺货，请联系客服" };
   const orderId = crypto.randomUUID();
   const orderNo = generateOrderNo();
   const results = await d1.batch<{ id: string }>([
-    d1.prepare(`INSERT INTO orders (id,order_no,product_id,product_name,product_price,quantity,total_amount,original_amount,payment_method,status,trade_no,user_id,username,user_image,paid_at,expired_at,created_at,updated_at)
-      SELECT ?,?,?,?,?,?,'0.00',?,'voucher','completed',?,?,?, ?,?,?,?,?
+    d1.prepare(`INSERT INTO orders (id,order_no,product_id,product_variant_id,product_variant_name,product_name,product_price,quantity,total_amount,original_amount,payment_method,status,trade_no,user_id,username,user_image,paid_at,expired_at,created_at,updated_at)
+      SELECT ?,?,?,?,?,?,?,?,'0.00',?,'voucher','completed',?,?,?, ?,?,?,?,?
       WHERE EXISTS (SELECT 1 FROM vouchers WHERE id = ? AND status = 'available')
         AND EXISTS (SELECT 1 FROM cards WHERE id = ? AND status = 'available') RETURNING id`)
-      .bind(orderId, orderNo, product.id, product.name, product.price, 1, product.price, `VOUCHER-${voucher.id}`, user.id, user.username || null, user.image || null, nowEpoch, nowEpoch, nowEpoch, nowEpoch, voucher.id, card.id),
+      .bind(orderId, orderNo, product.id, variant?.id || null, variant?.name || null, product.name, variant?.price || product.price, 1, variant?.price || product.price, `VOUCHER-${voucher.id}`, user.id, user.username || null, user.image || null, nowEpoch, nowEpoch, nowEpoch, nowEpoch, voucher.id, card.id),
     d1.prepare(`UPDATE cards SET status = 'sold', order_id = ?, sold_at = ? WHERE id = ? AND status = 'available' AND EXISTS (SELECT 1 FROM orders WHERE id = ?)`)
       .bind(orderId, nowEpoch, card.id, orderId),
     d1.prepare(`UPDATE vouchers SET status = 'redeemed', owner_user_id = ?, order_id = ?, redeemed_at = ? WHERE id = ? AND status = 'available' AND EXISTS (SELECT 1 FROM orders WHERE id = ?)`)

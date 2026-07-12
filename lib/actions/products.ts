@@ -1,6 +1,6 @@
 "use server";
 
-import { db, products, cards, categories, orders } from "@/lib/db";
+import { db, products, productVariants, cards, categories, orders } from "@/lib/db";
 import { eq, and, desc, asc, sql, like, or, inArray, lt } from "drizzle-orm";
 import { z } from "zod";
 import {
@@ -19,6 +19,22 @@ import {
   type RestockSummary,
 } from "@/lib/actions/restock-requests";
 import { generateProductTranslations } from "@/lib/ai/product-translation";
+
+async function syncProductVariants(productId: string, variants: NonNullable<ProductInput["variants"]>) {
+  const now = new Date();
+  const existing = await db.query.productVariants.findMany({ where: eq(productVariants.productId, productId), columns: { id: true } });
+  const existingIds = new Set(existing.map((variant) => variant.id));
+  const retainedIds = new Set(variants.flatMap((variant) => variant.id && existingIds.has(variant.id) ? [variant.id] : []));
+  await Promise.all([
+    ...variants.map((variant, index) => {
+      const values = { name: variant.name, price: variant.price.toFixed(2), originalPrice: variant.originalPrice?.toFixed(2) ?? null, sortOrder: index, isActive: true, updatedAt: now };
+      return variant.id && existingIds.has(variant.id)
+        ? db.update(productVariants).set(values).where(eq(productVariants.id, variant.id))
+        : db.insert(productVariants).values({ productId, ...values, createdAt: now });
+    }),
+    ...existing.filter((variant) => !retainedIds.has(variant.id)).map((variant) => db.update(productVariants).set({ isActive: false, updatedAt: now }).where(eq(productVariants.id, variant.id))),
+  ]);
+}
 
 // 节流：最多每 60 秒检查一次过期订单
 let lastExpireCheck = 0;
@@ -199,6 +215,10 @@ export async function getProductBySlug(slug: string) {
       },
       with: {
         category: true,
+        variants: {
+          where: eq(productVariants.isActive, true),
+          orderBy: [asc(productVariants.sortOrder), asc(productVariants.createdAt)],
+        },
       },
     }),
   ]);
@@ -207,13 +227,18 @@ export async function getProductBySlug(slug: string) {
     return null;
   }
 
-  const [[stockCount], restockSummary] = await Promise.all([
+  const [[stockCount], variantStockCounts, restockSummary] = await Promise.all([
     db
       .select({
         count: sql<number>`count(*)`,
       })
       .from(cards)
       .where(and(eq(cards.productId, product.id), eq(cards.status, "available"))),
+    db
+      .select({ variantId: cards.variantId, count: sql<number>`count(*)` })
+      .from(cards)
+      .where(and(eq(cards.productId, product.id), eq(cards.status, "available")))
+      .groupBy(cards.variantId),
     getRestockSummaryForProducts({
       productIds: [product.id],
       maxRequesters: 8,
@@ -221,9 +246,11 @@ export async function getProductBySlug(slug: string) {
   ]);
 
   const stock = stockCount?.count || 0;
+  const variantStockMap = new Map(variantStockCounts.filter((row) => row.variantId).map((row) => [row.variantId!, row.count]));
 
   return {
     ...product,
+    variants: product.variants.map((variant) => ({ ...variant, stock: variantStockMap.get(variant.id) || 0 })),
     stock,
     restockRequestCount: restockSummary[product.id]?.count ?? 0,
     restockRequesters: restockSummary[product.id]?.requesters ?? [],
@@ -244,6 +271,7 @@ export async function getProductById(id: string) {
     where: eq(products.id, id),
     with: {
       category: true,
+      variants: { orderBy: [asc(productVariants.sortOrder), asc(productVariants.createdAt)] },
     },
   });
 
@@ -604,7 +632,7 @@ export async function createProduct(input: CreateProductInput) {
   }
 
   try {
-    const { autoTranslate, translationSourceLocale, ...productData } =
+    const { autoTranslate, translationSourceLocale, variants, ...productData } =
       validationResult.data;
     const [product] = await db
       .insert(products)
@@ -615,6 +643,8 @@ export async function createProduct(input: CreateProductInput) {
         coverImage: productData.coverImage || null,
       })
       .returning();
+
+    if (variants.length > 0) await syncProductVariants(product.id, variants);
 
     let savedProduct = product;
     let translationWarning: string | undefined;
@@ -690,6 +720,7 @@ export async function updateProduct(id: string, input: UpdateProductInput) {
     const {
       autoTranslate = false,
       translationSourceLocale = "zh",
+      variants,
       ...productFields
     } = validationResult.data;
     const updateData: Record<string, unknown> = {
@@ -716,6 +747,8 @@ export async function updateProduct(id: string, input: UpdateProductInput) {
     if (!product) {
       return { success: false, message: "商品不存在" };
     }
+
+    if (variants !== undefined) await syncProductVariants(product.id, variants);
 
     let savedProduct = product;
     let translationWarning: string | undefined;

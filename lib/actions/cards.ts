@@ -1,6 +1,6 @@
 "use server";
 
-import { db, cards, products, type CardStatus } from "@/lib/db";
+import { db, cards, products, productVariants, type CardStatus } from "@/lib/db";
 import { eq, and, sql, inArray, desc, asc, isNull } from "drizzle-orm";
 import {
   importCardsSchema,
@@ -31,7 +31,7 @@ export async function importCards(input: ImportCardsInput) {
     };
   }
 
-  const { productId, content, delimiter, deduplicate } = validationResult.data;
+  const { productId, variantId, content, delimiter, deduplicate } = validationResult.data;
 
   // 检查商品是否存在
   const product = await db.query.products.findFirst({
@@ -41,6 +41,11 @@ export async function importCards(input: ImportCardsInput) {
   if (!product) {
     return { success: false, message: "商品不存在" };
   }
+  const variants = await db.query.productVariants.findMany({ where: and(eq(productVariants.productId, productId), eq(productVariants.isActive, true)), columns: { id: true } });
+  const variant = variantId ? variants.find((item) => item.id === variantId) : null;
+  if (variants.length > 0 && !variant) return { success: false, message: "请先选择有效的商品规格" };
+  if (variants.length === 0 && variantId) return { success: false, message: "该商品当前不支持规格库存" };
+  const cardVariantCondition = variant ? eq(cards.variantId, variant.id) : isNull(cards.variantId);
 
   // 解析卡密内容
   const cardContents = content
@@ -64,6 +69,7 @@ export async function importCards(input: ImportCardsInput) {
         .where(
           and(
             eq(cards.productId, productId),
+            cardVariantCondition,
             inArray(cards.content, uniqueContents)
           )
         );
@@ -89,6 +95,7 @@ export async function importCards(input: ImportCardsInput) {
       await db.insert(cards).values(
         newContents.map((content) => ({
           productId,
+          variantId: variant?.id ?? null,
           content,
           status: "available" as const,
         }))
@@ -113,6 +120,7 @@ export async function importCards(input: ImportCardsInput) {
     await db.insert(cards).values(
       cardContents.map((content) => ({
         productId,
+        variantId: variant?.id ?? null,
         content,
         status: "available" as const,
       }))
@@ -156,7 +164,7 @@ export async function createCard(input: CreateCardInput) {
     };
   }
 
-  const { productId, content, deduplicate } = validationResult.data;
+  const { productId, variantId, content, deduplicate } = validationResult.data;
 
   // 检查商品是否存在
   const product = await db.query.products.findFirst({
@@ -167,12 +175,17 @@ export async function createCard(input: CreateCardInput) {
   if (!product) {
     return { success: false, message: "商品不存在" };
   }
+  const variants = await db.query.productVariants.findMany({ where: and(eq(productVariants.productId, productId), eq(productVariants.isActive, true)), columns: { id: true } });
+  const variant = variantId ? variants.find((item) => item.id === variantId) : null;
+  if (variants.length > 0 && !variant) return { success: false, message: "请先选择有效的商品规格" };
+  if (variants.length === 0 && variantId) return { success: false, message: "该商品当前不支持规格库存" };
+  const cardVariantCondition = variant ? eq(cards.variantId, variant.id) : isNull(cards.variantId);
 
   try {
     if (deduplicate) {
       // 为什么这样做：默认强制去重，避免同一商品出现重复卡密导致“重复发货”风险。
       const duplicateCard = await db.query.cards.findFirst({
-        where: and(eq(cards.productId, productId), eq(cards.content, content)),
+        where: and(eq(cards.productId, productId), cardVariantCondition, eq(cards.content, content)),
         columns: { id: true },
       });
 
@@ -185,6 +198,7 @@ export async function createCard(input: CreateCardInput) {
       .insert(cards)
       .values({
         productId,
+        variantId: variant?.id ?? null,
         content,
         status: "available",
       })

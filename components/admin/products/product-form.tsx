@@ -12,6 +12,7 @@ import { deleteProductImage, uploadProductImages } from "@/lib/actions/product-i
 import { createProductPreview } from "@/lib/actions/product-previews";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -26,7 +27,7 @@ import {
 } from "@/components/ui/form";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { toast } from "sonner";
-import { Loader2, ArrowLeft, Package, Save, Copy, Languages, Eye, ImagePlus, Link2, Trash2, Upload } from "lucide-react";
+import { Loader2, ArrowLeft, Package, Save, Copy, Languages, Eye, ImagePlus, Link2, Trash2, Upload, Layers3, Plus } from "lucide-react";
 import Link from "next/link";
 
 interface ProductFormProps {
@@ -47,6 +48,7 @@ const defaultValues: ProductInput = {
   originalPrice: undefined,
   coverImage: "",
   images: [],
+  variants: [],
   isActive: true,
   isFeatured: false,
   sortOrder: 0,
@@ -78,6 +80,7 @@ export function ProductForm({
 
   const watchName = form.watch("name");
   const images = form.watch("images") ?? [];
+  const variants = form.watch("variants") ?? [];
   const generateSlug = () => {
     const slug = watchName
       .toLowerCase()
@@ -141,6 +144,19 @@ export function ProductForm({
       setPreviewUrl(result.url);
       toast.success("临时预览链接已生成，有效期 24 小时");
     });
+  };
+
+  const addVariant = () => {
+    const currentPrice = form.getValues("price") || 0;
+    form.setValue("variants", [...variants, { name: `规格 ${variants.length + 1}`, price: currentPrice, originalPrice: undefined, sortOrder: variants.length }], { shouldDirty: true, shouldValidate: true });
+  };
+
+  const updateVariant = (index: number, patch: Record<string, unknown>) => {
+    form.setValue("variants", variants.map((variant, itemIndex) => itemIndex === index ? { ...variant, ...patch } : variant), { shouldDirty: true, shouldValidate: true });
+  };
+
+  const removeVariant = (index: number) => {
+    form.setValue("variants", variants.filter((_, itemIndex) => itemIndex !== index).map((variant, itemIndex) => ({ ...variant, sortOrder: itemIndex })), { shouldDirty: true, shouldValidate: true });
   };
 
   const handleSubmit = (values: ProductInput) => {
@@ -475,6 +491,16 @@ export function ProductForm({
                     />
                   </div>
                   <FormDescription>原价留空则不显示折扣</FormDescription>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0">
+                  <div><CardTitle className="flex items-center gap-2 text-base"><Layers3 className="size-4" />商品规格</CardTitle><p className="mt-1 text-xs text-muted-foreground">留空即为单规格；开启后每个规格独立定价和卡密库存。</p></div>
+                  <Button type="button" size="sm" variant="outline" onClick={addVariant}><Plus />添加规格</Button>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {variants.length === 0 ? <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">当前为单规格商品，使用上方基础售价和库存。</div> : variants.map((variant, index) => <div className="grid gap-2 rounded-lg border p-3 sm:grid-cols-[minmax(0,1fr)_120px_120px_auto] sm:items-end" key={variant.id || `new-${index}`}><div className="space-y-1"><Label htmlFor={`variant-name-${index}`}>规格名称</Label><Input id={`variant-name-${index}`} value={variant.name} onChange={(event) => updateVariant(index, { name: event.target.value })} placeholder="例如：月卡" /></div><div className="space-y-1"><Label htmlFor={`variant-price-${index}`}>售价</Label><Input id={`variant-price-${index}`} type="number" min="0.01" step="0.01" value={variant.price} onChange={(event) => updateVariant(index, { price: Number.isFinite(event.target.valueAsNumber) ? event.target.valueAsNumber : 0 })} /></div><div className="space-y-1"><Label htmlFor={`variant-original-price-${index}`}>原价</Label><Input id={`variant-original-price-${index}`} type="number" min="0.01" step="0.01" value={variant.originalPrice || ""} onChange={(event) => updateVariant(index, { originalPrice: Number.isFinite(event.target.valueAsNumber) ? event.target.valueAsNumber : undefined })} /></div><Button type="button" size="icon" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => removeVariant(index)} aria-label={`删除规格 ${variant.name || index + 1}`}><Trash2 className="size-4" /></Button></div>)}
                 </CardContent>
               </Card>
 

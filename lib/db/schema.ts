@@ -263,6 +263,21 @@ export const productPreviews = sqliteTable("product_previews", {
   index("product_previews_expires_idx").on(table.expiresAt),
 ]);
 
+export const productVariants = sqliteTable("product_variants", {
+  id: id("id"),
+  productId: text("product_id").references(() => products.id, { onDelete: "cascade" }).notNull(),
+  name: text("name").notNull(),
+  price: text("price").notNull(),
+  originalPrice: text("original_price"),
+  sortOrder: integer("sort_order").default(0).notNull(),
+  isActive: integer("is_active", { mode: "boolean" }).default(true).notNull(),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+}, (table) => [
+  index("product_variants_product_sort_idx").on(table.productId, table.sortOrder),
+  index("product_variants_product_active_idx").on(table.productId, table.isActive),
+]);
+
 // ============================================
 // Cards Table (卡密/库存)
 // ============================================
@@ -270,6 +285,7 @@ export const productPreviews = sqliteTable("product_previews", {
 export const cards = sqliteTable("cards", {
   id: id("id"),
   productId: text("product_id").references(() => products.id, { onDelete: "cascade" }).notNull(),
+  variantId: text("variant_id").references(() => productVariants.id, { onDelete: "restrict" }),
   content: text("content").notNull(), // 卡密内容
   status: text("status", { enum: cardStatusValues }).default("available").notNull(),
   orderId: text("order_id").references(() => orders.id, { onDelete: "set null" }),
@@ -282,6 +298,7 @@ export const cards = sqliteTable("cards", {
   index("cards_order_id_idx").on(table.orderId),
   // 用于快速查询可用库存
   index("cards_product_available_idx").on(table.productId, table.status),
+  index("cards_variant_available_idx").on(table.variantId, table.status),
 ]);
 
 // ============================================
@@ -292,6 +309,8 @@ export const orders = sqliteTable("orders", {
   id: id("id"),
   orderNo: text("order_no").notNull().unique(), // 订单号
   productId: text("product_id").references(() => products.id, { onDelete: "set null" }),
+  productVariantId: text("product_variant_id").references(() => productVariants.id, { onDelete: "set null" }),
+  productVariantName: text("product_variant_name"),
   productName: text("product_name").notNull(), // 冗余存储商品名
   productPrice: text("product_price").notNull(), // 冗余存储单价
   quantity: integer("quantity").notNull(),
@@ -336,6 +355,7 @@ export const orders = sqliteTable("orders", {
   index("orders_status_idx").on(table.status),
   index("orders_email_idx").on(table.email),
   index("orders_product_id_idx").on(table.productId),
+  index("orders_product_variant_idx").on(table.productVariantId),
   index("orders_created_at_idx").on(table.createdAt),
   index("orders_trade_no_idx").on(table.tradeNo),
   index("orders_user_id_idx").on(table.userId),
@@ -354,6 +374,8 @@ export const voucherBatches = sqliteTable("voucher_batches", {
   discountAmountCents: integer("discount_amount_cents").default(0).notNull(),
   minOrderCents: integer("min_order_cents").default(0).notNull(),
   productId: text("product_id").references(() => products.id, { onDelete: "restrict" }),
+  productVariantId: text("product_variant_id").references(() => productVariants.id, { onDelete: "restrict" }),
+  productVariantName: text("product_variant_name"),
   productName: text("product_name"),
   quantity: integer("quantity").notNull(),
   expiresAt: timestamp("expires_at"),
@@ -374,6 +396,8 @@ export const vouchers = sqliteTable("vouchers", {
   discountAmountCents: integer("discount_amount_cents").default(0).notNull(),
   minOrderCents: integer("min_order_cents").default(0).notNull(),
   productId: text("product_id").references(() => products.id, { onDelete: "restrict" }),
+  productVariantId: text("product_variant_id").references(() => productVariants.id, { onDelete: "restrict" }),
+  productVariantName: text("product_variant_name"),
   productName: text("product_name"),
   ownerUserId: text("owner_user_id").references(() => users.id, { onDelete: "restrict" }),
   orderId: text("order_id").references(() => orders.id, { onDelete: "set null" }),
@@ -515,7 +539,16 @@ export const productsRelations = relations(products, ({ one, many }) => ({
     references: [categories.id],
   }),
   cards: many(cards),
+  variants: many(productVariants),
   restockRequests: many(restockRequests),
+  voucherBatches: many(voucherBatches),
+  vouchers: many(vouchers),
+}));
+
+export const productVariantsRelations = relations(productVariants, ({ one, many }) => ({
+  product: one(products, { fields: [productVariants.productId], references: [products.id] }),
+  cards: many(cards),
+  orders: many(orders),
   voucherBatches: many(voucherBatches),
   vouchers: many(vouchers),
 }));
@@ -525,6 +558,7 @@ export const cardsRelations = relations(cards, ({ one }) => ({
     fields: [cards.productId],
     references: [products.id],
   }),
+  variant: one(productVariants, { fields: [cards.variantId], references: [productVariants.id] }),
   order: one(orders, {
     fields: [cards.orderId],
     references: [orders.id],
@@ -536,12 +570,14 @@ export const ordersRelations = relations(orders, ({ one, many }) => ({
     fields: [orders.productId],
     references: [products.id],
   }),
+  productVariant: one(productVariants, { fields: [orders.productVariantId], references: [productVariants.id] }),
   cards: many(cards),
   vouchers: many(vouchers),
 }));
 
 export const voucherBatchesRelations = relations(voucherBatches, ({ one, many }) => ({
   product: one(products, { fields: [voucherBatches.productId], references: [products.id] }),
+  productVariant: one(productVariants, { fields: [voucherBatches.productVariantId], references: [productVariants.id] }),
   creator: one(users, { fields: [voucherBatches.createdBy], references: [users.id] }),
   vouchers: many(vouchers),
 }));
@@ -549,6 +585,7 @@ export const voucherBatchesRelations = relations(voucherBatches, ({ one, many })
 export const vouchersRelations = relations(vouchers, ({ one }) => ({
   batch: one(voucherBatches, { fields: [vouchers.batchId], references: [voucherBatches.id] }),
   product: one(products, { fields: [vouchers.productId], references: [products.id] }),
+  productVariant: one(productVariants, { fields: [vouchers.productVariantId], references: [productVariants.id] }),
   owner: one(users, { fields: [vouchers.ownerUserId], references: [users.id] }),
   order: one(orders, { fields: [vouchers.orderId], references: [orders.id] }),
 }));
@@ -621,6 +658,9 @@ export type NewCategory = typeof categories.$inferInsert;
 
 export type Product = typeof products.$inferSelect;
 export type NewProduct = typeof products.$inferInsert;
+
+export type ProductVariant = typeof productVariants.$inferSelect;
+export type NewProductVariant = typeof productVariants.$inferInsert;
 
 export type Card = typeof cards.$inferSelect;
 export type NewCard = typeof cards.$inferInsert;

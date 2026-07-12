@@ -2,6 +2,14 @@ import { z } from "zod";
 
 export const productTranslationLocales = ["en", "ko", "zh", "ru", "de", "id", "hi"] as const;
 
+export const productVariantSchema = z.object({
+  id: z.string().uuid().optional(),
+  name: z.string().trim().min(1, "规格名称不能为空").max(80, "规格名称最多80字符"),
+  price: z.number().positive("规格售价必须大于0"),
+  originalPrice: z.number().positive("规格原价必须大于0").optional().nullable(),
+  sortOrder: z.number().int().min(0).default(0),
+});
+
 // 创建/更新商品验证
 export const productSchema = z.object({
   name: z.string().min(1, "商品名称不能为空").max(100, "商品名称最多100字符"),
@@ -17,6 +25,7 @@ export const productSchema = z.object({
   originalPrice: z.number().positive("原价必须大于0").optional().nullable(),
   coverImage: z.string().url("无效的图片URL").optional().nullable().or(z.literal("")),
   images: z.array(z.string().url()).max(12, "商品图片最多 12 张").optional(),
+  variants: z.array(productVariantSchema).max(30, "单个商品最多 30 个规格").optional().default([]),
   isActive: z.boolean().default(true),
   isFeatured: z.boolean().default(false),
   sortOrder: z.number().int().default(0),
@@ -44,4 +53,4 @@ export const productPreviewSchema = z.object({
 export type ProductInput = z.input<typeof productSchema>;
 export type ProductOutput = z.infer<typeof productSchema>;
 export type CreateProductInput = z.input<typeof createProductSchema>;
-export type UpdateProductInput = z.infer<typeof updateProductSchema>;
+export type UpdateProductInput = z.input<typeof updateProductSchema>;

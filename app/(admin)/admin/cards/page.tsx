@@ -58,6 +58,7 @@ async function getProductsWithStock() {
       createdAt: true,
       categoryId: true,
     },
+    with: { variants: { where: (variants, { eq }) => eq(variants.isActive, true), columns: { id: true, name: true } } },
     orderBy: [asc(products.sortOrder), desc(products.createdAt)],
   });
 
@@ -280,8 +281,8 @@ export default async function CardsPage({ searchParams }: CardsPageProps) {
             ) : null}
             {selectedProductId ? (
               <CardAction className="flex items-center gap-2">
-                <CreateCardDialog productId={selectedProductId} />
-                <ImportCardsDialog productId={selectedProductId} />
+                <CreateCardDialog productId={selectedProductId} variants={selectedProduct?.variants} />
+                <ImportCardsDialog productId={selectedProductId} variants={selectedProduct?.variants} />
               </CardAction>
             ) : null}
           </CardHeader>

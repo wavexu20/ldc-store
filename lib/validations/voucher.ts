@@ -10,6 +10,7 @@ export const createVoucherBatchSchema = z.object({
   discountAmountCents: z.number().int().min(0).max(10_000_000).default(0),
   minOrderCents: z.number().int().min(0).max(10_000_000).default(0),
   productId: z.string().uuid().nullable().optional(),
+  productVariantId: z.string().uuid().nullable().optional(),
   expiresAt: z.string().datetime().nullable().optional(),
 }).superRefine((input, ctx) => {
   if (input.type === "recharge" && input.rechargeAmountCents < 100) {
