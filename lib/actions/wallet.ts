@@ -10,6 +10,7 @@ import type { PaymentLaunchData } from "@/lib/payment/types";
 import { createGatewayPayment } from "@/lib/payment/gateway";
 import { calculateRechargeBonus, getMembershipStatus } from "@/lib/membership";
 import { SECOND_FACTOR_REQUIRED_MESSAGE, requireSecondFactor } from "@/lib/security/two-factor-session";
+import { getExternalStoreLinks } from "@/lib/actions/external-stores";
 
 const rechargeSchema = z.number().int().min(100, "最低充值 1.00").max(10_000_000, "单笔充值不能超过 100,000.00");
 
@@ -25,7 +26,7 @@ export async function getWalletOverview() {
   if (!session?.user?.id || session.user.id === "admin") {
     return { success: false as const, message: "请先登录" };
   }
-  const [user, transactions, memberHistory, spendRows] = await Promise.all([
+  const [user, transactions, memberHistory, spendRows, externalStoreLinks] = await Promise.all([
     db.query.users.findFirst({
       where: eq(users.id, session.user.id),
       columns: { balanceCents: true, bonusBalanceCents: true, pointsBalance: true, memberNo: true, email: true, name: true },
@@ -45,11 +46,12 @@ export async function getWalletOverview() {
       FROM orders
       WHERE user_id = ${session.user.id} AND status = 'completed'
     `),
+    getExternalStoreLinks(),
   ]);
   if (!user) return { success: false as const, message: "账号不存在" };
   const lifetimeSpend = Number((spendRows as Array<{ total_spent?: unknown }>)[0]?.total_spent ?? 0);
   const totalSpentCents = Number.isFinite(lifetimeSpend) ? Math.max(0, Math.round(lifetimeSpend * 100)) : 0;
-  return { success: true as const, user, transactions, memberHistory, membership: getMembershipStatus(totalSpentCents) };
+  return { success: true as const, user, transactions, memberHistory, membership: getMembershipStatus(totalSpentCents), externalStoreLinks };
 }
 
 export async function getCheckoutMembership() {
