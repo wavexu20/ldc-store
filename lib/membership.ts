@@ -3,6 +3,27 @@ export const MAX_POINTS_DISCOUNT_BPS = 1_000;
 export const POINTS_PER_YUAN = 1;
 export const POINTS_PER_DISCOUNT_YUAN = 200;
 
+export const MEMBERSHIP_TIERS = [
+  { key: "starter", name: "新星会员", minSpendCents: 0 },
+  { key: "silver", name: "银耀会员", minSpendCents: 50_000 },
+  { key: "gold", name: "金耀会员", minSpendCents: 200_000 },
+  { key: "obsidian", name: "黑曜会员", minSpendCents: 500_000 },
+] as const;
+
+export type MembershipTier = (typeof MEMBERSHIP_TIERS)[number];
+
+/** Membership is cosmetic for now: it reflects completed lifetime spending and makes no pricing promise. */
+export function getMembershipStatus(totalSpentCents: number) {
+  const total = Math.max(0, Math.floor(totalSpentCents));
+  const tierIndex = MEMBERSHIP_TIERS.reduce((current, tier, index) => total >= tier.minSpendCents ? index : current, 0);
+  const tier = MEMBERSHIP_TIERS[tierIndex];
+  const nextTier = MEMBERSHIP_TIERS[tierIndex + 1] ?? null;
+  const progress = nextTier
+    ? Math.min(100, Math.max(0, ((total - tier.minSpendCents) / (nextTier.minSpendCents - tier.minSpendCents)) * 100))
+    : 100;
+  return { tier, nextTier, totalSpentCents: total, progress, amountToNextCents: nextTier ? Math.max(0, nextTier.minSpendCents - total) : 0 };
+}
+
 export function createMemberNo(userId: string) {
   return `G3D-${userId.replaceAll("-", "").slice(0, 10).toUpperCase()}`;
 }

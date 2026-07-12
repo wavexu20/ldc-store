@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculatePointsEarned, calculatePointsRedemption, calculateRechargeBonus, splitBalancePayment } from "@/lib/membership";
+import { calculatePointsEarned, calculatePointsRedemption, calculateRechargeBonus, getMembershipStatus, splitBalancePayment } from "@/lib/membership";
 
 describe("membership rules", () => {
   it("grants a one-percent recharge bonus in whole cents", () => {
@@ -20,5 +20,11 @@ describe("membership rules", () => {
   it("spends bonus balance before cash without exceeding either asset", () => {
     expect(splitBalancePayment(10_000, 8_000, 3_000)).toEqual({ bonusSpentCents: 3_000, cashSpentCents: 7_000 });
     expect(splitBalancePayment(12_000, 8_000, 3_000)).toBeNull();
+  });
+
+  it("derives the membership tier and progress from completed lifetime spending", () => {
+    expect(getMembershipStatus(0)).toMatchObject({ tier: { key: "starter" }, nextTier: { key: "silver" }, amountToNextCents: 50_000 });
+    expect(getMembershipStatus(75_000)).toMatchObject({ tier: { key: "silver" }, nextTier: { key: "gold" }, amountToNextCents: 125_000 });
+    expect(getMembershipStatus(500_000)).toMatchObject({ tier: { key: "obsidian" }, nextTier: null, progress: 100 });
   });
 });

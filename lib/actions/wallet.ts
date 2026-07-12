@@ -1,6 +1,6 @@
 "use server";
 
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 import { headers } from "next/headers";
 import { nanoid } from "nanoid";
 import { z } from "zod";
@@ -8,7 +8,7 @@ import { auth } from "@/lib/auth";
 import { db, memberTransactions, rechargeOrders, users, walletTransactions } from "@/lib/db";
 import type { PaymentLaunchData } from "@/lib/payment/types";
 import { createGatewayPayment } from "@/lib/payment/gateway";
-import { calculateRechargeBonus } from "@/lib/membership";
+import { calculateRechargeBonus, getMembershipStatus } from "@/lib/membership";
 import { SECOND_FACTOR_REQUIRED_MESSAGE, requireSecondFactor } from "@/lib/security/two-factor-session";
 
 const rechargeSchema = z.number().int().min(100, "最低充值 1.00").max(10_000_000, "单笔充值不能超过 100,000.00");
@@ -25,7 +25,7 @@ export async function getWalletOverview() {
   if (!session?.user?.id || session.user.id === "admin") {
     return { success: false as const, message: "请先登录" };
   }
-  const [user, transactions, memberHistory] = await Promise.all([
+  const [user, transactions, memberHistory, spendRows] = await Promise.all([
     db.query.users.findFirst({
       where: eq(users.id, session.user.id),
       columns: { balanceCents: true, bonusBalanceCents: true, pointsBalance: true, memberNo: true, email: true, name: true },
@@ -40,9 +40,16 @@ export async function getWalletOverview() {
       orderBy: [desc(memberTransactions.createdAt)],
       limit: 50,
     }),
+    db.all(sql`
+      SELECT COALESCE(SUM(CAST(total_amount AS REAL)), 0) AS total_spent
+      FROM orders
+      WHERE user_id = ${session.user.id} AND status = 'completed'
+    `),
   ]);
   if (!user) return { success: false as const, message: "账号不存在" };
-  return { success: true as const, user, transactions, memberHistory };
+  const lifetimeSpend = Number((spendRows as Array<{ total_spent?: unknown }>)[0]?.total_spent ?? 0);
+  const totalSpentCents = Number.isFinite(lifetimeSpend) ? Math.max(0, Math.round(lifetimeSpend * 100)) : 0;
+  return { success: true as const, user, transactions, memberHistory, membership: getMembershipStatus(totalSpentCents) };
 }
 
 export async function getCheckoutMembership() {

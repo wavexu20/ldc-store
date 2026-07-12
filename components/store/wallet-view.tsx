@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowDownLeft, ArrowUpRight, Coins, CreditCard, Gift, History, Landmark, Loader2, Sparkles, WalletCards } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, Crown, Coins, CreditCard, Gift, History, Landmark, Loader2, Medal, Sparkles, WalletCards } from "lucide-react";
 import { toast } from "sonner";
 import { createRecharge, getWalletOverview } from "@/lib/actions/wallet";
 import { Button } from "@/components/ui/button";
@@ -11,9 +11,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useI18n } from "@/components/i18n-provider";
+import type { MembershipTier } from "@/lib/membership";
 
 type WalletData = Extract<Awaited<ReturnType<typeof getWalletOverview>>, { success: true }>;
 const rechargeOptions = [50, 100, 300, 500];
+const tierVisuals: Record<MembershipTier["key"], { icon: typeof Medal; panel: string; iconWrap: string; progress: string }> = {
+  starter: { icon: Medal, panel: "border-border bg-background/70", iconWrap: "bg-muted text-muted-foreground", progress: "bg-primary" },
+  silver: { icon: Medal, panel: "border-slate-300 bg-slate-50 dark:border-slate-700 dark:bg-slate-900/40", iconWrap: "bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-200", progress: "bg-slate-500" },
+  gold: { icon: Crown, panel: "border-warning/30 bg-warning/10", iconWrap: "bg-warning/15 text-warning-foreground dark:text-warning", progress: "bg-warning" },
+  obsidian: { icon: Crown, panel: "border-primary bg-primary text-primary-foreground", iconWrap: "bg-primary-foreground/15 text-primary-foreground", progress: "bg-primary-foreground" },
+};
 
 export function WalletView({ data }: { data: WalletData }) {
   const { locale, t } = useI18n();
@@ -23,6 +30,9 @@ export function WalletView({ data }: { data: WalletData }) {
   const amountCents = Math.max(0, Math.round(Number(amount || 0) * 100));
   const availableCents = data.user.balanceCents + data.user.bonusBalanceCents;
   const bonusCents = Math.floor(amountCents / 100);
+  const membership = data.membership;
+  const tierVisual = tierVisuals[membership.tier.key];
+  const TierIcon = tierVisual.icon;
 
   function recharge() {
     startTransition(async () => {
@@ -64,7 +74,7 @@ export function WalletView({ data }: { data: WalletData }) {
     <div className="grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
       <Card className="overflow-hidden border-brand/15 bg-gradient-to-br from-brand/10 via-background to-brand/5 shadow-sm">
         <CardHeader className="relative pb-4"><div className="absolute right-0 top-0 size-36 -translate-y-10 translate-x-10 rounded-full bg-brand/15 blur-2xl" /><CardDescription className="relative text-muted-foreground">可用余额</CardDescription><CardTitle className="relative text-5xl font-semibold tracking-tight">¥{(availableCents / 100).toFixed(2)}</CardTitle><p className="relative mt-1 text-xs text-muted-foreground">会员编号 · {data.user.memberNo}</p></CardHeader>
-        <CardContent className="relative grid grid-cols-2 gap-3"><div className="rounded-xl border border-brand/15 bg-card/80 p-3"><p className="text-xs text-muted-foreground">现金余额</p><p className="mt-1 text-lg font-medium">¥{(data.user.balanceCents / 100).toFixed(2)}</p></div><div className="rounded-xl border border-brand/15 bg-card/80 p-3"><p className="text-xs text-muted-foreground">奖励金</p><p className="mt-1 text-lg font-medium">¥{(data.user.bonusBalanceCents / 100).toFixed(2)}</p></div><div className="col-span-2 flex items-center justify-between border-t border-brand/15 pt-4 text-sm"><span className="flex items-center gap-2 text-muted-foreground"><Coins className="size-4 text-warning" />会员积分</span><span className="font-semibold">{data.user.pointsBalance}</span></div></CardContent>
+        <CardContent className="relative grid grid-cols-2 gap-3"><div className="rounded-xl border border-brand/15 bg-card/80 p-3"><p className="text-xs text-muted-foreground">现金余额</p><p className="mt-1 text-lg font-medium">¥{(data.user.balanceCents / 100).toFixed(2)}</p></div><div className="rounded-xl border border-brand/15 bg-card/80 p-3"><p className="text-xs text-muted-foreground">奖励金</p><p className="mt-1 text-lg font-medium">¥{(data.user.bonusBalanceCents / 100).toFixed(2)}</p></div><div className="col-span-2 flex items-center justify-between border-t border-brand/15 pt-4 text-sm"><span className="flex items-center gap-2 text-muted-foreground"><Coins className="size-4 text-warning" />会员积分</span><span className="font-semibold">{data.user.pointsBalance}</span></div><div className={`col-span-2 mt-1 rounded-xl border p-3 ${tierVisual.panel}`}><div className="flex items-center gap-3"><div className={`rounded-lg p-2 ${tierVisual.iconWrap}`}><TierIcon className="size-5" /></div><div className="min-w-0 flex-1"><div className="flex items-baseline justify-between gap-2"><p className="font-semibold">{membership.tier.name}</p><p className="text-xs opacity-70">累计有效消费 ¥{(membership.totalSpentCents / 100).toFixed(2)}</p></div><p className="mt-0.5 text-xs opacity-70">{membership.nextTier ? `距 ${membership.nextTier.name} 还差 ¥${(membership.amountToNextCents / 100).toFixed(2)}` : "已达当前最高会员等级"}</p></div></div><div className="mt-3 h-1.5 overflow-hidden rounded-full bg-black/10 dark:bg-white/15" role="progressbar" aria-label="会员等级进度" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(membership.progress)}><div className={`h-full rounded-full transition-[width] duration-300 ${tierVisual.progress}`} style={{ width: `${membership.progress}%` }} /></div></div></CardContent>
       </Card>
 
       <Card className="border shadow-sm"><CardHeader className="pb-4"><CardTitle className="flex items-center gap-2 text-lg"><WalletCards className="size-5 text-brand" />充值余额</CardTitle><CardDescription>到账后可直接用于商城支付</CardDescription></CardHeader><CardContent className="space-y-5"><div className="space-y-2"><Label htmlFor="amount">{t("topupAmount")}</Label><div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-lg font-medium text-muted-foreground">¥</span><Input id="amount" className="h-12 pl-8 text-lg font-semibold tabular-nums" type="number" min="1" step="0.01" inputMode="decimal" value={amount} onChange={(event) => setAmount(event.target.value)} /></div></div><div className="grid grid-cols-4 gap-2">{rechargeOptions.map((value) => <Button className="cursor-pointer" key={value} type="button" variant={amountCents === value * 100 ? "default" : "outline"} size="sm" onClick={() => setAmount(value.toFixed(2))}>¥{value}</Button>)}</div><div className="flex items-center gap-3 rounded-xl bg-success/10 px-3 py-2.5 text-sm text-success dark:text-success"><div className="rounded-lg bg-success/10 p-1.5"><Gift className="size-4" /></div><span className="flex-1">本次充值赠送 1% 奖励金</span><strong>+¥{(bonusCents / 100).toFixed(2)}</strong></div><Button className="w-full cursor-pointer" size="lg" disabled={pending || amountCents < 100} onClick={recharge}>{pending ? <Loader2 className="animate-spin" /> : <CreditCard />}{t("topupNow")}</Button><p className="text-center text-xs text-muted-foreground">充值时将进行二次验证，保障账户资金安全</p></CardContent></Card>
