@@ -240,7 +240,9 @@ export function ProductForm({
         if (result.success) {
           toast.success(result.message || (isEdit ? "商品更新成功" : "商品创建成功"));
           if (!isEdit && submitDestinationRef.current === "inventory" && result.data?.id) {
-            router.push(`/admin/cards?product=${result.data.id}`);
+            window.location.assign(`/admin/cards?product=${result.data.id}`);
+          } else if (!isEdit) {
+            window.location.assign("/admin/products");
           } else {
             router.push("/admin/products");
           }
