@@ -66,7 +66,7 @@ export function ProductCard({
 
       <div className="relative z-20 flex flex-col pointer-events-none">
       {/* Cover：图像层级更“干净”，内容层与图像层用柔和分割，避免信息挤在同一层导致阅读压力 */}
-      <div className="relative aspect-[16/10] overflow-hidden bg-zinc-950">
+      <div className="relative aspect-video overflow-hidden bg-zinc-950">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_35%,rgba(255,255,255,0.10),transparent_58%)]" />
         {coverImage ? (
           <Image
@@ -126,27 +126,38 @@ export function ProductCard({
       </div>
 
       {/* Content */}
-      <div className="flex flex-1 flex-col gap-2.5 p-4">
+      <div className="flex flex-1 flex-col gap-2 p-3.5">
         {/* Title + Price：把价格提升到首屏层级（电商转化关键），同时保持信息密度不过载 */}
         <div>
-          <h3 className="font-semibold text-base leading-snug line-clamp-2 transition-colors group-hover:text-primary group-focus-within:text-primary">
+          <h3 className="font-semibold text-[15px] leading-snug line-clamp-1 transition-colors group-hover:text-primary group-focus-within:text-primary">
             {name}
           </h3>
         </div>
 
         {/* Description */}
         {description && (
-          <p className="text-sm text-muted-foreground line-clamp-1">{description}</p>
+          <p className="text-xs text-muted-foreground line-clamp-1">{description}</p>
         )}
 
         {/* Footer */}
-        <div className="mt-auto flex items-end justify-between gap-3 border-t pt-3">
+        <div className="mt-auto flex items-center justify-between gap-3 border-t pt-2.5">
           <div className="flex items-baseline gap-1.5 tabular-nums">
             <span className="text-sm font-medium text-muted-foreground">¥</span>
-            <span className="text-xl font-semibold tracking-tight text-foreground">{price}</span>
+            <span className="text-lg font-semibold tracking-tight text-foreground">{price}</span>
             {hasDiscount && <span className="text-xs text-muted-foreground line-through">¥{originalPrice}</span>}
           </div>
-          <div className="flex flex-wrap justify-end gap-1.5 text-xs">
+          {isOutOfStock ? (
+            <div className="pointer-events-auto min-w-0">
+              <RestockRequestInline
+                productId={id}
+                productName={name}
+                initialCount={restockRequestCount}
+                initialRequesters={restockRequesters}
+                maxAvatars={4}
+                showSummary={false}
+              />
+            </div>
+          ) : <div className="flex flex-wrap justify-end gap-1.5 text-xs">
             {salesCount !== undefined && salesCount > 0 && (
               <span className="inline-flex items-center gap-1 text-success tabular-nums">
                 <TrendingUp className="h-3.5 w-3.5" />
@@ -159,20 +170,8 @@ export function ProductCard({
                 {t("onlyLeft", { count: stock })}
               </span>
             )}
-          </div>
+          </div>}
         </div>
-
-        {isOutOfStock && (
-          <div className="pointer-events-auto mt-1 border-t pt-3">
-            <RestockRequestInline
-              productId={id}
-              productName={name}
-              initialCount={restockRequestCount}
-              initialRequesters={restockRequesters}
-              maxAvatars={4}
-            />
-          </div>
-        )}
       </div>
       </div>
 

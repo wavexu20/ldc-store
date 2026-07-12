@@ -23,6 +23,7 @@ interface RestockRequestInlineProps {
   initialCount?: number;
   initialRequesters?: RestockRequestInlineRequester[];
   maxAvatars?: number;
+  showSummary?: boolean;
   className?: string;
   size?: "sm" | "md";
 }
@@ -72,6 +73,7 @@ export function RestockRequestInline({
   initialCount = 0,
   initialRequesters = [],
   maxAvatars = 4,
+  showSummary = true,
   className,
   size = "sm",
 }: RestockRequestInlineProps) {
@@ -139,8 +141,8 @@ export function RestockRequestInline({
   })();
 
   return (
-    <div className={cn("flex items-center justify-between gap-2", className)}>
-      <div className="flex min-w-0 flex-col items-start gap-1">
+    <div className={cn("flex items-center gap-2", showSummary ? "justify-between" : "justify-end", className)}>
+      {showSummary ? <div className="flex min-w-0 flex-col items-start gap-1">
         {count > 0 ? (
           <>
             <div className="flex items-center -space-x-2">
@@ -182,7 +184,7 @@ export function RestockRequestInline({
             {t("noRestockRequests")}
           </div>
         )}
-      </div>
+      </div> : null}
 
       <Button
         type="button"

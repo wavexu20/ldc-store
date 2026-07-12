@@ -77,7 +77,7 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
 
       {/* Products Grid */}
       {localizedProducts.length > 0 ? (
-        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-[repeat(auto-fill,minmax(18rem,22rem))]">
           {localizedProducts.map((product) => (
             <ProductCard
               key={product.id}

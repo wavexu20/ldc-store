@@ -77,8 +77,8 @@ function ProductGridSkeleton() {
           key={i}
           className="flex flex-col overflow-hidden rounded-2xl border bg-card shadow-sm"
         >
-          <Skeleton className="aspect-[16/10] w-full" />
-          <div className="p-4 space-y-3">
+          <Skeleton className="aspect-video w-full" />
+          <div className="space-y-2 p-3.5">
             <div className="flex items-start justify-between gap-3">
               <Skeleton className="h-5 w-3/4" />
               <Skeleton className="h-6 w-16 rounded-full" />
