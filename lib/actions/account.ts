@@ -8,6 +8,7 @@ import { db, emailVerificationTokens, getD1Binding, oauthAccounts, users } from 
 import { isPlaceholderEmail, normalizeEmail } from "@/lib/email-address";
 import { findValidVerificationToken, hashVerificationCode, issueEmailVerification } from "@/lib/email/verification";
 import { avatarKeyFromUrl, avatarUrlForKey, getAvatarBucket } from "@/lib/avatar-storage";
+import { SECOND_FACTOR_REQUIRED_MESSAGE, requireSecondFactor } from "@/lib/security/two-factor-session";
 
 const emailSchema = z.string().trim().email("请输入有效的邮箱地址").transform(normalizeEmail)
   .refine((email) => !isPlaceholderEmail(email), "请输入可接收邮件的真实邮箱");
@@ -90,6 +91,11 @@ export async function getAccountEmailStatus() {
 export async function sendBindingEmail(email: string) {
   const userId = await currentUserId();
   if (!userId) return { success: false, message: "请先登录" };
+  try {
+    await requireSecondFactor(userId);
+  } catch (error) {
+    return { success: false, message: error instanceof Error ? error.message : SECOND_FACTOR_REQUIRED_MESSAGE, requiresSecondFactor: true };
+  }
   const parsed = emailSchema.safeParse(email);
   if (!parsed.success) return { success: false, message: parsed.error.issues[0].message };
   const user = await db.query.users.findFirst({ where: eq(users.id, userId), columns: { name: true } });
@@ -105,6 +111,11 @@ export async function sendBindingEmail(email: string) {
 export async function verifyBindingEmail(input: { email: string; code: string }) {
   const userId = await currentUserId();
   if (!userId) return { success: false, message: "请先登录" };
+  try {
+    await requireSecondFactor(userId);
+  } catch (error) {
+    return { success: false, message: error instanceof Error ? error.message : SECOND_FACTOR_REQUIRED_MESSAGE, requiresSecondFactor: true };
+  }
   const email = emailSchema.safeParse(input.email);
   const code = z.string().regex(/^\d{6}$/, "请输入 6 位数字验证码").safeParse(input.code);
   if (!email.success) return { success: false, message: email.error.issues[0].message };

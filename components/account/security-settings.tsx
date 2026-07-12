@@ -48,6 +48,10 @@ export function SecuritySettings({ overview }: { overview: SecurityOverview }) {
     startTransition(async () => {
       const result = await setAccountPassword({ currentPassword, password: newPassword });
       if (!result.success) {
+        if (result.requiresSecondFactor) {
+          router.push("/account/verify-2fa?callbackUrl=%2Faccount%2Fsecurity");
+          return;
+        }
         toast.error(result.message);
         return;
       }
@@ -64,6 +68,10 @@ export function SecuritySettings({ overview }: { overview: SecurityOverview }) {
     startTransition(async () => {
       const result = await beginTwoFactorSetup();
       if (!result.success || !result.secret || !result.otpauthUrl) {
+        if (result.requiresSecondFactor) {
+          router.push("/account/verify-2fa?callbackUrl=%2Faccount%2Fsecurity");
+          return;
+        }
         toast.error(result.message);
         return;
       }
@@ -76,6 +84,10 @@ export function SecuritySettings({ overview }: { overview: SecurityOverview }) {
     startTransition(async () => {
       const result = await enableTwoFactor({ secret: setup.secret, code: twoFactorCode });
       if (!result.success) {
+        if (result.requiresSecondFactor) {
+          router.push("/account/verify-2fa?callbackUrl=%2Faccount%2Fsecurity");
+          return;
+        }
         toast.error(result.message);
         return;
       }

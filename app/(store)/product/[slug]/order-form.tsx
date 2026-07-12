@@ -124,6 +124,10 @@ export function OrderForm({
           router.push(`/order/result?out_trade_no=${result.orderNo}`);
         }
       } else {
+        if (result.requiresSecondFactor) {
+          router.push(`/account/verify-2fa?callbackUrl=${encodeURIComponent(window.location.pathname)}`);
+          return;
+        }
         toast.error(t("orderFailed"), {
           description: result.message,
         });

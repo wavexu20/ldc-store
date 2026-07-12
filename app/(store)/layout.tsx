@@ -12,7 +12,6 @@ import { auth } from "@/lib/auth";
 import { db, oauthAccounts, users } from "@/lib/db";
 import { eq } from "drizzle-orm";
 import { hasVerifiedRealEmail } from "@/lib/email-address";
-import { hasSecondFactorGrant, requiresSecondFactor } from "@/lib/security/two-factor-session";
 
 // 强制动态渲染，避免构建时查询数据库
 export const dynamic = "force-dynamic";
@@ -46,7 +45,6 @@ export default async function StoreLayout({
       db.query.oauthAccounts.findFirst({ where: eq(oauthAccounts.userId, session.user.id), columns: { id: true } }),
     ]);
     if (oauth && user && !hasVerifiedRealEmail(user)) redirect("/account/complete-profile");
-    if (await requiresSecondFactor(session.user.id) && !(await hasSecondFactorGrant(session.user.id))) redirect("/account/verify-2fa");
   }
 
   return (

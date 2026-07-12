@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 
 const GRANT_COOKIE = "g3d_2fa_grant";
 const MAX_AGE_SECONDS = 12 * 60 * 60;
+export const SECOND_FACTOR_REQUIRED_MESSAGE = "请先完成二次验证";
 
 function base64Url(value: Uint8Array) {
   let binary = "";
@@ -82,8 +83,13 @@ export async function requiresSecondFactor(userId: string) {
   return Boolean(user?.twoFactorEnabledAt);
 }
 
+/** True when this account has 2FA enabled but the current browser session has not passed it yet. */
+export async function isSecondFactorVerificationRequired(userId: string) {
+  return (await requiresSecondFactor(userId)) && !(await hasSecondFactorGrant(userId));
+}
+
 export async function requireSecondFactor(userId: string) {
-  if (await requiresSecondFactor(userId) && !(await hasSecondFactorGrant(userId))) {
-    throw new Error("请先完成二次验证");
+  if (await isSecondFactorVerificationRequired(userId)) {
+    throw new Error(SECOND_FACTOR_REQUIRED_MESSAGE);
   }
 }

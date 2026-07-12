@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { ArrowDownLeft, ArrowUpRight, Coins, Gift, Loader2, WalletCards } from "lucide-react";
 import { toast } from "sonner";
 import { createRecharge, getWalletOverview } from "@/lib/actions/wallet";
@@ -16,12 +17,17 @@ export function WalletView({ data }: { data: WalletData }) {
   const { locale, t } = useI18n();
   const [amount, setAmount] = useState("10.00");
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
   const amountCents = Math.max(0, Math.round(Number(amount || 0) * 100));
 
   function recharge() {
     startTransition(async () => {
       const result = await createRecharge(amountCents);
       if (!result.success || !result.paymentForm) {
+        if (result.requiresSecondFactor) {
+          router.push("/account/verify-2fa?callbackUrl=%2Faccount%2Fwallet");
+          return;
+        }
         toast.error(result.message);
         return;
       }

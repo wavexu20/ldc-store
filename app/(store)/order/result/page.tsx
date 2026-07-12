@@ -19,6 +19,7 @@ import {
   RefreshCw,
   XCircle,
   ShoppingBag,
+  ShieldCheck,
 } from "lucide-react";
 import { formatLocalTime } from "@/lib/time";
 import { cn } from "@/lib/utils";
@@ -38,6 +39,7 @@ interface OrderData {
   createdAt: Date;
   paidAt: Date | null;
   cards: string[];
+  deliveryLocked?: boolean;
 }
 
 // 轮询配置
@@ -577,6 +579,13 @@ export default function OrderResultPage({ searchParams }: OrderResultPageProps) 
                 {t("preparingDeliveryHint")}
               </div>
             )
+          ) : null}
+
+          {order.deliveryLocked ? (
+            <div className="flex flex-col gap-3 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm dark:border-amber-900 dark:bg-amber-950/40 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-2 font-medium text-amber-900 dark:text-amber-100"><ShieldCheck className="size-4 shrink-0" />卡密已受二次验证保护</div>
+              <Button asChild size="sm"><Link href={`/account/verify-2fa?callbackUrl=${encodeURIComponent(`/order/result?out_trade_no=${order.orderNo}`)}`}>验证后查看</Link></Button>
+            </div>
           ) : null}
 
           {/* Actions */}

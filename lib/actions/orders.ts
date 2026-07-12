@@ -37,7 +37,7 @@ import { logger, getRequestIdFromHeaders } from "@/lib/logger";
 import { parseWalletAmount } from "@/lib/money";
 import { calculatePointsEarned, calculatePointsRedemption, splitBalancePayment } from "@/lib/membership";
 import { awardOrderPoints, reverseExternalOrderPoints } from "@/lib/member-service";
-import { requireSecondFactor } from "@/lib/security/two-factor-session";
+import { isSecondFactorVerificationRequired, SECOND_FACTOR_REQUIRED_MESSAGE, requireSecondFactor } from "@/lib/security/two-factor-session";
 import {
   sendNewOrderNotification,
   sendPaymentSuccessNotification,
@@ -73,6 +73,7 @@ export interface CreateOrderResult {
   message: string;
   orderNo?: string;
   paymentForm?: PaymentLaunchData;
+  requiresSecondFactor?: boolean;
 }
 
 /**
@@ -115,7 +116,7 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
   try {
     await requireSecondFactor(userId);
   } catch (error) {
-    return { success: false, message: error instanceof Error ? error.message : "请先完成二次验证" };
+    return { success: false, message: error instanceof Error ? error.message : SECOND_FACTOR_REQUIRED_MESSAGE, requiresSecondFactor: true };
   }
 
   const { productId, quantity, paymentMethod, usePoints } = validationResult.data;
@@ -560,6 +561,8 @@ export async function getUserOrders() {
       return { success: false, message: "请先登录", data: [] };
     }
 
+    const deliveryLocked = await isSecondFactorVerificationRequired(user.id);
+
     const userOrders = await db.query.orders.findMany({
       where: eq(orders.userId, user.id),
       with: {
@@ -590,7 +593,8 @@ export async function getUserOrders() {
         paymentMethod: order.paymentMethod,
         createdAt: order.createdAt,
         paidAt: order.paidAt,
-        cards: cardsToShow.map((c) => c.content),
+        cards: deliveryLocked ? [] : cardsToShow.map((c) => c.content),
+        deliveryLocked: deliveryLocked && cardsToShow.length > 0,
       };
     });
 
@@ -624,6 +628,7 @@ export async function getOrderByNo(orderNo: string) {
     }
 
     const userId = user.id;
+    const deliveryLocked = await isSecondFactorVerificationRequired(userId);
 
     function toCents(value: string): number | null {
       const amount = parseWalletAmount(value);
@@ -724,7 +729,8 @@ export async function getOrderByNo(orderNo: string) {
         paymentMethod: order.paymentMethod,
         createdAt: order.createdAt,
         paidAt: order.paidAt,
-        cards: cardsToShow.map((c) => c.content),
+        cards: deliveryLocked ? [] : cardsToShow.map((c) => c.content),
+        deliveryLocked: deliveryLocked && cardsToShow.length > 0,
       },
     };
   } catch (error) {
@@ -820,7 +826,7 @@ export async function getOrderReceiptByNo(
 export async function requestRefund(
   orderNo: string,
   reason: string
-): Promise<{ success: boolean; message: string }> {
+): Promise<{ success: boolean; message: string; requiresSecondFactor?: boolean }> {
   const requestId = await getRequestIdFromHeaders();
   const log = logger.child({ requestId, action: "requestRefund", orderNo });
 
@@ -836,6 +842,12 @@ export async function requestRefund(
     if (!user?.id || user.id === "admin") {
       log.warn("未登录用户尝试申请退款");
       return { success: false, message: "请先登录" };
+    }
+
+    try {
+      await requireSecondFactor(user.id);
+    } catch (error) {
+      return { success: false, message: error instanceof Error ? error.message : SECOND_FACTOR_REQUIRED_MESSAGE, requiresSecondFactor: true };
     }
 
     if (!reason || reason.trim().length < 5) {

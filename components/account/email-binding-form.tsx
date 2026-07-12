@@ -22,7 +22,16 @@ export function EmailBindingForm({ callbackUrl = "/" }: { callbackUrl?: string }
   function send() {
     startTransition(async () => {
       const result = await sendBindingEmail(email);
-      result.success ? (setSent(true), toast.success(result.message)) : toast.error(result.message);
+      if (!result.success) {
+        if (result.requiresSecondFactor) {
+          router.push(`/account/verify-2fa?callbackUrl=${encodeURIComponent(window.location.pathname)}`);
+          return;
+        }
+        toast.error(result.message);
+        return;
+      }
+      setSent(true);
+      toast.success(result.message);
     });
   }
 
@@ -30,6 +39,10 @@ export function EmailBindingForm({ callbackUrl = "/" }: { callbackUrl?: string }
     startTransition(async () => {
       const result = await verifyBindingEmail({ email, code });
       if (!result.success) {
+        if (result.requiresSecondFactor) {
+          router.push(`/account/verify-2fa?callbackUrl=${encodeURIComponent(window.location.pathname)}`);
+          return;
+        }
         toast.error(result.message);
         return;
       }

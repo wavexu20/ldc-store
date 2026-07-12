@@ -9,7 +9,7 @@ import { db, memberTransactions, rechargeOrders, users, walletTransactions } fro
 import type { PaymentLaunchData } from "@/lib/payment/types";
 import { createGatewayPayment } from "@/lib/payment/gateway";
 import { calculateRechargeBonus } from "@/lib/membership";
-import { requireSecondFactor } from "@/lib/security/two-factor-session";
+import { SECOND_FACTOR_REQUIRED_MESSAGE, requireSecondFactor } from "@/lib/security/two-factor-session";
 
 const rechargeSchema = z.number().int().min(100, "最低充值 1.00").max(10_000_000, "单笔充值不能超过 100,000.00");
 
@@ -59,13 +59,14 @@ export async function createRecharge(amountCents: number): Promise<{
   message: string;
   rechargeNo?: string;
   paymentForm?: PaymentLaunchData;
+  requiresSecondFactor?: boolean;
 }> {
   const session = await auth();
   if (!session?.user?.id || session.user.id === "admin") return { success: false, message: "请先登录" };
   try {
     await requireSecondFactor(session.user.id);
   } catch (error) {
-    return { success: false, message: error instanceof Error ? error.message : "请先完成二次验证" };
+    return { success: false, message: error instanceof Error ? error.message : SECOND_FACTOR_REQUIRED_MESSAGE, requiresSecondFactor: true };
   }
   const parsed = rechargeSchema.safeParse(amountCents);
   if (!parsed.success) return { success: false, message: parsed.error.issues[0].message };

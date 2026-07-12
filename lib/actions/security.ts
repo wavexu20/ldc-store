@@ -10,7 +10,7 @@ import { sendPasswordResetEmail } from "@/lib/email/cloudflare";
 import { hashVerificationCode } from "@/lib/email/verification";
 import { passwordContainsIdentity, strongPasswordSchema } from "@/lib/validations/password";
 import { buildOtpAuthUrl, decryptTotpSecret, encryptTotpSecret, generateRecoveryCodes, generateTotpSecret, hashRecoveryCode, verifyTotp } from "@/lib/security/totp";
-import { clearSecondFactorGrant, grantSecondFactor, requireSecondFactor } from "@/lib/security/two-factor-session";
+import { clearSecondFactorGrant, grantSecondFactor, SECOND_FACTOR_REQUIRED_MESSAGE, requireSecondFactor } from "@/lib/security/two-factor-session";
 
 async function requireUser() {
   const session = await auth();
@@ -47,7 +47,11 @@ export async function getSecurityOverview() {
 
 export async function setAccountPassword(input: { currentPassword?: string; password: string }) {
   const user = await requireUser();
-  await requireSecondFactor(user.id);
+  try {
+    await requireSecondFactor(user.id);
+  } catch (error) {
+    return { success: false, message: error instanceof Error ? error.message : SECOND_FACTOR_REQUIRED_MESSAGE, requiresSecondFactor: true };
+  }
   const parsed = passwordSchema.safeParse({ password: input.password, email: user.email, name: user.name || "" });
   if (!parsed.success) return { success: false, message: parsed.error.issues[0].message };
   if (user.passwordHash && (!input.currentPassword || !(await compare(input.currentPassword, user.passwordHash)))) {
@@ -94,6 +98,13 @@ export async function resetPasswordWithCode(input: { email: string; code: string
 export async function beginTwoFactorSetup() {
   const user = await requireUser();
   if (!hasVerifiedRealEmail(user)) return { success: false, message: "请先绑定并验证真实邮箱" };
+  if (user.twoFactorEnabledAt) {
+    try {
+      await requireSecondFactor(user.id);
+    } catch (error) {
+      return { success: false, message: error instanceof Error ? error.message : SECOND_FACTOR_REQUIRED_MESSAGE, requiresSecondFactor: true };
+    }
+  }
   const secret = generateTotpSecret();
   return { success: true, secret, otpauthUrl: buildOtpAuthUrl(secret, user.email) };
 }
@@ -101,6 +112,13 @@ export async function beginTwoFactorSetup() {
 export async function enableTwoFactor(input: { secret: string; code: string }) {
   const user = await requireUser();
   if (!hasVerifiedRealEmail(user)) return { success: false, message: "请先绑定并验证真实邮箱" };
+  if (user.twoFactorEnabledAt) {
+    try {
+      await requireSecondFactor(user.id);
+    } catch (error) {
+      return { success: false, message: error instanceof Error ? error.message : SECOND_FACTOR_REQUIRED_MESSAGE, requiresSecondFactor: true };
+    }
+  }
   const code = codeSchema.safeParse(input.code);
   if (!code.success) return { success: false, message: code.error.issues[0].message };
   try {
