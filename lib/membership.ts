@@ -4,7 +4,7 @@ export const POINTS_PER_YUAN = 1;
 export const POINTS_PER_DISCOUNT_YUAN = 200;
 
 export const MEMBERSHIP_TIERS = [
-  { key: "starter", name: "新耀会员", minSpendCents: 0 },
+  { key: "starter", name: "黑铁会员", minSpendCents: 0 },
   { key: "silver", name: "银耀会员", minSpendCents: 50_000 },
   { key: "gold", name: "金耀会员", minSpendCents: 200_000 },
   { key: "obsidian", name: "黑曜会员", minSpendCents: 500_000 },
