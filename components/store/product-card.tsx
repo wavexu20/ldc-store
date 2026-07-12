@@ -66,14 +66,15 @@ export function ProductCard({
 
       <div className="relative z-20 flex flex-col pointer-events-none">
       {/* Cover：图像层级更“干净”，内容层与图像层用柔和分割，避免信息挤在同一层导致阅读压力 */}
-      <div className="relative aspect-video overflow-hidden bg-gradient-to-br from-muted/40 via-muted/20 to-muted/40">
+      <div className="relative aspect-[16/10] overflow-hidden bg-zinc-950">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_35%,rgba(255,255,255,0.10),transparent_58%)]" />
         {coverImage ? (
           <Image
             src={coverImage}
             alt={name}
             fill
             sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-            className="object-contain transition-transform duration-500 motion-safe:group-hover:scale-[1.02] motion-safe:group-focus-within:scale-[1.02] motion-reduce:transform-none"
+            className="object-contain p-2 transition-transform duration-300 motion-safe:group-hover:scale-[1.015] motion-safe:group-focus-within:scale-[1.015] motion-reduce:transform-none"
             unoptimized={coverImage.startsWith("/api/product-images/")}
           />
         ) : (
@@ -86,12 +87,12 @@ export function ProductCard({
         )}
 
         {/* Hover/focus overlay：给触屏/键盘用户“同等反馈”，避免仅依赖 hover */}
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-background/55 via-transparent to-transparent opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100" />
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/35 via-transparent to-black/10" />
 
         {/* Badges overlay */}
         <div className="absolute left-3 top-3 flex flex-col gap-1.5">
           {isOutOfStock && (
-            <Badge variant="secondary" className="border bg-background/90 text-xs shadow-sm backdrop-blur-sm">
+            <Badge variant="secondary" className="border-white/15 bg-black/70 text-xs text-white shadow-sm backdrop-blur-sm">
               {t("soldOut")}
             </Badge>
           )}
@@ -111,37 +112,26 @@ export function ProductCard({
         {/* Category tag */}
         {category && (
           <div className="absolute bottom-3 right-3">
-            <Badge variant="secondary" className="bg-background/80 backdrop-blur-sm text-xs">
+            <Badge variant="secondary" className="border-white/15 bg-black/65 text-xs text-white backdrop-blur-sm">
               {category.name}
             </Badge>
           </div>
         )}
 
         {/* Hover affordance：明确这是可点的卡片（不做强 CTA，避免喧宾夺主） */}
-        <div className="pointer-events-none absolute right-3 top-3 flex items-center gap-1 rounded-full border border-border/40 bg-background/70 px-2 py-1 text-xs text-muted-foreground opacity-0 backdrop-blur-sm transition-all duration-200 group-hover:opacity-100 group-focus-within:opacity-100">
+        <div className="pointer-events-none absolute right-3 top-3 flex items-center gap-1 rounded-full border border-white/15 bg-black/60 px-2 py-1 text-xs text-white/80 opacity-0 backdrop-blur-sm transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100">
           <span>{t("view")}</span>
           <ArrowUpRight className="h-3.5 w-3.5 transition-transform duration-200 group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-focus-within:-translate-y-0.5 group-focus-within:translate-x-0.5" />
         </div>
       </div>
 
       {/* Content */}
-      <div className="flex flex-1 flex-col gap-2 p-4">
+      <div className="flex flex-1 flex-col gap-2.5 p-4">
         {/* Title + Price：把价格提升到首屏层级（电商转化关键），同时保持信息密度不过载 */}
-        <div className="flex items-start justify-between gap-3">
-          <h3 className="min-w-0 flex-1 font-semibold text-base leading-snug line-clamp-2 transition-colors group-hover:text-primary group-focus-within:text-primary">
+        <div>
+          <h3 className="font-semibold text-base leading-snug line-clamp-2 transition-colors group-hover:text-primary group-focus-within:text-primary">
             {name}
           </h3>
-          <div className="shrink-0 text-right">
-            <div className="inline-flex items-baseline gap-1 rounded-full border border-border/50 bg-background/70 px-2.5 py-1 text-xs font-semibold tabular-nums backdrop-blur-sm">
-              <span className="text-sm font-bold text-foreground">{price}</span>
-              <span className="text-xs font-medium text-muted-foreground">CNY</span>
-            </div>
-            {hasDiscount && (
-              <div className="mt-1 text-[11px] tabular-nums text-muted-foreground line-through">
-                ¥{originalPrice}
-              </div>
-            )}
-          </div>
         </div>
 
         {/* Description */}
@@ -150,19 +140,26 @@ export function ProductCard({
         )}
 
         {/* Footer */}
-        <div className="mt-auto flex flex-wrap items-center gap-x-2 gap-y-1 pt-2 text-xs">
-          {salesCount !== undefined && salesCount > 0 && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-success/10 px-2 py-1 text-success tabular-nums">
-              <TrendingUp className="h-3.5 w-3.5" />
-              {t("sold", { count: salesCount })}
-            </span>
-          )}
-          {!isOutOfStock && stock > 0 && stock <= 10 && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-warning/10 px-2 py-1 text-warning-foreground tabular-nums dark:text-warning">
-              <Sparkles className="h-3.5 w-3.5" />
-              {t("onlyLeft", { count: stock })}
-            </span>
-          )}
+        <div className="mt-auto flex items-end justify-between gap-3 border-t pt-3">
+          <div className="flex items-baseline gap-1.5 tabular-nums">
+            <span className="text-sm font-medium text-muted-foreground">¥</span>
+            <span className="text-xl font-semibold tracking-tight text-foreground">{price}</span>
+            {hasDiscount && <span className="text-xs text-muted-foreground line-through">¥{originalPrice}</span>}
+          </div>
+          <div className="flex flex-wrap justify-end gap-1.5 text-xs">
+            {salesCount !== undefined && salesCount > 0 && (
+              <span className="inline-flex items-center gap-1 text-success tabular-nums">
+                <TrendingUp className="h-3.5 w-3.5" />
+                {t("sold", { count: salesCount })}
+              </span>
+            )}
+            {!isOutOfStock && stock > 0 && stock <= 10 && (
+              <span className="inline-flex items-center gap-1 text-warning-foreground tabular-nums dark:text-warning">
+                <Sparkles className="h-3.5 w-3.5" />
+                {t("onlyLeft", { count: stock })}
+              </span>
+            )}
+          </div>
         </div>
 
         {isOutOfStock && (
