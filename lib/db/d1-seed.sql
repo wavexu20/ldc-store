@@ -4,6 +4,7 @@ VALUES
   ('00000000-0000-4000-8000-000000000001', '游戏账号', 'game-accounts', '各类游戏账号', '🎮', 1, 1, unixepoch(), unixepoch()),
   ('00000000-0000-4000-8000-000000000002', '会员充值', 'membership', '各平台会员充值卡', '💎', 2, 1, unixepoch(), unixepoch()),
   ('00000000-0000-4000-8000-000000000003', '软件授权', 'software', '正版软件授权码', '💻', 3, 1, unixepoch(), unixepoch()),
+  ('00000000-0000-4000-8000-000000000005', 'AI', 'ai', 'AI 工具、订阅与服务', '✨', 4, 1, unixepoch(), unixepoch()),
   ('00000000-0000-4000-8000-000000000004', '其他', 'others', '其他虚拟商品', '📦', 99, 1, unixepoch(), unixepoch());
 
 INSERT OR IGNORE INTO announcements

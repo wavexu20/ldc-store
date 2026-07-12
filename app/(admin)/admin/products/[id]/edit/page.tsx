@@ -57,6 +57,7 @@ export default function EditProductPage({ params }: EditProductPageProps) {
             ? parseFloat(product.originalPrice)
             : undefined,
           coverImage: product.coverImage || "",
+          images: Array.from(new Set([product.coverImage, ...(product.images ?? [])].filter((image): image is string => Boolean(image)))),
           isActive: product.isActive,
           isFeatured: product.isFeatured,
           sortOrder: product.sortOrder,

@@ -214,6 +214,18 @@ export type ProductTranslations = Partial<
   Record<"en" | "ko" | "zh" | "ru" | "de" | "id" | "hi", ProductTranslation>
 >;
 
+export type ProductPreviewPayload = {
+  name: string;
+  description: string;
+  content: string;
+  price: number;
+  originalPrice: number | null;
+  coverImage: string | null;
+  images: string[];
+  isFeatured: boolean;
+  categoryName: string | null;
+};
+
 export const products = sqliteTable("products", {
   id: id("id"),
   categoryId: text("category_id").references(() => categories.id, { onDelete: "set null" }),
@@ -239,6 +251,16 @@ export const products = sqliteTable("products", {
   index("products_is_active_idx").on(table.isActive),
   index("products_is_featured_idx").on(table.isFeatured),
   index("products_sort_order_idx").on(table.sortOrder),
+]);
+
+export const productPreviews = sqliteTable("product_previews", {
+  id: id("id"),
+  token: text("token").notNull().unique(),
+  payload: text("payload", { mode: "json" }).$type<ProductPreviewPayload>().notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: createdAt(),
+}, (table) => [
+  index("product_previews_expires_idx").on(table.expiresAt),
 ]);
 
 // ============================================

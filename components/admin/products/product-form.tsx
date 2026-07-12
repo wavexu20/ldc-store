@@ -1,12 +1,15 @@
 "use client";
 
-import { useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { productSchema, type ProductInput } from "@/lib/validations/product";
 import { localeMeta, locales } from "@/lib/i18n";
 import { type AdminCategoryOption } from "@/lib/actions/categories";
+import { deleteProductImage, uploadProductImages } from "@/lib/actions/product-images";
+import { createProductPreview } from "@/lib/actions/product-previews";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -23,7 +26,7 @@ import {
 } from "@/components/ui/form";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { toast } from "sonner";
-import { Loader2, ArrowLeft, Package, Save, Copy, Languages } from "lucide-react";
+import { Loader2, ArrowLeft, Package, Save, Copy, Languages, Eye, ImagePlus, Link2, Trash2, Upload } from "lucide-react";
 import Link from "next/link";
 
 interface ProductFormProps {
@@ -43,6 +46,7 @@ const defaultValues: ProductInput = {
   price: 0,
   originalPrice: undefined,
   coverImage: "",
+  images: [],
   isActive: true,
   isFeatured: false,
   sortOrder: 0,
@@ -60,6 +64,11 @@ export function ProductForm({
   templateInfo = null,
 }: ProductFormProps) {
   const [isPending, startTransition] = useTransition();
+  const [isImagePending, startImageTransition] = useTransition();
+  const [isPreviewPending, startPreviewTransition] = useTransition();
+  const [externalImageUrl, setExternalImageUrl] = useState("");
+  const [previewUrl, setPreviewUrl] = useState("");
+  const imageInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
 
   const form = useForm<ProductInput>({
@@ -68,12 +77,70 @@ export function ProductForm({
   });
 
   const watchName = form.watch("name");
+  const images = form.watch("images") ?? [];
   const generateSlug = () => {
     const slug = watchName
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-|-$/g, "");
     form.setValue("slug", slug || `product-${Date.now()}`);
+  };
+
+  const updateImages = (nextImages: string[]) => {
+    const uniqueImages = Array.from(new Set(nextImages.filter(Boolean))).slice(0, 12);
+    form.setValue("images", uniqueImages, { shouldDirty: true, shouldValidate: true });
+    const currentCover = form.getValues("coverImage") || "";
+    if (!currentCover || !uniqueImages.includes(currentCover)) {
+      form.setValue("coverImage", uniqueImages[0] || "", { shouldDirty: true, shouldValidate: true });
+    }
+  };
+
+  const addExternalImage = () => {
+    const candidate = externalImageUrl.trim();
+    try {
+      const url = new URL(candidate);
+      if (url.protocol !== "https:" && url.protocol !== "http:") throw new Error();
+      updateImages([...images, url.toString()]);
+      setExternalImageUrl("");
+    } catch {
+      toast.error("请输入有效的图片链接");
+    }
+  };
+
+  const uploadImages = (files: FileList | null) => {
+    if (!files?.length) return;
+    const formData = new FormData();
+    Array.from(files).forEach((file) => formData.append("images", file));
+    startImageTransition(async () => {
+      const result = await uploadProductImages(formData);
+      if (!result.success || !result.urls) {
+        toast.error(result.message);
+        return;
+      }
+      updateImages([...images, ...result.urls]);
+      toast.success(result.message);
+    });
+  };
+
+  const removeImage = (url: string) => {
+    const nextImages = images.filter((image) => image !== url);
+    updateImages(nextImages);
+    startImageTransition(async () => {
+      const result = await deleteProductImage(url);
+      if (!result.success) toast.error(result.message);
+    });
+  };
+
+  const createPreview = () => {
+    startPreviewTransition(async () => {
+      const result = await createProductPreview(form.getValues());
+      if (!result.success || !result.url) {
+        toast.error(result.message);
+        return;
+      }
+      setPreviewUrl(result.url);
+      toast.success("临时预览链接已生成，有效期 24 小时");
+    });
   };
 
   const handleSubmit = (values: ProductInput) => {
@@ -413,27 +480,15 @@ export function ProductForm({
 
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-base">商品图片</CardTitle>
+                  <CardTitle className="flex items-center gap-2 text-base"><ImagePlus className="size-4" />商品图片</CardTitle>
                 </CardHeader>
-                <CardContent>
-                  <FormField
-                    control={form.control}
-                    name="coverImage"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>封面图片 URL</FormLabel>
-                        <FormControl>
-                          <Input
-                            placeholder="https://example.com/image.jpg"
-                            {...field}
-                            value={field.value || ""}
-                          />
-                        </FormControl>
-                        <FormDescription>支持外部图片链接</FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                <CardContent className="space-y-4">
+                  <input ref={imageInputRef} type="file" accept="image/jpeg,image/png,image/webp" multiple className="sr-only" onChange={(event) => { uploadImages(event.target.files); event.target.value = ""; }} />
+                  <div className="flex flex-wrap gap-2"><Button type="button" variant="outline" disabled={isImagePending || images.length >= 12} onClick={() => imageInputRef.current?.click()}>{isImagePending ? <><Loader2 className="animate-spin" />上传中...</> : <><Upload />上传图片</>}</Button><span className="self-center text-xs text-muted-foreground">JPG、PNG、WebP；单张最大 2 MB，最多 12 张</span></div>
+                  <div className="flex gap-2"><Input value={externalImageUrl} onChange={(event) => setExternalImageUrl(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addExternalImage(); } }} placeholder="粘贴外部图片链接（https://...）" /><Button type="button" variant="outline" disabled={!externalImageUrl.trim() || images.length >= 12} onClick={addExternalImage}><Link2 />添加</Button></div>
+                  {images.length > 0 ? <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">{images.map((url, index) => { const isCover = form.getValues("coverImage") === url; return <div className="group relative aspect-square overflow-hidden rounded-lg border bg-muted/30" key={url}><Image src={url} alt={`商品图片 ${index + 1}`} fill sizes="(max-width: 640px) 45vw, 160px" className="object-cover" /><div className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-1 bg-background/90 p-1.5 backdrop-blur-sm"><Button type="button" size="sm" variant={isCover ? "default" : "secondary"} className="h-7 px-2 text-[11px]" onClick={() => form.setValue("coverImage", url, { shouldDirty: true })}>{isCover ? "封面" : "设为封面"}</Button><Button type="button" size="icon" variant="ghost" className="size-7 text-destructive hover:text-destructive" disabled={isImagePending} onClick={() => removeImage(url)} aria-label={`删除图片 ${index + 1}`}><Trash2 className="size-3.5" /></Button></div></div>; })}</div> : <div className="rounded-lg border border-dashed p-5 text-center text-sm text-muted-foreground">上传本地图片，或添加外部图片链接。</div>}
+                  <FormField control={form.control} name="coverImage" render={({ field }) => <input type="hidden" {...field} value={field.value || ""} />} />
+                  <FormField control={form.control} name="images" render={({ field }) => <input type="hidden" value={(field.value ?? []).join(",")} readOnly />} />
                 </CardContent>
               </Card>
             </div>
@@ -515,6 +570,10 @@ export function ProductForm({
             </div>
 
             <div className="space-y-6">
+              <Card>
+                <CardHeader><CardTitle className="flex items-center gap-2 text-base"><Eye className="size-4" />临时预览</CardTitle></CardHeader>
+                <CardContent className="space-y-3"><p className="text-sm text-muted-foreground">保存前可生成当前表单的只读预览链接，有效期 24 小时。</p><Button type="button" variant="outline" className="w-full" disabled={isPreviewPending} onClick={createPreview}>{isPreviewPending ? <><Loader2 className="animate-spin" />生成中...</> : <><Eye />生成预览链接</>}</Button>{previewUrl ? <div className="space-y-2 rounded-lg border bg-muted/20 p-2"><Input readOnly value={previewUrl} className="h-8 text-xs" /><div className="grid grid-cols-2 gap-2"><Button type="button" size="sm" variant="secondary" onClick={() => navigator.clipboard.writeText(previewUrl).then(() => toast.success("预览链接已复制"))}><Copy />复制</Button><Button asChild type="button" size="sm" variant="secondary"><a href={previewUrl} target="_blank" rel="noreferrer"><Eye />打开</a></Button></div></div> : null}</CardContent>
+              </Card>
               <Button
                 type="submit"
                 className="w-full gap-2"
