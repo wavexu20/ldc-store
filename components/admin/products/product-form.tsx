@@ -8,7 +8,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { productSchema, type ProductInput } from "@/lib/validations/product";
 import { localeMeta, locales } from "@/lib/i18n";
 import { type AdminCategoryOption } from "@/lib/actions/categories";
-import { deleteProductImage, uploadProductImages } from "@/lib/actions/product-images";
+import { deleteProductImage } from "@/lib/actions/product-images";
 import { createProductPreview } from "@/lib/actions/product-previews";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -141,16 +141,40 @@ export function ProductForm({
 
   const uploadImages = (files: FileList | null) => {
     if (!files?.length) return;
+    const selectedFiles = Array.from(files);
+    if (selectedFiles.length > 6) {
+      toast.error("单次最多上传 6 张图片");
+      return;
+    }
+    if (images.length + selectedFiles.length > 12) {
+      toast.error(`最多上传 12 张图片，当前还可上传 ${12 - images.length} 张`);
+      return;
+    }
+    const invalidType = selectedFiles.find((file) => !["image/jpeg", "image/png", "image/webp"].includes(file.type));
+    if (invalidType) {
+      toast.error("仅支持 JPG、PNG 或 WebP 图片");
+      return;
+    }
+    const oversizedFile = selectedFiles.find((file) => file.size > 2 * 1024 * 1024);
+    if (oversizedFile) {
+      toast.error(`图片「${oversizedFile.name}」超过 2 MB`);
+      return;
+    }
     const formData = new FormData();
-    Array.from(files).forEach((file) => formData.append("images", file));
+    selectedFiles.forEach((file) => formData.append("images", file));
     startImageTransition(async () => {
-      const result = await uploadProductImages(formData);
-      if (!result.success || !result.urls) {
-        toast.error(result.message);
-        return;
+      try {
+        const response = await fetch("/api/admin/product-images", { method: "POST", body: formData });
+        const result = await response.json().catch(() => null) as { success?: boolean; urls?: string[]; message?: string } | null;
+        if (!response.ok || !result?.success || !result.urls) {
+          toast.error(result?.message || "图片上传失败，请稍后重试");
+          return;
+        }
+        updateImages([...images, ...result.urls]);
+        toast.success(result.message || `已上传 ${result.urls.length} 张图片`);
+      } catch {
+        toast.error("图片上传失败，请检查网络后重试");
       }
-      updateImages([...images, ...result.urls]);
-      toast.success(result.message);
     });
   };
 
