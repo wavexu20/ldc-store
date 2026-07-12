@@ -39,7 +39,7 @@ export interface ProductFormInventory {
 interface ProductFormProps {
   initialData?: Partial<ProductInput>;
   categories: AdminCategoryOption[];
-  onSubmit: (values: ProductInput) => Promise<{ success: boolean; message?: string }>;
+  onSubmit: (values: ProductInput) => Promise<{ success: boolean; message?: string; data?: { id: string } }>;
   isEdit?: boolean;
   templateInfo?: { name: string } | null;
   productId?: string;
@@ -82,6 +82,7 @@ export function ProductForm({
   const [previewUrl, setPreviewUrl] = useState("");
   const [draftVariantName, setDraftVariantName] = useState("");
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const submitDestinationRef = useRef<"products" | "inventory">("products");
   const router = useRouter();
 
   const form = useForm<ProductInput>({
@@ -209,7 +210,11 @@ export function ProductForm({
 
       if (result.success) {
         toast.success(result.message || (isEdit ? "商品更新成功" : "商品创建成功"));
-        router.push("/admin/products");
+        if (!isEdit && submitDestinationRef.current === "inventory" && result.data?.id) {
+          router.push(`/admin/cards?product=${result.data.id}`);
+        } else {
+          router.push("/admin/products");
+        }
       } else {
         toast.error(result.message);
       }
@@ -440,12 +445,12 @@ export function ProductForm({
                   {usesVariantPricing ? <Button type="button" size="sm" variant="outline" className="self-start" onClick={() => addVariant()}><Plus />添加规格</Button> : null}
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  {usesVariantPricing ? variants.map((variant, index) => { const variantStock = variant.id ? inventory?.variantStock[variant.id] ?? 0 : 0; return <div className="grid gap-3 rounded-lg border p-3 md:grid-cols-[minmax(0,1fr)_140px_140px_110px_auto] md:items-end" key={variant.id || `new-${index}`}><div className="space-y-1"><Label htmlFor={`variant-name-${index}`}>规格名称</Label><Input id={`variant-name-${index}`} value={variant.name} onChange={(event) => updateVariant(index, { name: event.target.value })} onBlur={(event) => { if (!event.target.value.trim()) removeVariant(index); }} placeholder="例如：月卡" /></div><div className="space-y-1"><Label htmlFor={`variant-price-${index}`}>售价</Label><Input id={`variant-price-${index}`} type="number" min="0.01" step="0.01" value={variant.price} onChange={(event) => updateVariant(index, { price: Number.isFinite(event.target.valueAsNumber) ? event.target.valueAsNumber : 0 })} /></div><div className="space-y-1"><Label htmlFor={`variant-original-price-${index}`}>原价</Label><Input id={`variant-original-price-${index}`} type="number" min="0.01" step="0.01" value={variant.originalPrice || ""} onChange={(event) => updateVariant(index, { originalPrice: Number.isFinite(event.target.valueAsNumber) ? event.target.valueAsNumber : undefined })} /></div><div className="space-y-1"><Label>可售库存</Label><div className="flex h-9 items-center rounded-md border bg-muted/40 px-3 text-sm font-medium tabular-nums">{variant.id ? `${variantStock} 个` : "保存后导入"}</div></div><Button type="button" size="icon" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => removeVariant(index)} aria-label={`删除规格 ${variant.name || index + 1}`}><Trash2 className="size-4" /></Button></div>; }) : <div className="space-y-2"><Label htmlFor="optional-variant-name">规格名称（可选）</Label><Input id="optional-variant-name" value={draftVariantName} onChange={(event) => setDraftVariantName(event.target.value)} onBlur={activateFirstVariant} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); } }} placeholder="留空即为单一售价，例如：月卡" /></div>}
-                  <div className="flex flex-col gap-3 rounded-lg border bg-muted/20 p-3 sm:flex-row sm:items-center sm:justify-between">
+                  {usesVariantPricing ? variants.map((variant, index) => { const variantStock = variant.id ? inventory?.variantStock[variant.id] ?? 0 : 0; return <div className={`grid gap-3 rounded-lg border p-3 md:items-end ${productId ? "md:grid-cols-[minmax(0,1fr)_140px_140px_110px_auto]" : "md:grid-cols-[minmax(0,1fr)_160px_160px_auto]"}`} key={variant.id || `new-${index}`}><div className="space-y-1"><Label htmlFor={`variant-name-${index}`}>规格名称</Label><Input id={`variant-name-${index}`} value={variant.name} onChange={(event) => updateVariant(index, { name: event.target.value })} onBlur={(event) => { if (!event.target.value.trim()) removeVariant(index); }} placeholder="例如：月卡" /></div><div className="space-y-1"><Label htmlFor={`variant-price-${index}`}>售价</Label><Input id={`variant-price-${index}`} type="number" min="0.01" step="0.01" value={variant.price} onChange={(event) => updateVariant(index, { price: Number.isFinite(event.target.valueAsNumber) ? event.target.valueAsNumber : 0 })} /></div><div className="space-y-1"><Label htmlFor={`variant-original-price-${index}`}>原价</Label><Input id={`variant-original-price-${index}`} type="number" min="0.01" step="0.01" value={variant.originalPrice || ""} onChange={(event) => updateVariant(index, { originalPrice: Number.isFinite(event.target.valueAsNumber) ? event.target.valueAsNumber : undefined })} /></div>{productId ? <div className="space-y-1"><Label>可售库存</Label><div className="flex h-9 items-center rounded-md border bg-muted/40 px-3 text-sm font-medium tabular-nums">{variantStock} 个</div></div> : null}<Button type="button" size="icon" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => removeVariant(index)} aria-label={`删除规格 ${variant.name || index + 1}`}><Trash2 className="size-4" /></Button></div>; }) : <div className="space-y-2"><Label htmlFor="optional-variant-name">规格名称（可选）</Label><Input id="optional-variant-name" value={draftVariantName} onChange={(event) => setDraftVariantName(event.target.value)} onBlur={activateFirstVariant} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); } }} placeholder="留空即为单一售价，例如：月卡" /></div>}
+                  {productId ? <div className="flex flex-col gap-3 rounded-lg border bg-muted/20 p-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex items-center gap-3"><Boxes className="size-4 shrink-0" /><p className="text-sm font-medium">{usesVariantPricing ? `规格库存 ${activeVariantStock}` : `公共库存 ${publicStock}`}</p></div>
-                    {productId ? <Button asChild type="button" size="sm" variant="outline"><Link href={`/admin/cards?product=${productId}`}><ExternalLink />管理卡密库存</Link></Button> : null}
-                  </div>
-                  {inactiveStock > 0 ? <Alert variant="destructive"><AlertTitle>{inactiveStock} 个卡密未计入库存</AlertTitle></Alert> : null}
+                    <Button asChild type="button" size="sm" variant="outline"><Link href={`/admin/cards?product=${productId}`}><ExternalLink />管理卡密库存</Link></Button>
+                  </div> : null}
+                  {productId && inactiveStock > 0 ? <Alert variant="destructive"><AlertTitle>{inactiveStock} 个卡密未计入库存</AlertTitle></Alert> : null}
                   <div className="space-y-4 border-t pt-4">
                     {!usesVariantPricing ? <div className="grid gap-4 sm:grid-cols-2"><FormField control={form.control} name="price" render={({ field }) => <FormItem><FormLabel>售价 *</FormLabel><FormControl><Input type="number" step={0.01} min={0.01} placeholder="0" {...field} onChange={(e) => field.onChange(Number.isFinite(e.target.valueAsNumber) ? e.target.valueAsNumber : 0)} /></FormControl><FormMessage /></FormItem>} /><FormField control={form.control} name="originalPrice" render={({ field }) => <FormItem><FormLabel>原价（划线价）</FormLabel><FormControl><Input type="number" step={0.01} min={0.01} placeholder="0" value={field.value || ""} onChange={(e) => { const val = e.target.valueAsNumber; field.onChange(Number.isFinite(val) ? val : undefined); }} /></FormControl><FormMessage /></FormItem>} /></div> : null}
                     <div className="grid gap-4 sm:grid-cols-2"><FormField control={form.control} name="minQuantity" render={({ field }) => <FormItem><FormLabel>最小购买数量</FormLabel><FormControl><Input type="number" min={1} {...field} onChange={(e) => field.onChange(parseInt(e.target.value) || 1)} /></FormControl><FormMessage /></FormItem>} /><FormField control={form.control} name="maxQuantity" render={({ field }) => <FormItem><FormLabel>最大购买数量</FormLabel><FormControl><Input type="number" min={1} {...field} onChange={(e) => field.onChange(parseInt(e.target.value) || 10)} /></FormControl><FormMessage /></FormItem>} /></div>
@@ -551,12 +556,8 @@ export function ProductForm({
                 <CardHeader><CardTitle className="flex items-center gap-2 text-base"><Eye className="size-4" />临时预览</CardTitle></CardHeader>
                 <CardContent className="space-y-3"><p className="text-sm text-muted-foreground">保存前可生成当前表单的只读预览链接，有效期 2 小时。</p><Button type="button" variant="outline" className="w-full" disabled={isPreviewPending} onClick={createPreview}>{isPreviewPending ? <><Loader2 className="animate-spin" />生成中...</> : <><Eye />生成预览链接</>}</Button>{previewUrl ? <div className="space-y-2 rounded-lg border bg-muted/20 p-2"><Input readOnly value={previewUrl} className="h-8 text-xs" /><div className="grid grid-cols-2 gap-2"><Button type="button" size="sm" variant="secondary" onClick={() => navigator.clipboard.writeText(previewUrl).then(() => toast.success("预览链接已复制"))}><Copy />复制</Button><Button asChild type="button" size="sm" variant="secondary"><a href={previewUrl} target="_blank" rel="noreferrer"><Eye />打开</a></Button></div></div> : null}</CardContent>
               </Card>
-              <Button
-                type="submit"
-                className="w-full gap-2"
-                size="lg"
-                disabled={isPending}
-              >
+              <div className="grid gap-2">
+              <Button type="submit" className="w-full gap-2" size="lg" disabled={isPending} onClick={() => { submitDestinationRef.current = isEdit ? "products" : "inventory"; }}>
                 {isPending ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -571,10 +572,12 @@ export function ProductForm({
                 ) : (
                   <>
                     {isEdit && <Save className="h-4 w-4" />}
-                    {isEdit ? "保存修改" : "创建商品"}
+                    {isEdit ? "保存修改" : <><Boxes className="h-4 w-4" />创建并导入卡密</>}
                   </>
                 )}
               </Button>
+              {!isEdit ? <Button type="submit" variant="outline" disabled={isPending} onClick={() => { submitDestinationRef.current = "products"; }}>仅创建商品</Button> : null}
+              </div>
             </div>
           </div>
         </form>
