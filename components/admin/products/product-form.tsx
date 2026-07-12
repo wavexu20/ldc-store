@@ -3,7 +3,7 @@
 import { useRef, useState, useTransition } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { useForm } from "react-hook-form";
+import { useForm, type FieldErrors } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { productSchema, type ProductInput } from "@/lib/validations/product";
 import { localeMeta, locales } from "@/lib/i18n";
@@ -189,13 +189,17 @@ export function ProductForm({
 
   const createPreview = () => {
     startPreviewTransition(async () => {
-      const result = await createProductPreview(form.getValues());
-      if (!result.success || !result.url) {
-        toast.error(result.message);
-        return;
+      try {
+        const result = await createProductPreview(form.getValues());
+        if (!result.success || !result.url) {
+          toast.error(result.message || "临时预览链接创建失败");
+          return;
+        }
+        setPreviewUrl(result.url);
+        toast.success("临时预览链接已生成，有效期 2 小时");
+      } catch {
+        toast.error("临时预览链接创建失败，请稍后重试");
       }
-      setPreviewUrl(result.url);
-      toast.success("临时预览链接已生成，有效期 2 小时");
     });
   };
 
@@ -230,19 +234,37 @@ export function ProductForm({
 
   const handleSubmit = (values: ProductInput) => {
     startTransition(async () => {
-      const result = await onSubmit(values);
+      try {
+        const result = await onSubmit(values);
 
-      if (result.success) {
-        toast.success(result.message || (isEdit ? "商品更新成功" : "商品创建成功"));
-        if (!isEdit && submitDestinationRef.current === "inventory" && result.data?.id) {
-          router.push(`/admin/cards?product=${result.data.id}`);
+        if (result.success) {
+          toast.success(result.message || (isEdit ? "商品更新成功" : "商品创建成功"));
+          if (!isEdit && submitDestinationRef.current === "inventory" && result.data?.id) {
+            router.push(`/admin/cards?product=${result.data.id}`);
+          } else {
+            router.push("/admin/products");
+          }
         } else {
-          router.push("/admin/products");
+          toast.error(result.message || (isEdit ? "商品保存失败" : "商品创建失败"));
         }
-      } else {
-        toast.error(result.message);
+      } catch {
+        toast.error(isEdit ? "商品保存失败，请稍后重试" : "商品创建失败，请稍后重试");
       }
     });
+  };
+
+  const handleInvalid = (errors: FieldErrors<ProductInput>) => {
+    const findMessage = (value: unknown): string | null => {
+      if (!value || typeof value !== "object") return null;
+      const record = value as Record<string, unknown>;
+      if (typeof record.message === "string") return record.message;
+      for (const child of Object.values(record)) {
+        const message = findMessage(child);
+        if (message) return message;
+      }
+      return null;
+    };
+    toast.error(findMessage(errors) || "请检查商品信息后再提交");
   };
 
   const pageTitle = templateInfo ? "复制商品" : isEdit ? "编辑商品" : "添加商品";
@@ -279,7 +301,7 @@ export function ProductForm({
       )}
 
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
+        <form onSubmit={form.handleSubmit(handleSubmit, handleInvalid)} className="space-y-6">
           <div className="grid gap-6 lg:grid-cols-3">
             <div className="lg:col-span-2 space-y-6">
               <Card>

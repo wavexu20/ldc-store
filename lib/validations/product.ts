@@ -2,6 +2,20 @@ import { z } from "zod";
 
 export const productTranslationLocales = ["en", "ko", "zh", "ru", "de", "id", "hi"] as const;
 
+const storedProductImagePattern = /^\/api\/product-images\/products\/[0-9a-f-]{36}\.(?:jpg|png|webp)$/;
+
+function isAllowedProductImageUrl(value: string) {
+  if (storedProductImagePattern.test(value)) return true;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" || url.protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
+const productImageUrlSchema = z.string().refine(isAllowedProductImageUrl, "无效的图片URL");
+
 export const productVariantSchema = z.object({
   id: z.string().uuid().optional(),
   name: z.string().trim().min(1, "规格名称不能为空").max(80, "规格名称最多80字符"),
@@ -23,8 +37,8 @@ const productFieldsSchema = z.object({
   content: z.string().optional(), // Markdown 内容
   price: z.number().nonnegative("价格不能小于0"),
   originalPrice: z.number().positive("原价必须大于0").optional().nullable(),
-  coverImage: z.string().url("无效的图片URL").optional().nullable().or(z.literal("")),
-  images: z.array(z.string().url()).max(12, "商品图片最多 12 张").optional(),
+  coverImage: productImageUrlSchema.optional().nullable().or(z.literal("")),
+  images: z.array(productImageUrlSchema).max(12, "商品图片最多 12 张").optional(),
   variants: z.array(productVariantSchema).max(30, "单个商品最多 30 个规格").optional().default([]),
   isActive: z.boolean().default(true),
   isFeatured: z.boolean().default(false),
@@ -55,8 +69,8 @@ export const productPreviewSchema = z.object({
   content: z.string().optional().default(""),
   price: z.number().nonnegative("预览价格不能小于 0").default(0),
   originalPrice: z.number().nonnegative("原价不能小于 0").optional().nullable(),
-  coverImage: z.string().url("无效的图片URL").optional().nullable().or(z.literal("")),
-  images: z.array(z.string().url()).max(12, "商品图片最多 12 张").optional().default([]),
+  coverImage: productImageUrlSchema.optional().nullable().or(z.literal("")),
+  images: z.array(productImageUrlSchema).max(12, "商品图片最多 12 张").optional().default([]),
   isFeatured: z.boolean().default(false),
 });
 
