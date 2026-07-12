@@ -147,7 +147,8 @@ export function ProductForm({
   };
 
   const addVariant = () => {
-    const currentPrice = form.getValues("price") || 0;
+    const currentPrice = form.getValues("price") || 1;
+    if (form.getValues("price") <= 0) form.setValue("price", currentPrice, { shouldValidate: true });
     form.setValue("variants", [...variants, { name: `规格 ${variants.length + 1}`, price: currentPrice, originalPrice: undefined, sortOrder: variants.length }], { shouldDirty: true, shouldValidate: true });
   };
 
@@ -404,10 +405,12 @@ export function ProductForm({
             <div className="space-y-6">
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-base">价格设置</CardTitle>
+                  <CardTitle className="text-base">{variants.length > 0 ? "购买设置" : "价格设置"}</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                  {variants.length > 0 ? <div className="rounded-lg border bg-muted/30 p-3 text-sm"><p className="font-medium">售价由规格决定</p><p className="mt-1 text-xs text-muted-foreground">当前价格区间 ¥{Math.min(...variants.map((variant) => variant.price)).toFixed(2)} – ¥{Math.max(...variants.map((variant) => variant.price)).toFixed(2)}。右侧不再单独维护商品售价。</p></div> : null}
                   <div className="grid gap-4 sm:grid-cols-2">
+                    {variants.length === 0 ? <>
                     <FormField
                       control={form.control}
                       name="price"
@@ -458,6 +461,7 @@ export function ProductForm({
                         </FormItem>
                       )}
                     />
+                    </> : null}
                     <FormField
                       control={form.control}
                       name="minQuantity"
@@ -500,7 +504,7 @@ export function ProductForm({
                       )}
                     />
                   </div>
-                  <FormDescription>原价留空则不显示折扣</FormDescription>
+                  <FormDescription>{variants.length > 0 ? "购买数量限制适用于每一个规格；每个规格的售价和原价请在左侧维护。" : "原价留空则不显示折扣"}</FormDescription>
                 </CardContent>
               </Card>
 

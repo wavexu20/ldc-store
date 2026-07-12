@@ -634,12 +634,13 @@ export async function createProduct(input: CreateProductInput) {
   try {
     const { autoTranslate, translationSourceLocale, variants, ...productData } =
       validationResult.data;
+    const displayPrice = variants.length > 0 ? Math.min(...variants.map((variant) => variant.price)) : productData.price;
     const [product] = await db
       .insert(products)
       .values({
         ...productData,
-        price: productData.price.toFixed(2),
-        originalPrice: productData.originalPrice?.toFixed(2),
+        price: displayPrice.toFixed(2),
+        originalPrice: variants.length > 0 ? null : productData.originalPrice?.toFixed(2),
         coverImage: productData.coverImage || null,
       })
       .returning();
@@ -736,6 +737,10 @@ export async function updateProduct(id: string, input: UpdateProductInput) {
     }
     if (productFields.coverImage !== undefined) {
       updateData.coverImage = productFields.coverImage || null;
+    }
+    if (variants && variants.length > 0) {
+      updateData.price = Math.min(...variants.map((variant) => variant.price)).toFixed(2);
+      updateData.originalPrice = null;
     }
 
     const [product] = await db

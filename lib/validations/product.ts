@@ -11,7 +11,7 @@ export const productVariantSchema = z.object({
 });
 
 // 创建/更新商品验证
-export const productSchema = z.object({
+const productFieldsSchema = z.object({
   name: z.string().min(1, "商品名称不能为空").max(100, "商品名称最多100字符"),
   slug: z
     .string()
@@ -21,7 +21,7 @@ export const productSchema = z.object({
   categoryId: z.string().uuid("无效的分类ID").nullable().optional(),
   description: z.string().max(500, "简短描述最多500字符").optional(),
   content: z.string().optional(), // Markdown 内容
-  price: z.number().positive("价格必须大于0"),
+  price: z.number().nonnegative("价格不能小于0"),
   originalPrice: z.number().positive("原价必须大于0").optional().nullable(),
   coverImage: z.string().url("无效的图片URL").optional().nullable().or(z.literal("")),
   images: z.array(z.string().url()).max(12, "商品图片最多 12 张").optional(),
@@ -35,8 +35,18 @@ export const productSchema = z.object({
   translationSourceLocale: z.enum(productTranslationLocales).default("zh"),
 });
 
+export const productSchema = productFieldsSchema.superRefine((input, ctx) => {
+  if ((input.variants?.length ?? 0) === 0 && input.price !== undefined && input.price <= 0) {
+    ctx.addIssue({ code: "custom", path: ["price"], message: "单规格商品的价格必须大于0" });
+  }
+});
+
 export const createProductSchema = productSchema;
-export const updateProductSchema = productSchema.partial();
+export const updateProductSchema = productFieldsSchema.partial().superRefine((input, ctx) => {
+  if (input.price !== undefined && (input.variants?.length ?? 0) === 0 && input.price <= 0) {
+    ctx.addIssue({ code: "custom", path: ["price"], message: "单规格商品的价格必须大于0" });
+  }
+});
 
 export const productPreviewSchema = z.object({
   name: z.string().trim().min(1, "请先填写商品名称").max(100, "商品名称最多100字符"),
