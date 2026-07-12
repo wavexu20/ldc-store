@@ -34,6 +34,7 @@ import { useSession, signOut } from "next-auth/react";
 import { SearchBar } from "@/components/store/search-bar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useI18n } from "@/components/i18n-provider";
+import { LanguageSwitcher } from "@/components/language-switcher";
 
 interface HeaderProps {
   siteName?: string;
@@ -232,6 +233,8 @@ export function Header({ siteName = "LDC Store", siteIcon, siteIconUrl }: Header
               <TrendingUp className="h-4 w-4" />
             </Link>
           </Button>
+
+          <LanguageSwitcher placement="header" />
           
           {/* 用户状态 */}
           {status === "loading" ? (

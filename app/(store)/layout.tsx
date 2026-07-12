@@ -4,7 +4,6 @@ import { Header } from "@/components/store/header";
 import { Footer } from "@/components/store/footer";
 import { Toaster } from "@/components/ui/sonner";
 import { getSystemSettings } from "@/lib/actions/system-settings";
-import { LanguageSwitcher } from "@/components/language-switcher";
 import { getTranslator } from "@/lib/i18n-server";
 import { SupportWidget } from "@/components/store/support-widget";
 import { redirect } from "next/navigation";
@@ -54,7 +53,6 @@ export default async function StoreLayout({
       <Header siteName={siteName} siteIcon={siteIcon} siteIconUrl={siteIconUrl} />
       <main className="flex-1">{children}</main>
       <Footer siteName={siteName} />
-      <LanguageSwitcher />
       <SupportWidget siteName={siteName} />
       <Toaster position="top-center" richColors />
     </div>

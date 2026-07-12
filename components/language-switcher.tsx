@@ -1,13 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Check, ChevronUp } from "lucide-react";
+import { Check, ChevronDown, ChevronUp } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useI18n } from "@/components/i18n-provider";
 import { localeMeta, locales, type Locale } from "@/lib/i18n";
 
-function Flag({ code }: { code: string }) {
-  const common = "h-6 w-9 overflow-hidden rounded-[4px] shadow-sm ring-1 ring-black/10";
+function Flag({ code, compact = false }: { code: string; compact?: boolean }) {
+  const common = `${compact ? "h-4 w-6" : "h-6 w-9"} overflow-hidden rounded-[4px] shadow-sm ring-1 ring-black/10`;
   if (code === "RU") return <span className={`${common} bg-[linear-gradient(#fff_0_33%,#1c57a7_33%_66%,#d52b1e_66%)]`} />;
   if (code === "DE") return <span className={`${common} bg-[linear-gradient(#000_0_33%,#dd0000_33%_66%,#ffce00_66%)]`} />;
   if (code === "ID") return <span className={`${common} bg-[linear-gradient(#e70011_0_50%,#fff_50%)]`} />;
@@ -25,7 +25,7 @@ function Flag({ code }: { code: string }) {
   return <span className={`${common} relative bg-[#21468b]`}><span className="absolute left-1/2 top-0 h-full w-2 -translate-x-1/2 bg-white"/><span className="absolute left-0 top-1/2 h-2 w-full -translate-y-1/2 bg-white"/><span className="absolute left-1/2 top-0 h-full w-1 -translate-x-1/2 bg-[#cf142b]"/><span className="absolute left-0 top-1/2 h-1 w-full -translate-y-1/2 bg-[#cf142b]"/></span>;
 }
 
-export function LanguageSwitcher() {
+export function LanguageSwitcher({ placement = "floating" }: { placement?: "floating" | "header" }) {
   const { locale, setLocale, t } = useI18n();
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -40,10 +40,11 @@ export function LanguageSwitcher() {
     setOpen(false);
     router.refresh();
   }
+  const inHeader = placement === "header";
   return (
-    <div ref={rootRef} className="fixed bottom-24 right-4 z-[70] flex flex-col items-end gap-2 sm:bottom-28 sm:right-6">
+    <div ref={rootRef} className={inHeader ? "relative z-[70]" : "fixed bottom-24 right-4 z-[70] flex flex-col items-end gap-2 sm:bottom-28 sm:right-6"}>
       {open ? (
-        <div role="menu" aria-label={t("language")} className="flex max-h-[min(70vh,480px)] flex-col gap-1.5 overflow-y-auto rounded-[1.35rem] border bg-background/95 p-2.5 shadow-2xl backdrop-blur-xl">
+        <div role="menu" aria-label={t("language")} className={`${inHeader ? "absolute right-0 top-full mt-2" : ""} flex max-h-[min(70vh,480px)] flex-col gap-1.5 overflow-y-auto rounded-[1.35rem] border bg-background/95 p-2.5 shadow-2xl backdrop-blur-xl`}>
           {locales.map((item) => (
             <button key={item} role="menuitemradio" aria-checked={locale === item} title={localeMeta[item].name} className="relative flex size-12 cursor-pointer items-center justify-center rounded-xl transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={() => choose(item)}>
               <Flag code={localeMeta[item].flag} />
@@ -52,9 +53,9 @@ export function LanguageSwitcher() {
           ))}
         </div>
       ) : null}
-      <button type="button" aria-label={`${t("language")}: ${localeMeta[locale].name}`} aria-expanded={open} className="flex cursor-pointer items-center gap-2 rounded-xl border bg-background/95 px-2.5 py-2 shadow-lg backdrop-blur-xl transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={() => setOpen((value) => !value)}>
-        <Flag code={localeMeta[locale].flag} />
-        <ChevronUp className={`size-4 text-indigo-500 transition-transform ${open ? "rotate-180" : ""}`} />
+      <button type="button" aria-label={`${t("language")}: ${localeMeta[locale].name}`} aria-expanded={open} className={`flex cursor-pointer items-center rounded-lg border bg-background transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${inHeader ? "h-8 gap-1.5 px-2" : "gap-2 px-2.5 py-2 shadow-lg backdrop-blur-xl"}`} onClick={() => setOpen((value) => !value)}>
+        <Flag code={localeMeta[locale].flag} compact={inHeader} />
+        {inHeader ? <ChevronDown className={`size-3.5 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} /> : <ChevronUp className={`size-4 text-indigo-500 transition-transform ${open ? "rotate-180" : ""}`} />}
       </button>
     </div>
   );
