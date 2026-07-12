@@ -408,120 +408,20 @@ export function ProductForm({
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <div className="grid gap-3 sm:grid-cols-2" aria-label="定价方式">
-                    <button type="button" aria-pressed={!usesVariantPricing} onClick={useSinglePrice} className={`cursor-pointer rounded-lg border p-3 text-left transition-colors ${!usesVariantPricing ? "border-zinc-900 bg-zinc-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900" : "border-border bg-background hover:bg-muted/50"}`}><span className="flex items-center gap-2 text-sm font-semibold">{!usesVariantPricing ? <Check className="size-4" /> : null}单一售价</span><span className={`mt-1 block text-xs ${!usesVariantPricing ? "text-white/70 dark:text-zinc-600" : "text-muted-foreground"}`}>所有用户按同一个价格购买；在右侧填写售价与原价。</span></button>
+                    <button type="button" aria-pressed={!usesVariantPricing} onClick={useSinglePrice} className={`cursor-pointer rounded-lg border p-3 text-left transition-colors ${!usesVariantPricing ? "border-zinc-900 bg-zinc-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900" : "border-border bg-background hover:bg-muted/50"}`}><span className="flex items-center gap-2 text-sm font-semibold">{!usesVariantPricing ? <Check className="size-4" /> : null}单一售价</span><span className={`mt-1 block text-xs ${!usesVariantPricing ? "text-white/70 dark:text-zinc-600" : "text-muted-foreground"}`}>所有用户按同一个价格购买；在下方填写售价与原价。</span></button>
                     <button type="button" aria-pressed={usesVariantPricing} onClick={() => { if (!usesVariantPricing) addVariant(); }} className={`cursor-pointer rounded-lg border p-3 text-left transition-colors ${usesVariantPricing ? "border-zinc-900 bg-zinc-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900" : "border-border bg-background hover:bg-muted/50"}`}><span className="flex items-center gap-2 text-sm font-semibold">{usesVariantPricing ? <Check className="size-4" /> : null}多规格定价</span><span className={`mt-1 block text-xs ${usesVariantPricing ? "text-white/70 dark:text-zinc-600" : "text-muted-foreground"}`}>例如月卡、年卡；每个规格独立设置售价、原价与卡密库存。</span></button>
                   </div>
-                  {usesVariantPricing ? <><div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100"><span className="font-medium">当前生效：多规格定价。</span><span className="text-amber-800 dark:text-amber-200"> 下方规格价格是唯一价格来源；右侧基础售价已停用。</span></div>{variants.map((variant, index) => <div className="grid gap-3 rounded-lg border p-3 md:grid-cols-[minmax(0,1fr)_160px_160px_auto] md:items-end" key={variant.id || `new-${index}`}><div className="space-y-1"><Label htmlFor={`variant-name-${index}`}>规格名称</Label><Input id={`variant-name-${index}`} value={variant.name} onChange={(event) => updateVariant(index, { name: event.target.value })} placeholder="例如：月卡" /></div><div className="space-y-1"><Label htmlFor={`variant-price-${index}`}>售价</Label><Input id={`variant-price-${index}`} type="number" min="0.01" step="0.01" value={variant.price} onChange={(event) => updateVariant(index, { price: Number.isFinite(event.target.valueAsNumber) ? event.target.valueAsNumber : 0 })} /></div><div className="space-y-1"><Label htmlFor={`variant-original-price-${index}`}>原价</Label><Input id={`variant-original-price-${index}`} type="number" min="0.01" step="0.01" value={variant.originalPrice || ""} onChange={(event) => updateVariant(index, { originalPrice: Number.isFinite(event.target.valueAsNumber) ? event.target.valueAsNumber : undefined })} /></div><Button type="button" size="icon" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => removeVariant(index)} aria-label={`删除规格 ${variant.name || index + 1}`}><Trash2 className="size-4" /></Button></div>)}</> : <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground"><span className="font-medium text-foreground">当前生效：单一售价。</span> 请到右侧“价格设置”填写商品售价与原价；需要不同规格不同价格时，选择上方“多规格定价”。</div>}
+                  {usesVariantPricing ? <><div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100"><span className="font-medium">当前生效：多规格定价。</span><span className="text-amber-800 dark:text-amber-200"> 下方规格价格是唯一价格来源。</span></div>{variants.map((variant, index) => <div className="grid gap-3 rounded-lg border p-3 md:grid-cols-[minmax(0,1fr)_160px_160px_auto] md:items-end" key={variant.id || `new-${index}`}><div className="space-y-1"><Label htmlFor={`variant-name-${index}`}>规格名称</Label><Input id={`variant-name-${index}`} value={variant.name} onChange={(event) => updateVariant(index, { name: event.target.value })} placeholder="例如：月卡" /></div><div className="space-y-1"><Label htmlFor={`variant-price-${index}`}>售价</Label><Input id={`variant-price-${index}`} type="number" min="0.01" step="0.01" value={variant.price} onChange={(event) => updateVariant(index, { price: Number.isFinite(event.target.valueAsNumber) ? event.target.valueAsNumber : 0 })} /></div><div className="space-y-1"><Label htmlFor={`variant-original-price-${index}`}>原价</Label><Input id={`variant-original-price-${index}`} type="number" min="0.01" step="0.01" value={variant.originalPrice || ""} onChange={(event) => updateVariant(index, { originalPrice: Number.isFinite(event.target.valueAsNumber) ? event.target.valueAsNumber : undefined })} /></div><Button type="button" size="icon" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => removeVariant(index)} aria-label={`删除规格 ${variant.name || index + 1}`}><Trash2 className="size-4" /></Button></div>)}</> : <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground"><span className="font-medium text-foreground">当前生效：单一售价。</span> 请在下方填写商品售价与原价；需要不同规格不同价格时，选择上方“多规格定价”。</div>}
+                  <div className="space-y-4 border-t pt-4">
+                    <div><p className="text-sm font-medium">{usesVariantPricing ? "购买数量" : "价格与购买数量"}</p><p className="mt-1 text-xs text-muted-foreground">{usesVariantPricing ? `当前售价区间 ¥${Math.min(...variants.map((variant) => variant.price)).toFixed(2)} – ¥${Math.max(...variants.map((variant) => variant.price)).toFixed(2)}；数量限制适用于每个规格。` : "原价留空则不显示折扣。"}</p></div>
+                    {!usesVariantPricing ? <div className="grid gap-4 sm:grid-cols-2"><FormField control={form.control} name="price" render={({ field }) => <FormItem><FormLabel>售价 *</FormLabel><FormControl><Input type="number" step={0.01} min={0.01} placeholder="0" {...field} onChange={(e) => field.onChange(Number.isFinite(e.target.valueAsNumber) ? e.target.valueAsNumber : 0)} /></FormControl><FormMessage /></FormItem>} /><FormField control={form.control} name="originalPrice" render={({ field }) => <FormItem><FormLabel>原价（划线价）</FormLabel><FormControl><Input type="number" step={0.01} min={0.01} placeholder="0" value={field.value || ""} onChange={(e) => { const val = e.target.valueAsNumber; field.onChange(Number.isFinite(val) ? val : undefined); }} /></FormControl><FormMessage /></FormItem>} /></div> : null}
+                    <div className="grid gap-4 sm:grid-cols-2"><FormField control={form.control} name="minQuantity" render={({ field }) => <FormItem><FormLabel>最小购买数量</FormLabel><FormControl><Input type="number" min={1} {...field} onChange={(e) => field.onChange(parseInt(e.target.value) || 1)} /></FormControl><FormMessage /></FormItem>} /><FormField control={form.control} name="maxQuantity" render={({ field }) => <FormItem><FormLabel>最大购买数量</FormLabel><FormControl><Input type="number" min={1} {...field} onChange={(e) => field.onChange(parseInt(e.target.value) || 10)} /></FormControl><FormMessage /></FormItem>} /></div>
+                  </div>
                 </CardContent>
               </Card>
             </div>
 
             <div className="space-y-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">{usesVariantPricing ? "购买设置" : "价格设置"}</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {usesVariantPricing ? <div className="rounded-lg border bg-muted/30 p-3 text-sm"><p className="font-medium">售价由规格决定</p><p className="mt-1 text-xs text-muted-foreground">当前价格区间 ¥{Math.min(...variants.map((variant) => variant.price)).toFixed(2)} – ¥{Math.max(...variants.map((variant) => variant.price)).toFixed(2)}。右侧不再单独维护商品售价。</p></div> : null}
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    {!usesVariantPricing ? <>
-                    <FormField
-                      control={form.control}
-                      name="price"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>售价 *</FormLabel>
-                          <FormControl>
-                            <Input
-                              type="number"
-                              step={0.01}
-                              min={0.01}
-                              placeholder="0"
-                              {...field}
-                              onChange={(e) =>
-                                field.onChange(
-                                  Number.isFinite(e.target.valueAsNumber)
-                                    ? e.target.valueAsNumber
-                                    : 0
-                                )
-                              }
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <FormField
-                      control={form.control}
-                      name="originalPrice"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>原价（划线价）</FormLabel>
-                          <FormControl>
-                            <Input
-                              type="number"
-                              step={0.01}
-                              min={0.01}
-                              placeholder="0"
-                              value={field.value || ""}
-                              onChange={(e) => {
-                                const val = e.target.valueAsNumber;
-                                field.onChange(Number.isFinite(val) ? val : undefined);
-                              }}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    </> : null}
-                    <FormField
-                      control={form.control}
-                      name="minQuantity"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>最小购买数量</FormLabel>
-                          <FormControl>
-                            <Input
-                              type="number"
-                              min={1}
-                              {...field}
-                              onChange={(e) =>
-                                field.onChange(parseInt(e.target.value) || 1)
-                              }
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <FormField
-                      control={form.control}
-                      name="maxQuantity"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>最大购买数量</FormLabel>
-                          <FormControl>
-                            <Input
-                              type="number"
-                              min={1}
-                              {...field}
-                              onChange={(e) =>
-                                field.onChange(parseInt(e.target.value) || 10)
-                              }
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-                  <FormDescription>{usesVariantPricing ? "购买数量限制适用于每一个规格；每个规格的售价和原价请在左侧维护。" : "原价留空则不显示折扣"}</FormDescription>
-                </CardContent>
-              </Card>
-
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-base"><ImagePlus className="size-4" />商品图片</CardTitle>
