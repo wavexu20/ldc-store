@@ -10,7 +10,7 @@
  * - 前端显示时浏览器自动转换为用户本地时区
  */
 
-import { db, getD1Binding, orders, cards, products, users } from "@/lib/db";
+import { db, getD1Binding, orders, cards, products, users, vouchers } from "@/lib/db";
 import { eq, and, desc, inArray, lt } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { headers } from "next/headers";
@@ -119,7 +119,7 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     return { success: false, message: error instanceof Error ? error.message : SECOND_FACTOR_REQUIRED_MESSAGE, requiresSecondFactor: true };
   }
 
-  const { productId, quantity, paymentMethod, usePoints } = validationResult.data;
+  const { productId, quantity, paymentMethod, usePoints, voucherId } = validationResult.data;
 
   try {
     log.info({ userId: user.id, productId, quantity, paymentMethod }, "开始创建订单");
@@ -166,16 +166,36 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     const createdEpoch = Math.floor(createdAt.getTime() / 1000);
     const expiredEpoch = Math.floor(expiredAt.getTime() / 1000);
     const placeholders = cardIds.map(() => "?").join(", ");
-    const isBalance = paymentMethod === "balance";
+    const selectedVoucher = voucherId
+      ? await db.query.vouchers.findFirst({ where: eq(vouchers.id, voucherId) })
+      : null;
+    if (voucherId) {
+      if (!selectedVoucher || selectedVoucher.type !== "discount" || selectedVoucher.status !== "claimed" || selectedVoucher.ownerUserId !== userId) {
+        throw new Error("所选满减券不可用，请重新选择");
+      }
+      if (selectedVoucher.expiresAt && selectedVoucher.expiresAt <= new Date()) {
+        throw new Error("所选满减券已过期");
+      }
+      if (totalCents < selectedVoucher.minOrderCents) {
+        throw new Error(`该满减券需满 ¥${(selectedVoucher.minOrderCents / 100).toFixed(2)} 才可使用`);
+      }
+    }
+    const voucherDiscountCents = selectedVoucher ? Math.min(totalCents, selectedVoucher.discountAmountCents) : 0;
+    const afterVoucherCents = totalCents - voucherDiscountCents;
+    const isVoucherOnly = Boolean(selectedVoucher && afterVoucherCents === 0);
+    const effectivePaymentMethod = isVoucherOnly ? "voucher" : paymentMethod;
+    if (paymentMethod === "voucher" && !isVoucherOnly) throw new Error("卡券支付方式不可用");
+    const isBalance = effectivePaymentMethod === "balance";
+    const isImmediateCompletion = isBalance || effectivePaymentMethod === "voucher";
     const member = isBalance ? await db.query.users.findFirst({
       where: eq(users.id, userId),
       columns: { balanceCents: true, bonusBalanceCents: true, pointsBalance: true },
     }) : null;
     if (isBalance && !member) throw new Error("账号不存在");
     const redemption = isBalance && usePoints
-      ? calculatePointsRedemption(totalCents, member?.pointsBalance || 0)
+      ? calculatePointsRedemption(afterVoucherCents, member?.pointsBalance || 0)
       : { points: 0, discountCents: 0 };
-    const payableCents = totalCents - redemption.discountCents;
+    const payableCents = afterVoucherCents - redemption.discountCents;
     const split = isBalance ? splitBalancePayment(payableCents, member?.balanceCents || 0, member?.bonusBalanceCents || 0) : null;
     if (isBalance && !split) throw new Error("账户余额不足，请先充值");
     const cashSpentCents = split?.cashSpentCents || 0;
@@ -199,16 +219,20 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
         AND (? <> 'balance' OR EXISTS (
           SELECT 1 FROM users WHERE id = ? AND balance_cents >= ? AND bonus_balance_cents >= ? AND points_balance >= ?
         ))
+        AND (? IS NULL OR EXISTS (
+          SELECT 1 FROM vouchers WHERE id = ? AND type = 'discount' AND status = 'claimed' AND owner_user_id = ?
+        ))
         RETURNING id, order_no
       `).bind(
         orderId, orderNo, productId, product.name, product.price, quantity,
         (payableCents / 100).toFixed(2), totalAmount.toFixed(2), cashSpentCents, bonusSpentCents, redemption.points, pointsEarned,
-        paymentMethod,
-        isBalance ? "completed" : "pending",
-        isBalance ? `BALANCE-${orderNo}` : null,
+        effectivePaymentMethod,
+        isImmediateCompletion ? "completed" : "pending",
+        isImmediateCompletion ? `${effectivePaymentMethod.toUpperCase()}-${orderNo}` : null,
         userId, user.username ?? null, user.image ?? null,
-        isBalance ? createdEpoch : null, expiredEpoch, createdEpoch, createdEpoch,
-        productId, ...cardIds, quantity, paymentMethod, userId, cashSpentCents, bonusSpentCents, redemption.points
+        isImmediateCompletion ? createdEpoch : null, expiredEpoch, createdEpoch, createdEpoch,
+        productId, ...cardIds, quantity, effectivePaymentMethod, userId, cashSpentCents, bonusSpentCents, redemption.points,
+        voucherId ?? null, voucherId ?? "", userId
       ),
       d1.prepare(`
         UPDATE cards SET status = ?, order_id = ?, locked_at = ?, sold_at = ?
@@ -216,17 +240,24 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
           AND id IN (${placeholders})
           AND EXISTS (SELECT 1 FROM orders WHERE id = ?)
       `).bind(
-        isBalance ? "sold" : "locked", orderId,
-        isBalance ? null : createdEpoch, isBalance ? createdEpoch : null,
+        isImmediateCompletion ? "sold" : "locked", orderId,
+        isImmediateCompletion ? null : createdEpoch, isImmediateCompletion ? createdEpoch : null,
         productId, ...cardIds, orderId
       ),
+      d1.prepare(`
+        UPDATE vouchers
+        SET status = CASE WHEN ? = 1 THEN 'redeemed' ELSE 'reserved' END,
+            owner_user_id = ?, order_id = ?, redeemed_at = CASE WHEN ? = 1 THEN ? ELSE NULL END
+        WHERE id = ? AND type = 'discount' AND status = 'claimed' AND owner_user_id = ?
+          AND EXISTS (SELECT 1 FROM orders WHERE id = ?)
+      `).bind(isImmediateCompletion ? 1 : 0, userId, orderId, isImmediateCompletion ? 1 : 0, isImmediateCompletion ? createdEpoch : null, voucherId ?? "", userId, orderId),
       d1.prepare(`
         UPDATE users
         SET balance_cents = balance_cents - ?, bonus_balance_cents = bonus_balance_cents - ?,
             points_balance = points_balance - ?, updated_at = ?
         WHERE id = ? AND ? = 'balance'
           AND EXISTS (SELECT 1 FROM orders WHERE id = ?)
-      `).bind(cashSpentCents, bonusSpentCents, redemption.points, createdEpoch, userId, paymentMethod, orderId),
+      `).bind(cashSpentCents, bonusSpentCents, redemption.points, createdEpoch, userId, effectivePaymentMethod, orderId),
       d1.prepare(`
         INSERT INTO wallet_transactions (
           id, user_id, type, amount_cents, balance_after_cents,
@@ -239,25 +270,25 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
         ON CONFLICT(idempotency_key) DO NOTHING
         `).bind(
         walletTransactionId, -cashSpentCents, orderId, `purchase:${orderId}`,
-        `购买 ${product.name}`, createdEpoch, userId, paymentMethod, orderId
+        `购买 ${product.name}`, createdEpoch, userId, effectivePaymentMethod, orderId
       ),
       d1.prepare(`
         INSERT INTO member_transactions (id,user_id,asset,type,amount,balance_after,reference_type,reference_id,idempotency_key,description,created_at)
         SELECT ?,id,'bonus','purchase',?,bonus_balance_cents,'order',?,?,?,? FROM users
         WHERE id = ? AND ? = 'balance' AND ? > 0 AND EXISTS (SELECT 1 FROM orders WHERE id = ?)
         ON CONFLICT(idempotency_key) DO NOTHING
-      `).bind(crypto.randomUUID(), -bonusSpentCents, orderId, `bonus:purchase:${orderId}`, `购买 ${product.name}`, createdEpoch, userId, paymentMethod, bonusSpentCents, orderId),
+      `).bind(crypto.randomUUID(), -bonusSpentCents, orderId, `bonus:purchase:${orderId}`, `购买 ${product.name}`, createdEpoch, userId, effectivePaymentMethod, bonusSpentCents, orderId),
       d1.prepare(`
         INSERT INTO member_transactions (id,user_id,asset,type,amount,balance_after,reference_type,reference_id,idempotency_key,description,created_at)
         SELECT ?,id,'points','purchase',?,points_balance,'order',?,?,?,? FROM users
         WHERE id = ? AND ? = 'balance' AND ? > 0 AND EXISTS (SELECT 1 FROM orders WHERE id = ?)
         ON CONFLICT(idempotency_key) DO NOTHING
-      `).bind(crypto.randomUUID(), -redemption.points, orderId, `points:purchase:${orderId}`, `订单 ${orderNo} 积分抵扣`, createdEpoch, userId, paymentMethod, redemption.points, orderId),
+      `).bind(crypto.randomUUID(), -redemption.points, orderId, `points:purchase:${orderId}`, `订单 ${orderNo} 积分抵扣`, createdEpoch, userId, effectivePaymentMethod, redemption.points, orderId),
       d1.prepare(`
         UPDATE products SET sales_count = sales_count + ?, updated_at = ?
-        WHERE id = ? AND ? = 'balance'
+        WHERE id = ? AND ? = 1
           AND EXISTS (SELECT 1 FROM orders WHERE id = ?)
-      `).bind(quantity, createdEpoch, productId, paymentMethod, orderId),
+      `).bind(quantity, createdEpoch, productId, isImmediateCompletion ? 1 : 0, orderId),
     ];
     const [insertResult] = await d1.batch<{ id: string; order_no: string }>(statements);
     if (!insertResult.results[0]) {
@@ -267,7 +298,7 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
       order: { orderNo, createdAt, expiredAt },
       totalAmount: payableCents / 100,
     };
-    if (isBalance) await awardOrderPoints(orderId);
+    if (isImmediateCompletion) await awardOrderPoints(orderId);
 
     // 4. 刷新页面缓存，确保库存显示准确
     revalidatePath("/");
@@ -275,10 +306,10 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
 
     // 5. 为外部支付创建托管收银台链接。
     let paymentForm: PaymentLaunchData | undefined;
-    if (paymentMethod === "gateway" || paymentMethod === "ldc") {
+    if (effectivePaymentMethod === "gateway" || effectivePaymentMethod === "ldc") {
       try {
         const siteUrl = await getSiteUrl();
-        paymentForm = paymentMethod === "gateway"
+        paymentForm = effectivePaymentMethod === "gateway"
           ? await createGatewayPayment({
               orderId: result.order.orderNo,
               amount: result.totalAmount,
@@ -310,7 +341,7 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
         productId,
         quantity,
         totalAmount: result.totalAmount,
-        paymentMethod,
+        paymentMethod: effectivePaymentMethod,
       },
       "订单创建成功"
     );
@@ -324,7 +355,7 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
           productName: product.name,
           quantity,
           totalAmount: result.totalAmount.toFixed(2),
-          paymentMethod,
+          paymentMethod: effectivePaymentMethod,
           username: user.username || null,
           createdAt: result.order.createdAt,
           expiredAt: result.order.expiredAt!,
@@ -385,13 +416,18 @@ export async function handlePaymentSuccess(
           AND EXISTS (SELECT 1 FROM orders WHERE id = ? AND status = 'pending')
       `).bind(pendingOrder.quantity, nowEpoch, pendingOrder.productId, pendingOrder.id),
       d1.prepare(`
+        UPDATE vouchers SET status = 'redeemed', redeemed_at = ?
+        WHERE order_id = ? AND status = 'reserved'
+          AND EXISTS (SELECT 1 FROM orders WHERE id = ? AND status = 'pending')
+      `).bind(nowEpoch, pendingOrder.id, pendingOrder.id),
+      d1.prepare(`
         UPDATE orders SET status = 'completed', trade_no = ?, paid_at = ?, updated_at = ?
         WHERE id = ? AND status = 'pending'
         RETURNING id
       `).bind(tradeNo, nowEpoch, nowEpoch, pendingOrder.id),
     ];
     const batchResult = await d1.batch<{ id: string }>(statements);
-    if (!batchResult[2]?.results[0]) throw new Error("订单不存在或已处理");
+    if (!batchResult[3]?.results[0]) throw new Error("订单不存在或已处理");
     await awardOrderPoints(pendingOrder.id);
     const result = { ...pendingOrder, status: "completed" as const, tradeNo, paidAt: new Date() };
     if (pendingOrder.productId) {
@@ -466,9 +502,13 @@ export async function releaseExpiredOrders(): Promise<number> {
             and(
               eq(orders.status, "pending"),
               inArray(orders.id, orderIds),
-              lt(orders.expiredAt, new Date())
-            )
-          ),
+            lt(orders.expiredAt, new Date())
+          )
+        ),
+        db
+          .update(vouchers)
+          .set({ status: "claimed", orderId: null })
+          .where(and(eq(vouchers.status, "reserved"), inArray(vouchers.orderId, orderIds))),
       ]);
     }
 
@@ -518,11 +558,16 @@ export async function adminCompleteOrder(
         )
       `).bind(order.quantity, nowEpoch, order.productId, orderId),
       d1.prepare(`
+        UPDATE vouchers SET status = 'redeemed', redeemed_at = ?
+        WHERE order_id = ? AND status = 'reserved'
+          AND EXISTS (SELECT 1 FROM orders WHERE id = ? AND status IN ('pending', 'paid'))
+      `).bind(nowEpoch, orderId, orderId),
+      d1.prepare(`
         UPDATE orders SET status = 'completed', paid_at = ?, admin_remark = ?, updated_at = ?
         WHERE id = ? AND status IN ('pending', 'paid') RETURNING id
       `).bind(nowEpoch, adminRemark ?? null, nowEpoch, orderId),
     ]);
-    if (!results[2]?.results[0]) throw new Error("订单状态不允许手动完成");
+    if (!results[3]?.results[0]) throw new Error("订单状态不允许手动完成");
     await awardOrderPoints(orderId);
     if (order.productId) {
       const product = await db.query.products.findFirst({

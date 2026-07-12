@@ -1,11 +1,11 @@
 "use server";
 
-import { desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, or, sql } from "drizzle-orm";
 import { headers } from "next/headers";
 import { nanoid } from "nanoid";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
-import { db, memberTransactions, rechargeOrders, users, walletTransactions } from "@/lib/db";
+import { db, memberTransactions, rechargeOrders, users, vouchers, walletTransactions } from "@/lib/db";
 import type { PaymentLaunchData } from "@/lib/payment/types";
 import { createGatewayPayment } from "@/lib/payment/gateway";
 import { calculateRechargeBonus, getMembershipStatus } from "@/lib/membership";
@@ -55,10 +55,24 @@ export async function getWalletOverview() {
 export async function getCheckoutMembership() {
   const session = await auth();
   if (!session?.user?.id || session.user.id === "admin") return null;
-  return db.query.users.findFirst({
-    where: eq(users.id, session.user.id),
-    columns: { balanceCents: true, bonusBalanceCents: true, pointsBalance: true },
-  });
+  const now = new Date();
+  const [member, discountVouchers] = await Promise.all([
+    db.query.users.findFirst({
+      where: eq(users.id, session.user.id),
+      columns: { balanceCents: true, bonusBalanceCents: true, pointsBalance: true },
+    }),
+    db.query.vouchers.findMany({
+      where: and(
+        eq(vouchers.ownerUserId, session.user.id),
+        eq(vouchers.type, "discount"),
+        eq(vouchers.status, "claimed"),
+        or(isNull(vouchers.expiresAt), sql`${vouchers.expiresAt} > ${now}`),
+      ),
+      columns: { id: true, code: true, discountAmountCents: true, minOrderCents: true, expiresAt: true },
+      orderBy: [desc(vouchers.createdAt)],
+    }),
+  ]);
+  return member ? { ...member, discountVouchers } : null;
 }
 
 export async function createRecharge(amountCents: number): Promise<{

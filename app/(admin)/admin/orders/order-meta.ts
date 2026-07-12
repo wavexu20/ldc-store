@@ -56,4 +56,5 @@ export const paymentMethodLabels: Record<PaymentMethod, string> = {
   alipay: "支付宝",
   wechat: "微信",
   usdt: "USDT",
+  voucher: "卡券兑换",
 };

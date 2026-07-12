@@ -37,6 +37,7 @@ const paymentMethodValues = [
   "alipay",    // 支付宝（预留）
   "wechat",    // 微信支付（预留）
   "usdt",      // USDT（预留）
+  "voucher",   // 卡券全额兑换
 ] as const;
 export const paymentMethodEnum = { enumValues: paymentMethodValues };
 
@@ -64,6 +65,10 @@ const memberTransactionTypeValues = [
 ] as const;
 const supportConversationStatusValues = ["open", "closed"] as const;
 const supportSenderValues = ["visitor", "admin", "system"] as const;
+const voucherTypeValues = ["recharge", "product", "discount"] as const;
+const voucherStatusValues = ["available", "claimed", "reserved", "redeemed", "disabled", "expired"] as const;
+export const voucherTypeEnum = { enumValues: voucherTypeValues };
+export const voucherStatusEnum = { enumValues: voucherStatusValues };
 
 const id = (name: string) =>
   text(name).primaryKey().$defaultFn(() => crypto.randomUUID());
@@ -316,6 +321,52 @@ export const orders = sqliteTable("orders", {
 ]);
 
 // ============================================
+// Voucher batches & externally distributed vouchers
+// ============================================
+
+export const voucherBatches = sqliteTable("voucher_batches", {
+  id: id("id"),
+  name: text("name").notNull(),
+  type: text("type", { enum: voucherTypeValues }).notNull(),
+  rechargeAmountCents: integer("recharge_amount_cents").default(0).notNull(),
+  discountAmountCents: integer("discount_amount_cents").default(0).notNull(),
+  minOrderCents: integer("min_order_cents").default(0).notNull(),
+  productId: text("product_id").references(() => products.id, { onDelete: "restrict" }),
+  productName: text("product_name"),
+  quantity: integer("quantity").notNull(),
+  expiresAt: timestamp("expires_at"),
+  createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt: createdAt(),
+}, (table) => [
+  index("voucher_batches_created_at_idx").on(table.createdAt),
+  index("voucher_batches_type_idx").on(table.type),
+]);
+
+export const vouchers = sqliteTable("vouchers", {
+  id: id("id"),
+  batchId: text("batch_id").references(() => voucherBatches.id, { onDelete: "cascade" }).notNull(),
+  code: text("code").notNull().unique(),
+  type: text("type", { enum: voucherTypeValues }).notNull(),
+  status: text("status", { enum: voucherStatusValues }).default("available").notNull(),
+  rechargeAmountCents: integer("recharge_amount_cents").default(0).notNull(),
+  discountAmountCents: integer("discount_amount_cents").default(0).notNull(),
+  minOrderCents: integer("min_order_cents").default(0).notNull(),
+  productId: text("product_id").references(() => products.id, { onDelete: "restrict" }),
+  productName: text("product_name"),
+  ownerUserId: text("owner_user_id").references(() => users.id, { onDelete: "restrict" }),
+  orderId: text("order_id").references(() => orders.id, { onDelete: "set null" }),
+  expiresAt: timestamp("expires_at"),
+  redeemedAt: timestamp("redeemed_at"),
+  createdAt: createdAt(),
+}, (table) => [
+  uniqueIndex("vouchers_code_unique").on(table.code),
+  index("vouchers_batch_idx").on(table.batchId),
+  index("vouchers_owner_status_idx").on(table.ownerUserId, table.status),
+  index("vouchers_order_idx").on(table.orderId),
+  index("vouchers_status_expires_idx").on(table.status, table.expiresAt),
+]);
+
+// ============================================
 // System Settings Table (系统设置)
 // ============================================
 
@@ -443,6 +494,8 @@ export const productsRelations = relations(products, ({ one, many }) => ({
   }),
   cards: many(cards),
   restockRequests: many(restockRequests),
+  voucherBatches: many(voucherBatches),
+  vouchers: many(vouchers),
 }));
 
 export const cardsRelations = relations(cards, ({ one }) => ({
@@ -462,6 +515,20 @@ export const ordersRelations = relations(orders, ({ one, many }) => ({
     references: [products.id],
   }),
   cards: many(cards),
+  vouchers: many(vouchers),
+}));
+
+export const voucherBatchesRelations = relations(voucherBatches, ({ one, many }) => ({
+  product: one(products, { fields: [voucherBatches.productId], references: [products.id] }),
+  creator: one(users, { fields: [voucherBatches.createdBy], references: [users.id] }),
+  vouchers: many(vouchers),
+}));
+
+export const vouchersRelations = relations(vouchers, ({ one }) => ({
+  batch: one(voucherBatches, { fields: [vouchers.batchId], references: [voucherBatches.id] }),
+  product: one(products, { fields: [vouchers.productId], references: [products.id] }),
+  owner: one(users, { fields: [vouchers.ownerUserId], references: [users.id] }),
+  order: one(orders, { fields: [vouchers.orderId], references: [orders.id] }),
 }));
 
 export const restockRequestsRelations = relations(restockRequests, ({ one }) => ({
@@ -479,6 +546,8 @@ export const usersRelations = relations(users, ({ many }) => ({
   passwordResetTokens: many(passwordResetTokens),
   twoFactorRecoveryCodes: many(twoFactorRecoveryCodes),
   memberTransactions: many(memberTransactions),
+  voucherBatches: many(voucherBatches),
+  vouchers: many(vouchers),
 }));
 
 export const oauthAccountsRelations = relations(oauthAccounts, ({ one }) => ({
@@ -557,7 +626,11 @@ export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
 export type TwoFactorRecoveryCode = typeof twoFactorRecoveryCodes.$inferSelect;
 export type SupportConversation = typeof supportConversations.$inferSelect;
 export type SupportMessage = typeof supportMessages.$inferSelect;
+export type VoucherBatch = typeof voucherBatches.$inferSelect;
+export type Voucher = typeof vouchers.$inferSelect;
 
 export type CardStatus = (typeof cardStatusEnum.enumValues)[number];
 export type OrderStatus = (typeof orderStatusEnum.enumValues)[number];
 export type PaymentMethod = (typeof paymentMethodEnum.enumValues)[number];
+export type VoucherType = (typeof voucherTypeEnum.enumValues)[number];
+export type VoucherStatus = (typeof voucherStatusEnum.enumValues)[number];

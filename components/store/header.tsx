@@ -17,6 +17,7 @@ import {
   Zap,
   TrendingUp,
   UserRoundPen,
+  Ticket,
   type LucideIcon,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -271,6 +272,12 @@ export function Header({ siteName = "LDC Store", siteIcon, siteIconUrl }: Header
                     {t("wallet")}
                   </Link>
                 </DropdownMenuItem>
+                {user?.id !== "admin" && <DropdownMenuItem asChild>
+                  <Link href="/account/vouchers" className="cursor-pointer">
+                    <Ticket className="mr-2 h-4 w-4" />
+                    卡券兑换
+                  </Link>
+                </DropdownMenuItem>}
                 {user?.id !== "admin" && <DropdownMenuItem asChild>
                   <Link href="/account/security" className="cursor-pointer">
                     <Shield className="mr-2 h-4 w-4" />

@@ -10,6 +10,7 @@ import { createOrder } from "@/lib/actions/orders";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { Loader2, Minus, Plus, CheckCircle2, WalletCards } from "lucide-react";
 import { useI18n } from "@/components/i18n-provider";
@@ -28,7 +29,7 @@ interface OrderFormProps {
   stock: number;
   minQuantity: number;
   maxQuantity: number;
-  membership?: { balanceCents: number; bonusBalanceCents: number; pointsBalance: number };
+  membership?: { balanceCents: number; bonusBalanceCents: number; pointsBalance: number; discountVouchers: Array<{ id: string; code: string; discountAmountCents: number; minOrderCents: number; expiresAt: Date | null }> };
 }
 
 export function OrderForm({
@@ -44,6 +45,7 @@ export function OrderForm({
   const { t } = useI18n();
   const [paymentMethod, setPaymentMethod] = useState<"gateway" | "balance">("gateway");
   const [usePoints, setUsePoints] = useState(false);
+  const [selectedVoucherId, setSelectedVoucherId] = useState("");
   const router = useRouter();
   const { data: session, status } = useSession();
   const effectiveMax = Math.min(maxQuantity, stock);
@@ -62,7 +64,10 @@ export function OrderForm({
   const quantity = form.watch("quantity");
   const totalPrice = (price * quantity).toFixed(2);
   const totalCents = Math.round(price * quantity * 100);
-  const redemption = usePoints ? calculatePointsRedemption(totalCents, membership?.pointsBalance || 0) : { points: 0, discountCents: 0 };
+  const selectedVoucher = membership?.discountVouchers.find((voucher) => voucher.id === selectedVoucherId);
+  const voucherDiscountCents = selectedVoucher && totalCents >= selectedVoucher.minOrderCents ? Math.min(totalCents, selectedVoucher.discountAmountCents) : 0;
+  const afterVoucherCents = totalCents - voucherDiscountCents;
+  const redemption = usePoints ? calculatePointsRedemption(afterVoucherCents, membership?.pointsBalance || 0) : { points: 0, discountCents: 0 };
 
   const updateQuantity = (delta: number) => {
     const newValue = quantity + delta;
@@ -87,6 +92,7 @@ export function OrderForm({
         quantity: values.quantity,
         paymentMethod,
         usePoints: paymentMethod === "balance" && usePoints,
+        voucherId: voucherDiscountCents > 0 ? selectedVoucherId : undefined,
       });
 
       if (result.success) {
@@ -189,6 +195,8 @@ export function OrderForm({
         <p className="mt-2 text-xs text-muted-foreground">200 积分抵 ¥1，单笔最多抵扣 10%</p>
       </div>}
 
+      {membership && membership.discountVouchers.length > 0 && <div className="space-y-2 rounded-lg border bg-muted/20 p-3"><Label htmlFor="discount-voucher">满减券</Label><Select value={selectedVoucherId || "none"} onValueChange={(value) => setSelectedVoucherId(value === "none" ? "" : value)}><SelectTrigger id="discount-voucher"><SelectValue placeholder="不使用满减券" /></SelectTrigger><SelectContent><SelectItem value="none">不使用满减券</SelectItem>{membership.discountVouchers.map((voucher) => <SelectItem key={voucher.id} value={voucher.id}>满 ¥{(voucher.minOrderCents / 100).toFixed(2)} 减 ¥{(voucher.discountAmountCents / 100).toFixed(2)}</SelectItem>)}</SelectContent></Select>{selectedVoucher ? <p className={voucherDiscountCents > 0 ? "text-xs text-muted-foreground" : "text-xs text-destructive"}>{voucherDiscountCents > 0 ? `本单已减 ¥${(voucherDiscountCents / 100).toFixed(2)}` : `还差 ¥${((selectedVoucher.minOrderCents - totalCents) / 100).toFixed(2)} 可使用`}</p> : null}</div>}
+
       {/* Quantity */}
       <div className="space-y-2">
         <Label>{t("quantity")}</Label>
@@ -236,7 +244,8 @@ export function OrderForm({
       <div className="flex items-center justify-between pt-2">
         <div>
           <span className="text-sm text-muted-foreground">{productName} × {quantity}</span>
-          <div className="text-xl font-bold">¥{((totalCents - redemption.discountCents) / 100).toFixed(2)}</div>
+          <div className="text-xl font-bold">¥{((afterVoucherCents - redemption.discountCents) / 100).toFixed(2)}</div>
+          {voucherDiscountCents > 0 ? <p className="text-xs text-muted-foreground">已使用满减券 -¥{(voucherDiscountCents / 100).toFixed(2)}</p> : null}
         </div>
         <Button type="submit" disabled={isPending}>
           {isPending ? (
