@@ -24,6 +24,7 @@ import {
 import { formatLocalTime } from "@/lib/time";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/components/i18n-provider";
+import { getLocalizedFulfillmentLabel, type FulfillmentMode } from "@/lib/fulfillment";
 
 interface OrderResultPageProps {
   // Next.js 期望 searchParams 为 Promise 类型；运行时保留 isThenable 检查以兼容测试传入对象。
@@ -40,6 +41,9 @@ interface OrderData {
   paidAt: Date | null;
   cards: string[];
   deliveryLocked?: boolean;
+  fulfillmentMode: FulfillmentMode;
+  deliveryDueAt: Date | null;
+  fulfilledAt: Date | null;
 }
 
 // 轮询配置
@@ -108,7 +112,7 @@ function InfoItem({
 }
 
 export default function OrderResultPage({ searchParams }: OrderResultPageProps) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   // 兼容 undefined、Promise、纯对象（测试环境）三种情况
   const resolvedParams = searchParams
     ? (isThenable<{ out_trade_no?: string }>(searchParams) ? use(searchParams) : searchParams)
@@ -576,7 +580,13 @@ export default function OrderResultPage({ searchParams }: OrderResultPageProps) 
               </div>
             ) : (
               <div className="rounded-2xl border bg-muted/30 p-4 text-sm text-muted-foreground">
-                {t("preparingDeliveryHint")}
+                <div>{t("preparingDeliveryHint")}</div>
+                {order.fulfillmentMode !== "auto" ? (
+                  <div className="mt-2 font-medium text-foreground">
+                    {getLocalizedFulfillmentLabel(order.fulfillmentMode, locale)}
+                    {order.deliveryDueAt ? ` · ${formatLocalTime(order.deliveryDueAt)}` : ""}
+                  </div>
+                ) : null}
               </div>
             )
           ) : null}

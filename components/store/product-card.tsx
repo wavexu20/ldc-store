@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { ArrowUpRight, Flame, Package, Sparkles, TrendingUp } from "lucide-react";
 import { RestockRequestInline } from "@/components/store/restock-request-inline";
 import { useI18n } from "@/components/i18n-provider";
+import { getLocalizedFulfillmentLabel, type FulfillmentMode } from "@/lib/fulfillment";
 
 interface ProductCardProps {
   id: string;
@@ -16,6 +17,7 @@ interface ProductCardProps {
   originalPrice?: string | null;
   coverImage?: string | null;
   stock: number;
+  fulfillmentMode?: FulfillmentMode;
   isFeatured?: boolean;
   salesCount?: number;
   category?: {
@@ -39,13 +41,14 @@ export function ProductCard({
   originalPrice,
   coverImage,
   stock,
+  fulfillmentMode = "auto",
   isFeatured,
   salesCount,
   category,
   restockRequestCount = 0,
   restockRequesters = [],
 }: ProductCardProps) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const isOutOfStock = stock === 0;
   const hasDiscount = originalPrice && parseFloat(originalPrice) > parseFloat(price);
   const discountPercent = hasDiscount
@@ -108,6 +111,10 @@ export function ProductCard({
             </Badge>
           )}
         </div>
+
+        <Badge variant="secondary" className="absolute bottom-3 left-3 border-white/15 bg-black/65 text-xs text-white backdrop-blur-sm">
+          {getLocalizedFulfillmentLabel(fulfillmentMode, locale)}
+        </Badge>
 
         {/* Category tag */}
         {category && (

@@ -6,6 +6,7 @@ import {
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
 import { relations, sql } from "drizzle-orm";
+import { fulfillmentModeValues } from "@/lib/fulfillment";
 
 // ============================================
 // Enums
@@ -243,6 +244,7 @@ export const products = sqliteTable("products", {
   sortOrder: integer("sort_order").default(0).notNull(),
   minQuantity: integer("min_quantity").default(1).notNull(),
   maxQuantity: integer("max_quantity").default(10).notNull(),
+  fulfillmentMode: text("fulfillment_mode", { enum: fulfillmentModeValues }).default("auto").notNull(),
   salesCount: integer("sales_count").default(0).notNull(), // 销量统计
   createdAt: createdAt(),
   updatedAt: updatedAt(),
@@ -325,6 +327,7 @@ export const orders = sqliteTable("orders", {
   // 数据库默认值保留为 ldc 兼容历史库；新订单由业务层显式写入 gateway。
   paymentMethod: text("payment_method", { enum: paymentMethodValues }).default("ldc").notNull(),
   status: text("status", { enum: orderStatusValues }).default("pending").notNull(),
+  fulfillmentMode: text("fulfillment_mode", { enum: fulfillmentModeValues }).default("auto").notNull(),
   tradeNo: text("trade_no"), // 支付平台订单号
   
   // 用户信息（OSS登录用户）
@@ -338,6 +341,8 @@ export const orders = sqliteTable("orders", {
   
   // 时间戳
   paidAt: timestamp("paid_at"),
+  deliveryDueAt: timestamp("delivery_due_at"),
+  fulfilledAt: timestamp("fulfilled_at"),
   expiredAt: timestamp("expired_at"), // 过期时间
   createdAt: createdAt(),
   updatedAt: updatedAt(),
@@ -696,3 +701,4 @@ export type OrderStatus = (typeof orderStatusEnum.enumValues)[number];
 export type PaymentMethod = (typeof paymentMethodEnum.enumValues)[number];
 export type VoucherType = (typeof voucherTypeEnum.enumValues)[number];
 export type VoucherStatus = (typeof voucherStatusEnum.enumValues)[number];
+export type { FulfillmentMode } from "@/lib/fulfillment";

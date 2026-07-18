@@ -75,6 +75,7 @@ export default function EditProductPage({ params }: EditProductPageProps) {
           sortOrder: product.sortOrder,
           minQuantity: product.minQuantity,
           maxQuantity: product.maxQuantity,
+          fulfillmentMode: product.fulfillmentMode,
           autoTranslate: false,
           translationSourceLocale: "zh",
         });

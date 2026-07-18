@@ -36,6 +36,7 @@ import Link from "next/link";
 import { formatShortTime } from "@/lib/time";
 import { useI18n } from "@/components/i18n-provider";
 import type { MessageKey } from "@/lib/i18n";
+import { getLocalizedFulfillmentLabel, type FulfillmentMode } from "@/lib/fulfillment";
 
 interface OrderData {
   orderNo: string;
@@ -48,6 +49,9 @@ interface OrderData {
   paidAt: Date | null;
   cards: string[];
   deliveryLocked?: boolean;
+  fulfillmentMode: FulfillmentMode;
+  deliveryDueAt: Date | null;
+  fulfilledAt: Date | null;
 }
 
 const statusConfig: Record<
@@ -94,7 +98,7 @@ const statusConfig: Record<
 };
 
 export default function MyOrdersPage() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const { data: session, status: sessionStatus } = useSession();
   const router = useRouter();
   const [orders, setOrders] = useState<OrderData[] | null>(null);
@@ -365,6 +369,12 @@ export default function MyOrdersPage() {
                     {order.status === "pending" && (
                       <div className="mt-3 rounded bg-warning/10 p-2 text-xs text-warning-foreground dark:text-warning">
                         {t("orderPendingHint")}
+                      </div>
+                    )}
+                    {order.status === "paid" && order.fulfillmentMode !== "auto" && (
+                      <div className="mt-3 rounded border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-200">
+                        {getLocalizedFulfillmentLabel(order.fulfillmentMode, locale)}
+                        {order.deliveryDueAt ? ` · ${new Date(order.deliveryDueAt).toLocaleString()}` : ""}
                       </div>
                     )}
 

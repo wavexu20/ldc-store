@@ -8,6 +8,7 @@ import {
   type CardStatus,
   type OrderStatus,
   type PaymentMethod,
+  type FulfillmentMode,
 } from "@/lib/db";
 import { requireAdmin } from "@/lib/auth-utils";
 import { revalidatePath } from "next/cache";
@@ -32,10 +33,13 @@ export interface AdminOrderListItem {
   tradeNo: string | null;
   refundReason: string | null;
   createdAt: string;
+  fulfillmentMode: FulfillmentMode;
+  deliveryDueAt: string | null;
 }
 
 export interface AdminOrdersStats {
   pending: number;
+  awaitingFulfillment: number;
   completed: number;
   refund_pending: number;
 }
@@ -78,6 +82,9 @@ export interface AdminOrderDetail {
   updatedAt: string;
   refundRequestedAt: string | null;
   refundedAt: string | null;
+  fulfillmentMode: FulfillmentMode;
+  deliveryDueAt: string | null;
+  fulfilledAt: string | null;
   cards: AdminOrderDetailCardItem[];
   product?: {
     id: string;
@@ -114,6 +121,8 @@ type AdminOrdersRow = Pick<
   | "tradeNo"
   | "refundReason"
   | "createdAt"
+  | "fulfillmentMode"
+  | "deliveryDueAt"
 >;
 
 function toIsoString(value: unknown): string | null {
@@ -172,6 +181,8 @@ function serializeAdminOrdersRow(row: AdminOrdersRow): AdminOrderListItem {
     tradeNo: row.tradeNo ?? null,
     refundReason: row.refundReason ?? null,
     createdAt: toIsoString(row.createdAt) ?? "",
+    fulfillmentMode: row.fulfillmentMode,
+    deliveryDueAt: toIsoString(row.deliveryDueAt),
   };
 }
 
@@ -183,6 +194,7 @@ function pickStatsFromGroupedCounts(
   );
   return {
     pending: map.get("pending") ?? 0,
+    awaitingFulfillment: map.get("paid") ?? 0,
     completed: map.get("completed") ?? 0,
     refund_pending: map.get("refund_pending") ?? 0,
   };
@@ -216,6 +228,8 @@ export async function getAdminOrdersPage(input: {
         tradeNo: true,
         refundReason: true,
         createdAt: true,
+        fulfillmentMode: true,
+        deliveryDueAt: true,
       },
       where,
       orderBy: (o, { desc }) => [desc(o.createdAt)],
@@ -403,6 +417,9 @@ export async function getAdminOrderDetail(orderId: string): Promise<AdminOrderDe
         updatedAt: toIsoString(order.updatedAt) ?? "",
         refundRequestedAt: toIsoString(order.refundRequestedAt),
         refundedAt: toIsoString(order.refundedAt),
+        fulfillmentMode: order.fulfillmentMode,
+        deliveryDueAt: toIsoString(order.deliveryDueAt),
+        fulfilledAt: toIsoString(order.fulfilledAt),
         cards: order.cards.map(serializeAdminOrderDetailCard),
         product: order.product
           ? {

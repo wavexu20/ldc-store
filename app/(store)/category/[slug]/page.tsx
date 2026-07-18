@@ -89,6 +89,7 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
               originalPrice={product.originalPrice}
               coverImage={product.coverImage}
               stock={product.stock}
+              fulfillmentMode={product.fulfillmentMode}
               isFeatured={product.isFeatured}
               salesCount={product.salesCount}
               category={product.category}

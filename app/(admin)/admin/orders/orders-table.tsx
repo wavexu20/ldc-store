@@ -32,6 +32,7 @@ import { deleteAdminOrders, type AdminOrderListItem } from "@/lib/actions/admin-
 import { canApproveRefund, orderStatusConfig, paymentMethodLabels } from "./order-meta";
 import { OrderActions } from "./order-actions";
 import { buildAdminOrdersExportUrl } from "./orders-url";
+import { fulfillmentModeMeta } from "@/lib/fulfillment";
 
 function Checkbox({
   checked,
@@ -272,6 +273,7 @@ function OrdersTableView({
             <TableHead className="text-right">金额</TableHead>
             <TableHead>支付方式</TableHead>
             <TableHead className="text-center">状态</TableHead>
+            <TableHead>发货</TableHead>
             <TableHead>创建时间</TableHead>
             <TableHead className="text-right">操作</TableHead>
           </TableRow>
@@ -280,7 +282,7 @@ function OrdersTableView({
           {items.map((order) => {
             const meta = orderStatusConfig[order.status];
             return (
-              <TableRow key={order.id}>
+              <TableRow key={order.id} className={order.status === "paid" && order.fulfillmentMode !== "auto" ? "bg-blue-50/70 dark:bg-blue-950/20" : undefined}>
                 <TableCell>
                   <Checkbox
                     checked={selectedIds.has(order.id)}
@@ -302,6 +304,14 @@ function OrdersTableView({
                 <TableCell className="text-center">
                   <Badge className={meta.color}>{meta.label}</Badge>
                 </TableCell>
+                <TableCell className="text-sm">
+                  <div>{fulfillmentModeMeta[order.fulfillmentMode].shortLabel}</div>
+                  {order.status === "paid" && order.deliveryDueAt ? (
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      截止 <LocalTime value={order.deliveryDueAt} mode="short" />
+                    </div>
+                  ) : null}
+                </TableCell>
                 <TableCell className="text-sm text-zinc-500">
                   <LocalTime value={order.createdAt} mode="short" />
                 </TableCell>
@@ -314,6 +324,8 @@ function OrdersTableView({
                     refundReason={order.refundReason}
                     refundEnabled={canApproveRefund(order.paymentMethod, refundEnabled)}
                     refundMode={refundMode}
+                    fulfillmentMode={order.fulfillmentMode}
+                    quantity={order.quantity}
                   />
                 </TableCell>
               </TableRow>

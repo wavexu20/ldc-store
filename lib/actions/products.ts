@@ -23,6 +23,7 @@ import {
   saleableCardInventoryCondition,
   summarizeAvailableInventory,
 } from "@/lib/inventory";
+import { isManualFulfillment } from "@/lib/fulfillment";
 
 async function syncProductVariants(productId: string, variants: NonNullable<ProductInput["variants"]>) {
   const now = new Date();
@@ -133,6 +134,8 @@ export async function getActiveProducts(options?: {
         coverImage: true,
         isFeatured: true,
         salesCount: true,
+        fulfillmentMode: true,
+        maxQuantity: true,
         sortOrder: true,
         createdAt: true,
       },
@@ -185,7 +188,9 @@ export async function getActiveProducts(options?: {
 
   return productList.map((product) => ({
     ...product,
-    stock: stockMap.get(product.id) || 0,
+    stock: isManualFulfillment(product.fulfillmentMode)
+      ? product.maxQuantity
+      : stockMap.get(product.id) || 0,
     restockRequestCount: restockSummary[product.id]?.count ?? 0,
     restockRequesters: restockSummary[product.id]?.requesters ?? [],
   }));
@@ -214,6 +219,7 @@ export async function getProductBySlug(slug: string) {
         isFeatured: true,
         minQuantity: true,
         maxQuantity: true,
+        fulfillmentMode: true,
         salesCount: true,
         createdAt: true,
         updatedAt: true,
@@ -250,12 +256,19 @@ export async function getProductBySlug(slug: string) {
     }),
   ]);
 
-  const stock = stockCount?.count || 0;
+  const stock = isManualFulfillment(product.fulfillmentMode)
+    ? product.maxQuantity
+    : stockCount?.count || 0;
   const variantStockMap = new Map(variantStockCounts.filter((row) => row.variantId).map((row) => [row.variantId!, row.count]));
 
   return {
     ...product,
-    variants: product.variants.map((variant) => ({ ...variant, stock: variantStockMap.get(variant.id) || 0 })),
+    variants: product.variants.map((variant) => ({
+      ...variant,
+      stock: isManualFulfillment(product.fulfillmentMode)
+        ? product.maxQuantity
+        : variantStockMap.get(variant.id) || 0,
+    })),
     stock,
     restockRequestCount: restockSummary[product.id]?.count ?? 0,
     restockRequesters: restockSummary[product.id]?.requesters ?? [],
@@ -307,7 +320,9 @@ export async function getProductById(id: string) {
       ...variant,
       stock: inventory.variantStock[variant.id] ?? 0,
     })),
-    stock: inventory.saleableStock,
+    stock: isManualFulfillment(product.fulfillmentMode)
+      ? product.maxQuantity
+      : inventory.saleableStock,
     publicStock: inventory.publicStock,
     inactiveStock: inventory.inactiveStock,
   };
@@ -349,6 +364,7 @@ function mapDbProductToTemplateInput(row: {
   sortOrder: number;
   minQuantity: number;
   maxQuantity: number;
+  fulfillmentMode: ProductInput["fulfillmentMode"];
 }): ProductInput {
   const price = toDecimalNumber(row.price);
   const originalPrice =
@@ -369,6 +385,7 @@ function mapDbProductToTemplateInput(row: {
     sortOrder: row.sortOrder,
     minQuantity: row.minQuantity,
     maxQuantity: row.maxQuantity,
+    fulfillmentMode: row.fulfillmentMode,
   };
 }
 
@@ -409,6 +426,7 @@ export async function getProductTemplateById(
       sortOrder: true,
       minQuantity: true,
       maxQuantity: true,
+      fulfillmentMode: true,
     },
   });
 
@@ -625,7 +643,9 @@ export async function searchProducts(
   return {
     items: productList.map((product) => ({
       ...product,
-      stock: stockMap.get(product.id) || 0,
+      stock: isManualFulfillment(product.fulfillmentMode)
+        ? product.maxQuantity
+        : stockMap.get(product.id) || 0,
       restockRequestCount: restockSummary[product.id]?.count ?? 0,
       restockRequesters: restockSummary[product.id]?.requesters ?? [],
     })),

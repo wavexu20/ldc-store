@@ -37,6 +37,7 @@ import { logger, getRequestIdFromHeaders } from "@/lib/logger";
 import { parseWalletAmount } from "@/lib/money";
 import { calculatePointsEarned, calculatePointsRedemption, splitBalancePayment } from "@/lib/membership";
 import { awardOrderPoints, reverseExternalOrderPoints } from "@/lib/member-service";
+import { getFulfillmentDueAt, isManualFulfillment } from "@/lib/fulfillment";
 import { isSecondFactorVerificationRequired, SECOND_FACTOR_REQUIRED_MESSAGE, requireSecondFactor } from "@/lib/security/two-factor-session";
 import {
   sendNewOrderNotification,
@@ -157,12 +158,15 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
 
     const { orderExpireMinutes } = await getSystemSettings();
 
-    const availableCards = await db
-      .select({ id: cards.id })
-      .from(cards)
-      .where(and(eq(cards.productId, productId), cardVariantCondition, eq(cards.status, "available")))
-      .limit(quantity);
-    if (availableCards.length < quantity) {
+    const manualFulfillment = isManualFulfillment(product.fulfillmentMode);
+    const availableCards = manualFulfillment
+      ? []
+      : await db
+          .select({ id: cards.id })
+          .from(cards)
+          .where(and(eq(cards.productId, productId), cardVariantCondition, eq(cards.status, "available")))
+          .limit(quantity);
+    if (!manualFulfillment && availableCards.length < quantity) {
       throw new Error(`库存不足，当前仅剩 ${availableCards.length} 件`);
     }
 
@@ -176,7 +180,7 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     const expiredAt = getExpireTime(orderExpireMinutes);
     const createdEpoch = Math.floor(createdAt.getTime() / 1000);
     const expiredEpoch = Math.floor(expiredAt.getTime() / 1000);
-    const placeholders = cardIds.map(() => "?").join(", ");
+    const placeholders = cardIds.length > 0 ? cardIds.map(() => "?").join(", ") : "NULL";
     const selectedVoucher = voucherId
       ? await db.query.vouchers.findFirst({ where: eq(vouchers.id, voucherId) })
       : null;
@@ -197,7 +201,7 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     const effectivePaymentMethod = isVoucherOnly ? "voucher" : paymentMethod;
     if (paymentMethod === "voucher" && !isVoucherOnly) throw new Error("卡券支付方式不可用");
     const isBalance = effectivePaymentMethod === "balance";
-    const isImmediateCompletion = isBalance || effectivePaymentMethod === "voucher";
+    const isImmediatePayment = isBalance || effectivePaymentMethod === "voucher";
     const member = isBalance ? await db.query.users.findFirst({
       where: eq(users.id, userId),
       columns: { balanceCents: true, bonusBalanceCents: true, pointsBalance: true },
@@ -212,6 +216,22 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     const cashSpentCents = split?.cashSpentCents || 0;
     const bonusSpentCents = split?.bonusSpentCents || 0;
     const pointsEarned = calculatePointsEarned(payableCents);
+    const initialStatus = isImmediatePayment
+      ? manualFulfillment ? "paid" : "completed"
+      : "pending";
+    const initialDueAt = isImmediatePayment
+      ? getFulfillmentDueAt(product.fulfillmentMode, createdAt)
+      : null;
+    const initialDueEpoch = initialDueAt ? Math.floor(initialDueAt.getTime() / 1000) : null;
+    const initialFulfilledEpoch = isImmediatePayment && !manualFulfillment ? createdEpoch : null;
+    const stockGuardSql = manualFulfillment
+      ? "1 = 1"
+      : `(SELECT COUNT(*) FROM cards
+          WHERE product_id = ? AND ${selectedVariant ? "variant_id = ?" : "variant_id IS NULL"} AND status = 'available' AND id IN (${placeholders})
+        ) = ?`;
+    const stockGuardBinds = manualFulfillment
+      ? []
+      : [productId, ...(selectedVariant ? [selectedVariant.id] : []), ...cardIds, quantity];
     const d1 = getD1Binding();
 
     const statements = [
@@ -219,14 +239,11 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
         INSERT INTO orders (
           id, order_no, product_id, product_variant_id, product_variant_name, product_name, product_price, quantity,
           total_amount, original_amount, cash_spent_cents, bonus_spent_cents, points_redeemed, points_earned,
-          payment_method, status, trade_no, user_id, username,
-          user_image, paid_at, expired_at, created_at, updated_at
+          payment_method, status, fulfillment_mode, trade_no, user_id, username,
+          user_image, paid_at, delivery_due_at, fulfilled_at, expired_at, created_at, updated_at
         )
-        SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-        WHERE (
-          SELECT COUNT(*) FROM cards
-          WHERE product_id = ? AND ${selectedVariant ? "variant_id = ?" : "variant_id IS NULL"} AND status = 'available' AND id IN (${placeholders})
-        ) = ?
+        SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+        WHERE ${stockGuardSql}
         AND (? <> 'balance' OR EXISTS (
           SELECT 1 FROM users WHERE id = ? AND balance_cents >= ? AND bonus_balance_cents >= ? AND points_balance >= ?
         ))
@@ -238,21 +255,22 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
         orderId, orderNo, productId, selectedVariant?.id ?? null, selectedVariant?.name ?? null, product.name, unitPrice, quantity,
         (payableCents / 100).toFixed(2), totalAmount.toFixed(2), cashSpentCents, bonusSpentCents, redemption.points, pointsEarned,
         effectivePaymentMethod,
-        isImmediateCompletion ? "completed" : "pending",
-        isImmediateCompletion ? `${effectivePaymentMethod.toUpperCase()}-${orderNo}` : null,
+        initialStatus, product.fulfillmentMode,
+        isImmediatePayment ? `${effectivePaymentMethod.toUpperCase()}-${orderNo}` : null,
         userId, user.username ?? null, user.image ?? null,
-        isImmediateCompletion ? createdEpoch : null, expiredEpoch, createdEpoch, createdEpoch,
-        productId, ...(selectedVariant ? [selectedVariant.id] : []), ...cardIds, quantity, effectivePaymentMethod, userId, cashSpentCents, bonusSpentCents, redemption.points,
+        isImmediatePayment ? createdEpoch : null, initialDueEpoch, initialFulfilledEpoch, expiredEpoch, createdEpoch, createdEpoch,
+        ...stockGuardBinds, effectivePaymentMethod, userId, cashSpentCents, bonusSpentCents, redemption.points,
         voucherId ?? null, voucherId ?? "", userId
       ),
       d1.prepare(`
         UPDATE cards SET status = ?, order_id = ?, locked_at = ?, sold_at = ?
-        WHERE product_id = ? AND ${selectedVariant ? "variant_id = ?" : "variant_id IS NULL"} AND status = 'available'
+        WHERE ? = 'auto' AND product_id = ? AND ${selectedVariant ? "variant_id = ?" : "variant_id IS NULL"} AND status = 'available'
           AND id IN (${placeholders})
           AND EXISTS (SELECT 1 FROM orders WHERE id = ?)
       `).bind(
-        isImmediateCompletion ? "sold" : "locked", orderId,
-        isImmediateCompletion ? null : createdEpoch, isImmediateCompletion ? createdEpoch : null,
+        isImmediatePayment ? "sold" : "locked", orderId,
+        isImmediatePayment ? null : createdEpoch, isImmediatePayment ? createdEpoch : null,
+        product.fulfillmentMode,
         productId, ...(selectedVariant ? [selectedVariant.id] : []), ...cardIds, orderId
       ),
       d1.prepare(`
@@ -261,7 +279,7 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
             owner_user_id = ?, order_id = ?, redeemed_at = CASE WHEN ? = 1 THEN ? ELSE NULL END
         WHERE id = ? AND type = 'discount' AND status = 'claimed' AND owner_user_id = ?
           AND EXISTS (SELECT 1 FROM orders WHERE id = ?)
-      `).bind(isImmediateCompletion ? 1 : 0, userId, orderId, isImmediateCompletion ? 1 : 0, isImmediateCompletion ? createdEpoch : null, voucherId ?? "", userId, orderId),
+      `).bind(isImmediatePayment ? 1 : 0, userId, orderId, isImmediatePayment ? 1 : 0, isImmediatePayment ? createdEpoch : null, voucherId ?? "", userId, orderId),
       d1.prepare(`
         UPDATE users
         SET balance_cents = balance_cents - ?, bonus_balance_cents = bonus_balance_cents - ?,
@@ -299,7 +317,7 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
         UPDATE products SET sales_count = sales_count + ?, updated_at = ?
         WHERE id = ? AND ? = 1
           AND EXISTS (SELECT 1 FROM orders WHERE id = ?)
-      `).bind(quantity, createdEpoch, productId, isImmediateCompletion ? 1 : 0, orderId),
+      `).bind(quantity, createdEpoch, productId, isImmediatePayment ? 1 : 0, orderId),
     ];
     const [insertResult] = await d1.batch<{ id: string; order_no: string }>(statements);
     if (!insertResult.results[0]) {
@@ -309,7 +327,7 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
       order: { orderNo, createdAt, expiredAt },
       totalAmount: payableCents / 100,
     };
-    if (isImmediateCompletion) await awardOrderPoints(orderId);
+    if (isImmediatePayment) await awardOrderPoints(orderId);
 
     // 4. 刷新页面缓存，确保库存显示准确
     revalidatePath("/");
@@ -414,13 +432,17 @@ export async function handlePaymentSuccess(
     });
     if (!pendingOrder) throw new Error("订单不存在或已处理");
     const nowEpoch = Math.floor(Date.now() / 1000);
+    const paidAt = new Date();
+    const manualFulfillment = isManualFulfillment(pendingOrder.fulfillmentMode);
+    const deliveryDueAt = getFulfillmentDueAt(pendingOrder.fulfillmentMode, paidAt);
+    const deliveryDueEpoch = deliveryDueAt ? Math.floor(deliveryDueAt.getTime() / 1000) : null;
     const d1 = getD1Binding();
     const statements = [
       d1.prepare(`
         UPDATE cards SET status = 'sold', sold_at = ?
-        WHERE order_id = ?
+        WHERE ? = 'auto' AND order_id = ?
           AND EXISTS (SELECT 1 FROM orders WHERE id = ? AND status = 'pending')
-      `).bind(nowEpoch, pendingOrder.id, pendingOrder.id),
+      `).bind(nowEpoch, pendingOrder.fulfillmentMode, pendingOrder.id, pendingOrder.id),
       d1.prepare(`
         UPDATE products SET sales_count = sales_count + ?, updated_at = ?
         WHERE id = ?
@@ -432,15 +454,29 @@ export async function handlePaymentSuccess(
           AND EXISTS (SELECT 1 FROM orders WHERE id = ? AND status = 'pending')
       `).bind(nowEpoch, pendingOrder.id, pendingOrder.id),
       d1.prepare(`
-        UPDATE orders SET status = 'completed', trade_no = ?, paid_at = ?, updated_at = ?
+        UPDATE orders
+        SET status = ?, trade_no = ?, paid_at = ?, delivery_due_at = ?, fulfilled_at = ?, updated_at = ?
         WHERE id = ? AND status = 'pending'
         RETURNING id
-      `).bind(tradeNo, nowEpoch, nowEpoch, pendingOrder.id),
+      `).bind(
+        manualFulfillment ? "paid" : "completed",
+        tradeNo,
+        nowEpoch,
+        deliveryDueEpoch,
+        manualFulfillment ? null : nowEpoch,
+        nowEpoch,
+        pendingOrder.id
+      ),
     ];
     const batchResult = await d1.batch<{ id: string }>(statements);
     if (!batchResult[3]?.results[0]) throw new Error("订单不存在或已处理");
     await awardOrderPoints(pendingOrder.id);
-    const result = { ...pendingOrder, status: "completed" as const, tradeNo, paidAt: new Date() };
+    const result = {
+      ...pendingOrder,
+      status: manualFulfillment ? "paid" as const : "completed" as const,
+      tradeNo,
+      paidAt,
+    };
     if (pendingOrder.productId) {
       const product = await db.query.products.findFirst({
         where: eq(products.id, pendingOrder.productId),
@@ -575,7 +611,7 @@ export async function adminCompleteOrder(
       `).bind(nowEpoch, orderId, orderId),
       d1.prepare(`
         UPDATE orders SET status = 'completed', paid_at = ?, admin_remark = ?, updated_at = ?
-        WHERE id = ? AND status IN ('pending', 'paid') RETURNING id
+        WHERE id = ? AND status IN ('pending', 'paid') AND fulfillment_mode = 'auto' RETURNING id
       `).bind(nowEpoch, adminRemark ?? null, nowEpoch, orderId),
     ]);
     if (!results[3]?.results[0]) throw new Error("订单状态不允许手动完成");
@@ -601,6 +637,101 @@ export async function adminCompleteOrder(
     return {
       success: false,
       message: error instanceof Error ? error.message : "操作失败",
+    };
+  }
+}
+
+/**
+ * 人工发货：每个非空行作为一条卡密交付记录，并一次性完成订单。
+ */
+export async function adminFulfillManualOrder(
+  orderId: string,
+  deliveryContent: string,
+  adminRemark?: string
+): Promise<{ success: boolean; message: string }> {
+  try {
+    await requireAdmin();
+  } catch {
+    return { success: false, message: "需要管理员权限" };
+  }
+
+  const normalizedOrderId = orderId.trim();
+  const deliveryItems = deliveryContent
+    .split(/\r?\n/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  if (!normalizedOrderId) return { success: false, message: "订单 ID 无效" };
+  if (deliveryItems.length === 0) return { success: false, message: "请填写发货内容" };
+  if (deliveryItems.some((item) => item.length > 1000)) {
+    return { success: false, message: "单条发货内容不能超过 1000 个字符" };
+  }
+  if (deliveryContent.length > 20_000) {
+    return { success: false, message: "发货内容过长" };
+  }
+
+  try {
+    const order = await db.query.orders.findFirst({
+      where: eq(orders.id, normalizedOrderId),
+      columns: {
+        id: true,
+        productId: true,
+        productVariantId: true,
+        productName: true,
+        quantity: true,
+        status: true,
+        fulfillmentMode: true,
+      },
+    });
+    if (!order) throw new Error("订单不存在");
+    if (order.status !== "paid" || !isManualFulfillment(order.fulfillmentMode)) {
+      throw new Error("仅已支付的人工发货订单可以执行此操作");
+    }
+    if (!order.productId) throw new Error("商品已删除，无法写入发货记录");
+    if (deliveryItems.length !== order.quantity) {
+      throw new Error(`该订单购买 ${order.quantity} 件，请填写 ${order.quantity} 行发货内容`);
+    }
+
+    const nowEpoch = Math.floor(Date.now() / 1000);
+    const d1 = getD1Binding();
+    const statements = deliveryItems.map((content) =>
+      d1.prepare(`
+        INSERT INTO cards (id, product_id, variant_id, content, status, order_id, sold_at, created_at)
+        SELECT ?, ?, ?, ?, 'sold', ?, ?, ?
+        WHERE EXISTS (
+          SELECT 1 FROM orders WHERE id = ? AND status = 'paid' AND fulfillment_mode <> 'auto'
+        )
+      `).bind(
+        crypto.randomUUID(),
+        order.productId,
+        order.productVariantId,
+        content,
+        order.id,
+        nowEpoch,
+        nowEpoch,
+        order.id
+      )
+    );
+    statements.push(
+      d1.prepare(`
+        UPDATE orders
+        SET status = 'completed', fulfilled_at = ?, admin_remark = ?, updated_at = ?
+        WHERE id = ? AND status = 'paid' AND fulfillment_mode <> 'auto'
+        RETURNING id
+      `).bind(nowEpoch, adminRemark?.trim() || null, nowEpoch, order.id)
+    );
+    const results = await d1.batch<{ id: string }>(statements);
+    if (!results.at(-1)?.results[0]) throw new Error("订单已被处理，请刷新后重试");
+
+    revalidatePath("/admin/orders");
+    revalidatePath(`/admin/orders/${order.id}`);
+    revalidatePath("/order/my");
+    return { success: true, message: "发货成功，用户已可查看卡密" };
+  } catch (error) {
+    console.error("人工发货失败:", error);
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : "发货失败，请稍后重试",
     };
   }
 }
@@ -649,6 +780,9 @@ export async function getUserOrders() {
         paymentMethod: order.paymentMethod,
         createdAt: order.createdAt,
         paidAt: order.paidAt,
+        fulfillmentMode: order.fulfillmentMode,
+        deliveryDueAt: order.deliveryDueAt,
+        fulfilledAt: order.fulfilledAt,
         cards: deliveryLocked ? [] : cardsToShow.map((c) => c.content),
         deliveryLocked: deliveryLocked && cardsToShow.length > 0,
       };
@@ -785,6 +919,9 @@ export async function getOrderByNo(orderNo: string) {
         paymentMethod: order.paymentMethod,
         createdAt: order.createdAt,
         paidAt: order.paidAt,
+        fulfillmentMode: order.fulfillmentMode,
+        deliveryDueAt: order.deliveryDueAt,
+        fulfilledAt: order.fulfilledAt,
         cards: deliveryLocked ? [] : cardsToShow.map((c) => c.content),
         deliveryLocked: deliveryLocked && cardsToShow.length > 0,
       },

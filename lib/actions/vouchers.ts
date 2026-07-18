@@ -8,6 +8,7 @@ import { requireAdmin } from "@/lib/auth-utils";
 import { db, cards, getD1Binding, products, productVariants, users, voucherBatches, vouchers } from "@/lib/db";
 import { requireSecondFactor, SECOND_FACTOR_REQUIRED_MESSAGE } from "@/lib/security/two-factor-session";
 import { createVoucherBatchSchema, type CreateVoucherBatchInput } from "@/lib/validations/voucher";
+import { getFulfillmentDueAt, isManualFulfillment } from "@/lib/fulfillment";
 
 const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
@@ -192,18 +193,23 @@ export async function redeemVoucher(rawCode: string): Promise<{ success: boolean
   const variant = voucher.productVariantId ? await db.query.productVariants.findFirst({ where: and(eq(productVariants.id, voucher.productVariantId), eq(productVariants.isActive, true)), columns: { id: true, name: true, price: true } }) : null;
   if (voucher.productVariantId && !variant) return { success: false, message: "兑换券绑定的商品规格已下架，请联系客服" };
   const cardVariantCondition = variant ? eq(cards.variantId, variant.id) : isNull(cards.variantId);
-  const [card] = await db.select({ id: cards.id }).from(cards).where(and(eq(cards.productId, product.id), cardVariantCondition, eq(cards.status, "available"))).limit(1);
-  if (!card) return { success: false, message: "兑换商品暂时缺货，请联系客服" };
+  const manualFulfillment = isManualFulfillment(product.fulfillmentMode);
+  const [card] = manualFulfillment
+    ? []
+    : await db.select({ id: cards.id }).from(cards).where(and(eq(cards.productId, product.id), cardVariantCondition, eq(cards.status, "available"))).limit(1);
+  if (!manualFulfillment && !card) return { success: false, message: "兑换商品暂时缺货，请联系客服" };
   const orderId = crypto.randomUUID();
   const orderNo = generateOrderNo();
+  const dueAt = getFulfillmentDueAt(product.fulfillmentMode, new Date());
+  const dueEpoch = dueAt ? Math.floor(dueAt.getTime() / 1000) : null;
   const results = await d1.batch<{ id: string }>([
-    d1.prepare(`INSERT INTO orders (id,order_no,product_id,product_variant_id,product_variant_name,product_name,product_price,quantity,total_amount,original_amount,payment_method,status,trade_no,user_id,username,user_image,paid_at,expired_at,created_at,updated_at)
-      SELECT ?,?,?,?,?,?,?,?,'0.00',?,'voucher','completed',?,?,?, ?,?,?,?,?
+    d1.prepare(`INSERT INTO orders (id,order_no,product_id,product_variant_id,product_variant_name,product_name,product_price,quantity,total_amount,original_amount,payment_method,status,fulfillment_mode,trade_no,user_id,username,user_image,paid_at,delivery_due_at,fulfilled_at,expired_at,created_at,updated_at)
+      SELECT ?,?,?,?,?,?,?,?,'0.00',?,'voucher',?,?, ?,?,?, ?,?,?,?,?,?,?
       WHERE EXISTS (SELECT 1 FROM vouchers WHERE id = ? AND status = 'available')
-        AND EXISTS (SELECT 1 FROM cards WHERE id = ? AND status = 'available') RETURNING id`)
-      .bind(orderId, orderNo, product.id, variant?.id || null, variant?.name || null, product.name, variant?.price || product.price, 1, variant?.price || product.price, `VOUCHER-${voucher.id}`, user.id, user.username || null, user.image || null, nowEpoch, nowEpoch, nowEpoch, nowEpoch, voucher.id, card.id),
-    d1.prepare(`UPDATE cards SET status = 'sold', order_id = ?, sold_at = ? WHERE id = ? AND status = 'available' AND EXISTS (SELECT 1 FROM orders WHERE id = ?)`)
-      .bind(orderId, nowEpoch, card.id, orderId),
+        AND (? = 1 OR EXISTS (SELECT 1 FROM cards WHERE id = ? AND status = 'available')) RETURNING id`)
+      .bind(orderId, orderNo, product.id, variant?.id || null, variant?.name || null, product.name, variant?.price || product.price, 1, variant?.price || product.price, manualFulfillment ? "paid" : "completed", product.fulfillmentMode, `VOUCHER-${voucher.id}`, user.id, user.username || null, user.image || null, nowEpoch, dueEpoch, manualFulfillment ? null : nowEpoch, nowEpoch, nowEpoch, nowEpoch, voucher.id, manualFulfillment ? 1 : 0, card?.id || ""),
+    d1.prepare(`UPDATE cards SET status = 'sold', order_id = ?, sold_at = ? WHERE ? = 0 AND id = ? AND status = 'available' AND EXISTS (SELECT 1 FROM orders WHERE id = ?)`)
+      .bind(orderId, nowEpoch, manualFulfillment ? 1 : 0, card?.id || "", orderId),
     d1.prepare(`UPDATE vouchers SET status = 'redeemed', owner_user_id = ?, order_id = ?, redeemed_at = ? WHERE id = ? AND status = 'available' AND EXISTS (SELECT 1 FROM orders WHERE id = ?)`)
       .bind(user.id, orderId, nowEpoch, voucher.id, orderId),
     d1.prepare(`UPDATE products SET sales_count = sales_count + 1, updated_at = ? WHERE id = ? AND EXISTS (SELECT 1 FROM orders WHERE id = ?)`)
@@ -214,5 +220,10 @@ export async function redeemVoucher(rawCode: string): Promise<{ success: boolean
   revalidatePath(`/product/${product.slug}`);
   revalidatePath("/order/my");
   revalidatePath("/account/vouchers");
-  return { success: true, message: "商品兑换成功，卡密已发放至我的订单", type: "product", orderNo };
+  return {
+    success: true,
+    message: manualFulfillment ? "商品兑换成功，订单已进入人工发货队列" : "商品兑换成功，卡密已发放至我的订单",
+    type: "product",
+    orderNo,
+  };
 }

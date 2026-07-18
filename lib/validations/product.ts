@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { fulfillmentModeValues } from "@/lib/fulfillment";
 
 export const productTranslationLocales = ["en", "ko", "zh", "ru", "de", "id", "hi"] as const;
 
@@ -45,6 +46,7 @@ const productFieldsSchema = z.object({
   sortOrder: z.number().int().default(0),
   minQuantity: z.number().int().min(1).default(1),
   maxQuantity: z.number().int().min(1).default(10),
+  fulfillmentMode: z.enum(fulfillmentModeValues).default("auto"),
   autoTranslate: z.boolean().default(true),
   translationSourceLocale: z.enum(productTranslationLocales).default("zh"),
 });

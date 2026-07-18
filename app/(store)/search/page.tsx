@@ -222,6 +222,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
                 originalPrice={product.originalPrice}
                 coverImage={product.coverImage}
                 stock={product.stock}
+                fulfillmentMode={product.fulfillmentMode}
                 isFeatured={product.isFeatured}
                 salesCount={product.salesCount}
                 category={product.category}

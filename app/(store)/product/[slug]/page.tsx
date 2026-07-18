@@ -12,6 +12,7 @@ import { RestockRequestInline } from "@/components/store/restock-request-inline"
 import { getTranslator } from "@/lib/i18n-server";
 import { localizeProduct } from "@/lib/product-i18n";
 import { getCheckoutMembership } from "@/lib/actions/wallet";
+import { getLocalizedFulfillmentLabel, isManualFulfillment } from "@/lib/fulfillment";
 
 // 强制动态渲染，避免构建时查询数据库（docker build 无需 DATABASE_URL）
 export const dynamic = "force-dynamic";
@@ -105,11 +106,14 @@ export default async function ProductPage({ params }: ProductPageProps) {
           )}
         </div>
         <div className="text-sm text-muted-foreground">
-          {isOutOfStock ? (
-            <span className="text-destructive">{t("outOfStock")}</span>
-          ) : (
-            <span>{t("inStockSold", { stock: product.stock, sold: product.salesCount })}</span>
-          )}
+          <span className={isOutOfStock && !isManualFulfillment(product.fulfillmentMode) ? "text-destructive" : undefined}>
+            {getLocalizedFulfillmentLabel(product.fulfillmentMode, locale)}
+            {!isManualFulfillment(product.fulfillmentMode)
+              ? isOutOfStock
+                ? ` · ${t("outOfStock")}`
+                : ` · ${t("inStockSold", { stock: product.stock, sold: product.salesCount })}`
+              : ""}
+          </span>
         </div>
       </div>
 
