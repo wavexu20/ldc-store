@@ -95,7 +95,7 @@ export function SupportWidget({ siteName }: { siteName: string }) {
   }
 
   return (
-    <div className={cn("fixed right-4 z-[80] sm:right-6", open ? "bottom-5 sm:bottom-8" : "bottom-28 sm:bottom-20")}>
+    <div className={cn("fixed right-4 z-[80] sm:right-6", open ? "bottom-5 sm:bottom-8" : "bottom-32 sm:bottom-20")}>
       {open ? (
         <section
           aria-label={t("supportChat")}
