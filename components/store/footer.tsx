@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { FileCheck2, RotateCcw, ShieldCheck } from "lucide-react";
 import { useI18n } from "@/components/i18n-provider";
+import { getPaymentIntroductionUrl } from "@/lib/payment/language";
 
 const paymentMethods = [
   { name: "Visa", src: "/payment-methods/visa.svg" },
@@ -19,7 +20,7 @@ interface FooterProps {
 }
 
 export function Footer({ siteName = "Game3DTech" }: FooterProps) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
 
   return (
     <footer className="border-t border-border/70 bg-muted/20">
@@ -28,7 +29,7 @@ export function Footer({ siteName = "Game3DTech" }: FooterProps) {
         <a
           aria-label={t("acceptedPayments")}
           className="mx-auto flex w-fit max-w-full flex-wrap items-center justify-center gap-2 rounded-xl outline-none ring-offset-background transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-          href="https://pay.game3dtech.com/"
+          href={getPaymentIntroductionUrl(locale)}
           rel="noreferrer"
           target="_blank"
           title={t("acceptedPayments")}
