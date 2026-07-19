@@ -230,7 +230,7 @@ export async function testTelegramConnection(
 连接测试成功！
 时间: ${formatTimestamp(new Date())}
 
-此消息由 LDC Store 发送。`;
+此消息由 Game3DTech 发送。`;
 
   return sendTelegramMessage(botToken, chatId, testMessage);
 }

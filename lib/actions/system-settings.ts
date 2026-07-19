@@ -24,7 +24,7 @@ const SYSTEM_SETTING_KEYS = {
 } as const;
 
 export async function getSystemSettings(): Promise<SystemSettings> {
-  const envSiteName = process.env.NEXT_PUBLIC_SITE_NAME || "LDC Store";
+  const envSiteName = process.env.NEXT_PUBLIC_SITE_NAME || "Game3DTech";
   const envSiteDescription =
     process.env.NEXT_PUBLIC_SITE_DESCRIPTION ||
     "基于 Linux DO Credit 的虚拟商品自动发卡平台";
@@ -49,7 +49,7 @@ export async function getSystemSettings(): Promise<SystemSettings> {
       (map.get(SYSTEM_SETTING_KEYS.siteDescription) ?? envSiteDescription) ||
       envSiteDescription,
     siteIcon: map.get(SYSTEM_SETTING_KEYS.siteIcon) ?? "Store",
-    siteIconUrl: map.get(SYSTEM_SETTING_KEYS.siteIconUrl) ?? "",
+    siteIconUrl: map.get(SYSTEM_SETTING_KEYS.siteIconUrl) || "/brand/game3dtech-icon.png",
     orderExpireMinutes: expireMinutes,
     // Telegram 配置 - 敏感字段脱敏，仅返回启用状态
     // 完整配置需通过 getSystemSettingsForAdmin() 获取
@@ -75,7 +75,7 @@ export async function getSystemSettings(): Promise<SystemSettings> {
     siteName: envSiteName,
     siteDescription: envSiteDescription,
     siteIcon: "Store",
-    siteIconUrl: "",
+    siteIconUrl: "/brand/game3dtech-icon.png",
     orderExpireMinutes: getOrderExpireMinutes(),
     telegramEnabled: false,
     telegramBotToken: "",
@@ -322,7 +322,7 @@ export async function getSystemSettingsForAdmin(): Promise<SystemSettings> {
     return getSystemSettings();
   }
 
-  const envSiteName = process.env.NEXT_PUBLIC_SITE_NAME || "LDC Store";
+  const envSiteName = process.env.NEXT_PUBLIC_SITE_NAME || "Game3DTech";
   const envSiteDescription =
     process.env.NEXT_PUBLIC_SITE_DESCRIPTION ||
     "基于 Linux DO Credit 的虚拟商品自动发卡平台";
@@ -347,7 +347,7 @@ export async function getSystemSettingsForAdmin(): Promise<SystemSettings> {
       (map.get(SYSTEM_SETTING_KEYS.siteDescription) ?? envSiteDescription) ||
       envSiteDescription,
     siteIcon: (map.get(SYSTEM_SETTING_KEYS.siteIcon) ?? "Store") as SystemSettings["siteIcon"],
-    siteIconUrl: map.get(SYSTEM_SETTING_KEYS.siteIconUrl) ?? "",
+    siteIconUrl: map.get(SYSTEM_SETTING_KEYS.siteIconUrl) || "/brand/game3dtech-icon.png",
     orderExpireMinutes: expireMinutes,
     telegramEnabled: map.get(SYSTEM_SETTING_KEYS.telegramEnabled) === "true",
     telegramBotToken: map.get(SYSTEM_SETTING_KEYS.telegramBotToken) ?? "",

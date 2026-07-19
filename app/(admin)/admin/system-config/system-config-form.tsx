@@ -189,7 +189,7 @@ export function SystemConfigForm({ initialValues }: SystemConfigFormProps) {
                         <FormItem>
                           <FormLabel>网站名称 *</FormLabel>
                           <FormControl>
-                            <Input placeholder="例如：LDC Store" {...field} />
+                            <Input placeholder="例如：Game3DTech" {...field} />
                           </FormControl>
                           <FormDescription>用于前台标题、Footer 版权等。</FormDescription>
                           <FormMessage />

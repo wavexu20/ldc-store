@@ -10,4 +10,4 @@ VALUES
 INSERT OR IGNORE INTO announcements
   (id, title, content, is_active, sort_order, created_at, updated_at)
 VALUES
-  ('00000000-0000-4000-8000-000000000010', '欢迎使用', '欢迎使用 LDC Store 自动发卡系统，购买商品后将自动发放卡密到您的邮箱。', 1, 1, unixepoch(), unixepoch());
+  ('00000000-0000-4000-8000-000000000010', '欢迎使用', '欢迎使用 Game3DTech 自动发卡系统，购买商品后将自动发放卡密到您的邮箱。', 1, 1, unixepoch(), unixepoch());

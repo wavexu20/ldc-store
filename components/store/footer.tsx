@@ -8,7 +8,7 @@ interface FooterProps {
   siteName?: string;
 }
 
-export function Footer({ siteName = "LDC Store" }: FooterProps) {
+export function Footer({ siteName = "Game3DTech" }: FooterProps) {
   const { t } = useI18n();
   return (
     <footer className="border-t border-border/50 bg-background/80 backdrop-blur-xl">

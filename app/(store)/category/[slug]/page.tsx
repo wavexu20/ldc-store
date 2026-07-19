@@ -25,7 +25,7 @@ export async function generateMetadata({ params }: CategoryPageProps) {
   }
 
   return {
-    title: `${category.name} - LDC Store`,
+    title: `${category.name} - Game3DTech`,
     description: category.description || t("categoryProducts", { name: category.name }),
   };
 }

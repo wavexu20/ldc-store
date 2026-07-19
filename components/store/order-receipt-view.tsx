@@ -62,7 +62,7 @@ export function OrderReceiptView({
   const resolvedMerchantName = useMemo(() => {
     const normalized = merchantName?.trim();
     if (normalized) return normalized;
-    return process.env.NEXT_PUBLIC_SITE_NAME || "LDC Store";
+    return process.env.NEXT_PUBLIC_SITE_NAME || "Game3DTech";
   }, [merchantName]);
 
   const paidAtText = receipt.paidAt ? formatLocalTime(receipt.paidAt) : "—";

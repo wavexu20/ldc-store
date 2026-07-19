@@ -59,7 +59,7 @@ export async function generateMetadata({ params }: ProductPageProps) {
   const product = localizeProduct(sourceProduct, locale);
 
   return {
-    title: `${product.name} - LDC Store`,
+    title: `${product.name} - Game3DTech`,
     description: product.description || product.name,
   };
 }

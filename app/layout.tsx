@@ -16,7 +16,7 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-const siteName = process.env.NEXT_PUBLIC_SITE_NAME || "LDC Store";
+const siteName = process.env.NEXT_PUBLIC_SITE_NAME || "Game3DTech";
 const siteDescription = process.env.NEXT_PUBLIC_SITE_DESCRIPTION || "基于 Linux DO Credit 的虚拟商品自动发卡平台";
 
 export const metadata: Metadata = {

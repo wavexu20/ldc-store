@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
@@ -14,7 +15,6 @@ import {
   LogOut,
   Store,
   ChevronUp,
-  Command,
   User,
   Megaphone,
   Headphones,
@@ -139,11 +139,11 @@ export function AppSidebar({ user }: { user?: AppSidebarUser }) {
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
               <Link href="/admin">
-                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                  <Command className="size-4" />
+                <div className="flex aspect-square size-8 items-center justify-center overflow-hidden rounded-lg">
+                  <Image src="/brand/game3dtech-icon.png" alt="Game3DTech" width={32} height={32} className="size-8" />
                 </div>
                 <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-semibold">LDC Store</span>
+                  <span className="truncate font-semibold">Game3DTech</span>
                   <span className="truncate text-xs text-muted-foreground">
                     管理后台
                   </span>

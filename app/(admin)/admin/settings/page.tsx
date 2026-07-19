@@ -19,7 +19,7 @@ async function getDbSystemSettingsOrNull() {
 export default async function SystemStatusPage() {
   const dbSettings = await getDbSystemSettingsOrNull();
   // 从环境变量读取配置
-  const siteName = process.env.NEXT_PUBLIC_SITE_NAME || "LDC Store";
+  const siteName = process.env.NEXT_PUBLIC_SITE_NAME || "Game3DTech";
   const siteDescription = process.env.NEXT_PUBLIC_SITE_DESCRIPTION || "未配置";
 
   // 检查数据库配置
@@ -279,7 +279,7 @@ LINUXDO_CLIENT_ID=your_oauth_client_id
 LINUXDO_CLIENT_SECRET=your_oauth_client_secret
 
 # 网站信息
-NEXT_PUBLIC_SITE_NAME=LDC Store
+NEXT_PUBLIC_SITE_NAME=Game3DTech
 NEXT_PUBLIC_SITE_DESCRIPTION=自动发卡系统
 
 # Game3DTech Pay

@@ -91,7 +91,7 @@ const SITE_ICON_MAP: Record<string, LucideIcon> = {
   Zap,
 };
 
-export function Header({ siteName = "LDC Store", siteIcon, siteIconUrl }: HeaderProps) {
+export function Header({ siteName = "Game3DTech", siteIcon, siteIconUrl = "/brand/game3dtech-icon.png" }: HeaderProps) {
   const { t } = useI18n();
   const { data: session, status } = useSession();
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
