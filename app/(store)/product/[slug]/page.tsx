@@ -20,6 +20,17 @@ export const dynamic = "force-dynamic";
 // 为什么这样做：generateMetadata 与页面本体都会读同一份商品数据；用 request 级 memoization 避免重复查库（首跳/预取时延会明显下降）。
 const getProductBySlugCached = cache(getProductBySlug);
 
+async function getCheckoutMembershipSafely() {
+  try {
+    return await getCheckoutMembership();
+  } catch (error) {
+    // Balance and voucher data enhance checkout, but must never make the
+    // product itself unavailable when an account record is temporarily bad.
+    console.error("[ProductPage] Failed to load checkout membership", error);
+    return null;
+  }
+}
+
 interface ProductPageProps {
   params: Promise<{ slug: string }>;
 }
@@ -44,7 +55,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
   const { locale, t } = await getTranslator();
   const { slug } = await params;
   const sourceProduct = await getProductBySlugCached(slug);
-  const membership = await getCheckoutMembership();
+  const membership = await getCheckoutMembershipSafely();
 
   if (!sourceProduct) {
     notFound();
