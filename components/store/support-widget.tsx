@@ -78,12 +78,6 @@ export function SupportWidget({ siteName }: { siteName: string }) {
   }, [connect, open]);
 
   useEffect(() => {
-    const handleOpen = () => setOpen(true);
-    window.addEventListener("game3dtech:open-support", handleOpen);
-    return () => window.removeEventListener("game3dtech:open-support", handleOpen);
-  }, []);
-
-  useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, open]);
 
@@ -101,7 +95,7 @@ export function SupportWidget({ siteName }: { siteName: string }) {
   }
 
   return (
-    <div className="fixed bottom-5 right-4 z-[80] sm:bottom-8 sm:right-6">
+    <div className={cn("fixed right-4 z-[80] sm:right-6", open ? "bottom-5 sm:bottom-8" : "bottom-20")}>
       {open ? (
         <section
           aria-label={t("supportChat")}
