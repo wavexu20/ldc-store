@@ -78,6 +78,12 @@ export function SupportWidget({ siteName }: { siteName: string }) {
   }, [connect, open]);
 
   useEffect(() => {
+    const handleOpen = () => setOpen(true);
+    window.addEventListener("game3dtech:open-support", handleOpen);
+    return () => window.removeEventListener("game3dtech:open-support", handleOpen);
+  }, []);
+
+  useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, open]);
 
