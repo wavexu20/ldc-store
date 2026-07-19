@@ -70,16 +70,27 @@ export function ProductCard({
       <div className="relative z-20 flex flex-col pointer-events-none">
       {/* Cover：图像层级更“干净”，内容层与图像层用柔和分割，避免信息挤在同一层导致阅读压力 */}
       <div className="relative aspect-video overflow-hidden bg-zinc-950">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_35%,rgba(255,255,255,0.10),transparent_58%)]" />
         {coverImage ? (
-          <Image
-            src={coverImage}
-            alt={name}
-            fill
-            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-            className="object-contain p-2 transition-transform duration-300 motion-safe:group-hover:scale-[1.015] motion-safe:group-focus-within:scale-[1.015] motion-reduce:transform-none"
-            unoptimized={coverImage.startsWith("/api/product-images/")}
-          />
+          <>
+            <Image
+              src={coverImage}
+              alt=""
+              fill
+              sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+              className="scale-110 object-cover opacity-60 blur-2xl"
+              unoptimized={coverImage.startsWith("/api/product-images/")}
+              aria-hidden="true"
+            />
+            <div className="pointer-events-none absolute inset-0 bg-black/25" />
+            <Image
+              src={coverImage}
+              alt={name}
+              fill
+              sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+              className="object-contain transition-transform duration-300 motion-safe:group-hover:scale-[1.015] motion-safe:group-focus-within:scale-[1.015] motion-reduce:transform-none"
+              unoptimized={coverImage.startsWith("/api/product-images/")}
+            />
+          </>
         ) : (
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="relative">
