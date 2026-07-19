@@ -17,15 +17,15 @@ export function Footer({ siteName = "Game3DTech" }: FooterProps) {
         <p>© {new Date().getFullYear()} {siteName}</p>
         <nav aria-label={t("footerNavigation")} className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2">
           <Link className="inline-flex items-center gap-1.5 transition-colors hover:text-foreground focus-visible:text-foreground" href="/terms" prefetch={false}>
-            <FileCheck2 aria-hidden="true" className="size-3.5" />
+            <FileCheck2 aria-hidden="true" className="size-3.5 shrink-0 text-blue-600 dark:text-blue-400" />
             {t("footerTerms")}
           </Link>
           <Link className="inline-flex items-center gap-1.5 transition-colors hover:text-foreground focus-visible:text-foreground" href="/privacy" prefetch={false}>
-            <ShieldCheck aria-hidden="true" className="size-3.5" />
+            <ShieldCheck aria-hidden="true" className="size-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
             {t("footerPrivacy")}
           </Link>
           <Link className="inline-flex items-center gap-1.5 transition-colors hover:text-foreground focus-visible:text-foreground" href="/refund-policy" prefetch={false}>
-            <RotateCcw aria-hidden="true" className="size-3.5" />
+            <RotateCcw aria-hidden="true" className="size-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
             {t("footerRefunds")}
           </Link>
         </nav>
