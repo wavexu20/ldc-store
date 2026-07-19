@@ -52,7 +52,6 @@ async function HomeProductSection() {
             id={product.id}
             name={product.name}
             slug={product.slug}
-            description={product.description}
             price={product.price}
             originalPrice={product.originalPrice}
             coverImage={product.coverImage}
