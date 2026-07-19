@@ -35,6 +35,7 @@ import { SearchBar } from "@/components/store/search-bar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useI18n } from "@/components/i18n-provider";
 import { LanguageSwitcher } from "@/components/language-switcher";
+import { CurrencySwitcher } from "@/components/currency-switcher";
 
 interface HeaderProps {
   siteName?: string;
@@ -235,6 +236,7 @@ export function Header({ siteName = "Game3DTech", siteIcon, siteIconUrl = "/bran
           </Button>
 
           <LanguageSwitcher placement="header" />
+          <CurrencySwitcher />
           
           {/* 用户状态 */}
           {status === "loading" ? (

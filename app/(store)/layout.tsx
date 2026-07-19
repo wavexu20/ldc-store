@@ -12,6 +12,8 @@ import { db, oauthAccounts, users } from "@/lib/db";
 import { eq } from "drizzle-orm";
 import { hasVerifiedRealEmail } from "@/lib/email-address";
 import { isSecondFactorVerificationRequired } from "@/lib/security/two-factor-session";
+import { CurrencyProvider } from "@/components/currency-provider";
+import { getCurrency } from "@/lib/currency-server";
 
 // 强制动态渲染，避免构建时查询数据库
 export const dynamic = "force-dynamic";
@@ -37,7 +39,8 @@ export default async function StoreLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { siteName, siteIcon, siteIconUrl } = await getSystemSettingsCached();
+  const { siteName, siteIcon, siteIconUrl, usdCnyRate } = await getSystemSettingsCached();
+  const currency = await getCurrency();
   const session = await auth();
   if (session?.user?.id && session.user.id !== "admin") {
     if (await isSecondFactorVerificationRequired(session.user.id)) redirect("/account/verify-2fa");
@@ -49,12 +52,14 @@ export default async function StoreLayout({
   }
 
   return (
-    <div className="flex min-h-screen flex-col">
-      <Header siteName={siteName} siteIcon={siteIcon} siteIconUrl={siteIconUrl} />
-      <main className="flex-1">{children}</main>
-      <Footer siteName={siteName} />
-      <SupportWidget siteName={siteName} />
-      <Toaster position="top-center" richColors />
-    </div>
+    <CurrencyProvider initialCurrency={currency} usdCnyRate={usdCnyRate}>
+      <div className="flex min-h-screen flex-col">
+        <Header siteName={siteName} siteIcon={siteIcon} siteIconUrl={siteIconUrl} />
+        <main className="flex-1">{children}</main>
+        <Footer siteName={siteName} />
+        <SupportWidget siteName={siteName} />
+        <Toaster position="top-center" richColors />
+      </div>
+    </CurrencyProvider>
   );
 }

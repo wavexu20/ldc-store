@@ -24,6 +24,7 @@ export async function createGatewayPayment(input: {
   siteUrl: string;
   successPath: string;
   cancelPath: string;
+  language?: string;
 }): Promise<PaymentLaunchData> {
   const { baseUrl, appId, apiKey } = getConfig();
   const query = new URLSearchParams({
@@ -34,7 +35,7 @@ export async function createGatewayPayment(input: {
     product_description: (input.productDescription || "Game3DTech 商城订单").slice(0, 180),
     success_url: new URL(input.successPath, input.siteUrl).toString(),
     cancel_url: new URL(input.cancelPath, input.siteUrl).toString(),
-    lang: "zh",
+    lang: input.language === "zh" || input.language === "ko" ? input.language : "en",
   });
   const response = await fetch(`${baseUrl}/v1/checkout/sign?${query}`, {
     headers: { "X-API-Key": apiKey, Accept: "application/json" },

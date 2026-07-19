@@ -174,6 +174,32 @@ export function SystemConfigForm({ initialValues }: SystemConfigFormProps) {
                 <Card>
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2 text-base">
+                      <CreditCard className="h-5 w-5" />
+                      货币与汇率
+                    </CardTitle>
+                    <CardDescription>前台仅支持 CNY 与 USD；账户余额和订单始终按 CNY 结算。</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <FormField
+                      control={form.control}
+                      name="usdCnyRate"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>美元显示汇率（1 USD = CNY）</FormLabel>
+                          <FormControl>
+                            <Input type="number" inputMode="decimal" min={1} max={20} step="0.0001" {...field} onChange={(event) => field.onChange(Number(event.target.value))} />
+                          </FormControl>
+                          <FormDescription>只影响 USD 展示价格，不改变 CNY 账本和实际结算金额。</FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-base">
                       <Globe className="h-5 w-5" />
                       站点信息
                     </CardTitle>

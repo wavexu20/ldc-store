@@ -8,9 +8,9 @@ import {
 describe("Game3DTech payment gateway", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
-    delete process.env.PAYMENT_GATEWAY_API_KEY;
-    delete process.env.PAYMENT_GATEWAY_APP_ID;
-    delete process.env.PAYMENT_GATEWAY_URL;
+    Reflect.deleteProperty(process.env, "PAYMENT_GATEWAY_API_KEY");
+    Reflect.deleteProperty(process.env, "PAYMENT_GATEWAY_APP_ID");
+    Reflect.deleteProperty(process.env, "PAYMENT_GATEWAY_URL");
   });
 
   it("creates a trusted hosted checkout URL without exposing the API key", async () => {
@@ -31,6 +31,7 @@ describe("Game3DTech payment gateway", () => {
       siteUrl: "https://game3dtech.com",
       successPath: "/order/result?out_trade_no=ORDER-1",
       cancelPath: "/order/result?out_trade_no=ORDER-1&cancelled=1",
+      language: "zh",
     });
 
     expect(result).toEqual({ redirectUrl: checkoutUrl });
@@ -38,6 +39,7 @@ describe("Game3DTech payment gateway", () => {
     const parsed = new URL(String(requestUrl));
     expect(parsed.searchParams.get("amount")).toBe("12.34");
     expect(parsed.searchParams.get("client_order_id")).toBe("ORDER-1");
+    expect(parsed.searchParams.get("lang")).toBe("zh");
     expect((options?.headers as Record<string, string>)["X-API-Key"]).toBe("gk_test_secret");
     expect(String(requestUrl)).not.toContain("gk_test_secret");
   });

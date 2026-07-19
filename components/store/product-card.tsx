@@ -7,6 +7,7 @@ import { ArrowUpRight, Flame, Package, Sparkles, TrendingUp } from "lucide-react
 import { RestockRequestInline } from "@/components/store/restock-request-inline";
 import { useI18n } from "@/components/i18n-provider";
 import { getLocalizedFulfillmentLabel, type FulfillmentMode } from "@/lib/fulfillment";
+import { Money } from "@/components/store/money";
 
 interface ProductCardProps {
   id: string;
@@ -148,9 +149,8 @@ export function ProductCard({
         {/* Footer */}
         <div className="mt-auto flex items-center justify-between gap-3 border-t pt-2.5">
           <div className="flex items-baseline gap-1.5 tabular-nums">
-            <span className="text-sm font-medium text-muted-foreground">¥</span>
-            <span className="text-lg font-semibold tracking-tight text-foreground">{price}</span>
-            {hasDiscount && <span className="text-xs text-muted-foreground line-through">¥{originalPrice}</span>}
+            <Money amount={price} className="text-lg font-semibold tracking-tight text-foreground" />
+            {hasDiscount && <Money amount={originalPrice!} className="text-xs text-muted-foreground line-through" />}
           </div>
           {isOutOfStock ? (
             <div className="pointer-events-auto min-w-0">

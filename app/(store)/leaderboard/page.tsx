@@ -8,6 +8,7 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 
 import { getCustomersSpendLeaderboard } from "@/lib/actions/customers";
 import { getTranslator } from "@/lib/i18n-server";
+import { Money } from "@/components/store/money";
 
 // 强制动态渲染，避免构建时查询数据库
 export const dynamic = "force-dynamic";
@@ -110,7 +111,7 @@ export default async function CustomersLeaderboardPage() {
                           {row.orderCount}
                         </TableCell>
                         <TableCell className="text-right tabular-nums">
-                          ¥{formatAmount(row.totalSpent)}
+                          <Money amount={formatAmount(row.totalSpent)} />
                         </TableCell>
                       </TableRow>
                     );

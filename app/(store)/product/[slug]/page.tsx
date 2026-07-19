@@ -14,6 +14,7 @@ import { getCheckoutMembership } from "@/lib/actions/wallet";
 import { getLocalizedFulfillmentLabel, isManualFulfillment } from "@/lib/fulfillment";
 import { getProductReviewData } from "@/lib/actions/reviews";
 import { ReviewSection } from "./review-section";
+import { CnySettlementHint, Money } from "@/components/store/money";
 
 // 强制动态渲染，避免构建时查询数据库（docker build 无需 DATABASE_URL）
 export const dynamic = "force-dynamic";
@@ -136,11 +137,12 @@ export default async function ProductPage({ params }: ProductPageProps) {
 
             <div className="mt-5 rounded-xl border bg-muted/30 p-4">
               <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                <span className="text-3xl font-semibold tracking-tight">¥{product.price}</span>
+                <Money amount={product.price} className="text-3xl font-semibold tracking-tight" />
                 {hasDiscount && (
-                  <span className="text-sm text-muted-foreground line-through">¥{product.originalPrice}</span>
+                  <Money amount={product.originalPrice!} className="text-sm text-muted-foreground line-through" />
                 )}
               </div>
+              <CnySettlementHint amount={product.price} className="mt-1 block" />
               <div className="mt-3 grid gap-2 text-sm text-muted-foreground sm:grid-cols-2">
                 <div className="flex items-center gap-2">
                   <Clock3 className="h-4 w-4 text-foreground" aria-hidden="true" />

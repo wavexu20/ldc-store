@@ -38,6 +38,7 @@ import { parseWalletAmount } from "@/lib/money";
 import { calculatePointsEarned, calculatePointsRedemption, splitBalancePayment } from "@/lib/membership";
 import { awardOrderPoints, reverseExternalOrderPoints } from "@/lib/member-service";
 import { getFulfillmentDueAt, isManualFulfillment } from "@/lib/fulfillment";
+import { getGatewayLanguage } from "@/lib/payment/language";
 import { isSecondFactorVerificationRequired, SECOND_FACTOR_REQUIRED_MESSAGE, requireSecondFactor } from "@/lib/security/two-factor-session";
 import {
   sendNewOrderNotification,
@@ -60,6 +61,11 @@ async function getSiteUrl(): Promise<string> {
   const host = headersList.get("host") || "localhost:3000";
   const protocol = headersList.get("x-forwarded-proto") || "http";
   return `${protocol}://${host}`;
+}
+
+async function getPaymentLanguage() {
+  const requestHeaders = await headers();
+  return getGatewayLanguage(requestHeaders.get("cookie"), requestHeaders.get("accept-language"));
 }
 
 // 生成订单号: 时间戳 + 随机字符
@@ -347,6 +353,7 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
               siteUrl,
               successPath: `/order/result?out_trade_no=${encodeURIComponent(result.order.orderNo)}`,
               cancelPath: `/order/result?out_trade_no=${encodeURIComponent(result.order.orderNo)}&cancelled=1`,
+              language: await getPaymentLanguage(),
             })
           : createPayment(result.order.orderNo, result.totalAmount, `${product.name}${variantLabel}`, siteUrl);
       } catch (error) {

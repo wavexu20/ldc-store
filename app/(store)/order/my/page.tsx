@@ -37,6 +37,7 @@ import { formatShortTime } from "@/lib/time";
 import { useI18n } from "@/components/i18n-provider";
 import type { MessageKey } from "@/lib/i18n";
 import { getLocalizedFulfillmentLabel, type FulfillmentMode } from "@/lib/fulfillment";
+import { Money } from "@/components/store/money";
 
 interface OrderData {
   orderNo: string;
@@ -260,7 +261,7 @@ export default function MyOrdersPage() {
                     <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
                       <span>{formatShortTime(order.createdAt)}</span>
                       <span>×{order.quantity}</span>
-                      <span className="font-medium text-foreground">¥{order.totalAmount}</span>
+                      <Money amount={order.totalAmount} className="font-medium text-foreground" />
                     </div>
                   </div>
                   <Badge variant={status.variant} className={`shrink-0 text-xs ${status.className || ""}`}>

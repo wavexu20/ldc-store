@@ -25,6 +25,7 @@ import { formatLocalTime } from "@/lib/time";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/components/i18n-provider";
 import { getLocalizedFulfillmentLabel, type FulfillmentMode } from "@/lib/fulfillment";
+import { Money } from "@/components/store/money";
 
 interface OrderResultPageProps {
   // Next.js 期望 searchParams 为 Promise 类型；运行时保留 isThenable 检查以兼容测试传入对象。
@@ -510,9 +511,7 @@ export default function OrderResultPage({ searchParams }: OrderResultPageProps) 
               <InfoItem
                 label={t("amount")}
                 value={
-                  <span className="font-semibold tabular-nums">
-                    ¥{order.totalAmount}
-                  </span>
+                  <Money amount={order.totalAmount} className="font-semibold tabular-nums" />
                 }
               />
               <InfoItem label={t("quantity")} value={String(order.quantity)} />

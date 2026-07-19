@@ -59,6 +59,11 @@ const baseSystemSettingsSchema = z.object({
     .int("必须为整数")
     .min(1, "至少 1 分钟")
     .max(1440, "最大 1440 分钟"),
+  usdCnyRate: z
+    .number({ error: "请输入有效汇率" })
+    .min(1, "汇率不能低于 1")
+    .max(20, "汇率不能高于 20")
+    .default(7.2),
 });
 
 // 合并 Telegram 配置

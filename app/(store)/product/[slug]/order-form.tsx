@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import { Loader2, Minus, Plus, CheckCircle2, WalletCards } from "lucide-react";
 import { useI18n } from "@/components/i18n-provider";
 import { calculatePointsRedemption } from "@/lib/membership";
+import { CnySettlementHint, Money } from "@/components/store/money";
 
 const orderFormSchema = z.object({
   quantity: z.number().int().min(1),
@@ -190,7 +191,7 @@ export function OrderForm({
         </span>
       </div>
 
-      {variants.length > 0 ? <div className="space-y-2"><Label>选择规格</Label><div className="flex flex-wrap gap-2">{variants.map((variant) => { const selected = selectedVariant?.id === variant.id; const unavailable = inventoryManaged && variant.stock < minQuantity; return <Button key={variant.id} type="button" size="sm" variant={selected ? "default" : "outline"} disabled={unavailable} onClick={() => { setSelectedVariantId(variant.id); form.setValue("quantity", minQuantity); }}>{variant.name}<span className="ml-1 tabular-nums">¥{Number(variant.price).toFixed(2)}</span>{unavailable ? <span className="ml-1 text-xs opacity-70">缺货</span> : null}</Button>; })}</div>{selectedVariant ? <p className="text-xs text-muted-foreground">已选 {selectedVariant.name}{inventoryManaged ? ` · 可用 ${selectedVariant.stock} 件` : ""}</p> : null}</div> : null}
+      {variants.length > 0 ? <div className="space-y-2"><Label>选择规格</Label><div className="flex flex-wrap gap-2">{variants.map((variant) => { const selected = selectedVariant?.id === variant.id; const unavailable = inventoryManaged && variant.stock < minQuantity; return <Button key={variant.id} type="button" size="sm" variant={selected ? "default" : "outline"} disabled={unavailable} onClick={() => { setSelectedVariantId(variant.id); form.setValue("quantity", minQuantity); }}>{variant.name}<Money amount={variant.price} className="ml-1" />{unavailable ? <span className="ml-1 text-xs opacity-70">缺货</span> : null}</Button>; })}</div>{selectedVariant ? <p className="text-xs text-muted-foreground">已选 {selectedVariant.name}{inventoryManaged ? ` · 可用 ${selectedVariant.stock} 件` : ""}</p> : null}</div> : null}
 
       <div className="space-y-2">
         <Label>{t("paymentMethod")}</Label>
@@ -201,12 +202,12 @@ export function OrderForm({
       </div>
 
       {paymentMethod === "balance" && membership && <div className="rounded-lg border bg-muted/30 p-3 text-sm">
-        <div className="flex justify-between"><span>现金余额</span><span>¥{(membership.balanceCents / 100).toFixed(2)}</span></div>
-        <div className="mt-1 flex justify-between"><span>奖励金</span><span>¥{(membership.bonusBalanceCents / 100).toFixed(2)}</span></div>
+        <div className="flex justify-between"><span>现金余额</span><Money amount={membership.balanceCents} cents /></div>
+        <div className="mt-1 flex justify-between"><span>奖励金</span><Money amount={membership.bonusBalanceCents} cents /></div>
         <label className="mt-3 flex cursor-pointer items-center gap-2 border-t pt-3">
           <input className="h-4 w-4 accent-primary" type="checkbox" checked={usePoints} onChange={(event) => setUsePoints(event.target.checked)} disabled={membership.pointsBalance < 2} />
           <span className="flex-1">使用积分（现有 {membership.pointsBalance}）</span>
-          {redemption.discountCents > 0 && <span className="text-emerald-600">-¥{(redemption.discountCents / 100).toFixed(2)}</span>}
+          {redemption.discountCents > 0 && <Money amount={-redemption.discountCents} cents className="text-emerald-600" />}
         </label>
         <p className="mt-2 text-xs text-muted-foreground">200 积分抵 ¥1，单笔最多抵扣 10%</p>
       </div>}
@@ -260,7 +261,8 @@ export function OrderForm({
       <div className="flex items-center justify-between pt-2">
         <div>
           <span className="text-sm text-muted-foreground">{productName}{selectedVariant ? ` · ${selectedVariant.name}` : ""} × {quantity}</span>
-          <div className="text-xl font-bold">¥{((afterVoucherCents - redemption.discountCents) / 100).toFixed(2)}</div>
+          <Money amount={afterVoucherCents - redemption.discountCents} cents className="block text-xl font-bold" />
+          <CnySettlementHint amount={(afterVoucherCents - redemption.discountCents) / 100} className="block" />
           {voucherDiscountCents > 0 ? <p className="text-xs text-muted-foreground">已使用满减券 -¥{(voucherDiscountCents / 100).toFixed(2)}</p> : null}
         </div>
         <Button type="submit" disabled={isPending || effectiveMax < minQuantity}>

@@ -13,6 +13,7 @@ const SYSTEM_SETTING_KEYS = {
   siteIcon: "site.icon",
   siteIconUrl: "site.icon_url",
   orderExpireMinutes: "order.expire_minutes",
+  usdCnyRate: "currency.usd_cny_rate",
   telegramEnabled: "telegram.enabled",
   telegramBotToken: "telegram.bot_token",
   telegramChatId: "telegram.chat_id",
@@ -42,6 +43,8 @@ export async function getSystemSettings(): Promise<SystemSettings> {
   const expireMinutes = Number.isFinite(parsedExpireMinutes)
     ? parsedExpireMinutes
     : getOrderExpireMinutes();
+  const parsedUsdCnyRate = Number(map.get(SYSTEM_SETTING_KEYS.usdCnyRate));
+  const usdCnyRate = Number.isFinite(parsedUsdCnyRate) ? parsedUsdCnyRate : 7.2;
 
   const candidate = {
     siteName: (map.get(SYSTEM_SETTING_KEYS.siteName) ?? envSiteName) || envSiteName,
@@ -51,6 +54,7 @@ export async function getSystemSettings(): Promise<SystemSettings> {
     siteIcon: map.get(SYSTEM_SETTING_KEYS.siteIcon) ?? "Store",
     siteIconUrl: map.get(SYSTEM_SETTING_KEYS.siteIconUrl) || "/brand/game3dtech-icon.png",
     orderExpireMinutes: expireMinutes,
+    usdCnyRate,
     // Telegram 配置 - 敏感字段脱敏，仅返回启用状态
     // 完整配置需通过 getSystemSettingsForAdmin() 获取
     telegramEnabled: map.get(SYSTEM_SETTING_KEYS.telegramEnabled) === "true",
@@ -77,6 +81,7 @@ export async function getSystemSettings(): Promise<SystemSettings> {
     siteIcon: "Store",
     siteIconUrl: "/brand/game3dtech-icon.png",
     orderExpireMinutes: getOrderExpireMinutes(),
+    usdCnyRate: 7.2,
     telegramEnabled: false,
     telegramBotToken: "",
     telegramChatId: "",
@@ -113,6 +118,7 @@ export async function updateSystemSettings(input: SystemSettingsInput): Promise<
     siteIcon,
     siteIconUrl,
     orderExpireMinutes,
+    usdCnyRate,
     telegramEnabled,
     telegramBotToken,
     telegramChatId,
@@ -156,6 +162,12 @@ export async function updateSystemSettings(input: SystemSettingsInput): Promise<
           key: SYSTEM_SETTING_KEYS.orderExpireMinutes,
           value: String(orderExpireMinutes),
           description: "订单过期时间（分钟）",
+          updatedAt: now,
+        },
+        {
+          key: SYSTEM_SETTING_KEYS.usdCnyRate,
+          value: String(usdCnyRate),
+          description: "美元显示汇率（1 USD 对应 CNY）",
           updatedAt: now,
         },
         {
@@ -340,6 +352,8 @@ export async function getSystemSettingsForAdmin(): Promise<SystemSettings> {
   const expireMinutes = Number.isFinite(parsedExpireMinutes)
     ? parsedExpireMinutes
     : getOrderExpireMinutes();
+  const parsedUsdCnyRate = Number(map.get(SYSTEM_SETTING_KEYS.usdCnyRate));
+  const usdCnyRate = Number.isFinite(parsedUsdCnyRate) ? parsedUsdCnyRate : 7.2;
 
   return {
     siteName: (map.get(SYSTEM_SETTING_KEYS.siteName) ?? envSiteName) || envSiteName,
@@ -349,6 +363,7 @@ export async function getSystemSettingsForAdmin(): Promise<SystemSettings> {
     siteIcon: (map.get(SYSTEM_SETTING_KEYS.siteIcon) ?? "Store") as SystemSettings["siteIcon"],
     siteIconUrl: map.get(SYSTEM_SETTING_KEYS.siteIconUrl) || "/brand/game3dtech-icon.png",
     orderExpireMinutes: expireMinutes,
+    usdCnyRate,
     telegramEnabled: map.get(SYSTEM_SETTING_KEYS.telegramEnabled) === "true",
     telegramBotToken: map.get(SYSTEM_SETTING_KEYS.telegramBotToken) ?? "",
     telegramChatId: map.get(SYSTEM_SETTING_KEYS.telegramChatId) ?? "",

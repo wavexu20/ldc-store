@@ -11,6 +11,7 @@ import { createGatewayPayment } from "@/lib/payment/gateway";
 import { calculateRechargeBonus, getMembershipStatus } from "@/lib/membership";
 import { SECOND_FACTOR_REQUIRED_MESSAGE, requireSecondFactor } from "@/lib/security/two-factor-session";
 import { getExternalStoreLinks } from "@/lib/actions/external-stores";
+import { getGatewayLanguage } from "@/lib/payment/language";
 
 const rechargeSchema = z.number().int().min(100, "最低充值 1.00").max(10_000_000, "单笔充值不能超过 100,000.00");
 
@@ -19,6 +20,11 @@ async function getSiteUrl() {
   const host = values.get("host") || "localhost:3000";
   const protocol = values.get("x-forwarded-proto") || "http";
   return `${protocol}://${host}`;
+}
+
+async function getPaymentLanguage() {
+  const values = await headers();
+  return getGatewayLanguage(values.get("cookie"), values.get("accept-language"));
 }
 
 export async function getWalletOverview() {
@@ -112,6 +118,7 @@ export async function createRecharge(amountCents: number): Promise<{
     siteUrl,
     successPath: `/account/wallet?recharge=${encodeURIComponent(rechargeNo)}&status=success`,
     cancelPath: `/account/wallet?recharge=${encodeURIComponent(rechargeNo)}&status=cancelled`,
+    language: await getPaymentLanguage(),
   });
   return { success: true, message: "充值单已创建", rechargeNo, paymentForm };
 }
