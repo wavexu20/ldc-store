@@ -1,5 +1,5 @@
 export const PRODUCT_IMAGE_WIDTH = 1200;
-export const PRODUCT_IMAGE_HEIGHT = 675;
+export const PRODUCT_IMAGE_HEIGHT = 900;
 export const PRODUCT_IMAGE_TARGET_BYTES = 320 * 1024;
 export const PRODUCT_IMAGE_MAX_SOURCE_BYTES = 10 * 1024 * 1024;
 
@@ -64,7 +64,7 @@ async function loadBitmap(file: File): Promise<ImageBitmap> {
 
 function outputName(name: string) {
   const base = name.replace(/\.[^.]+$/, "").replace(/[^a-zA-Z0-9\u4e00-\u9fff_-]+/g, "-");
-  return `${base || "product"}-16x9.webp`;
+  return `${base || "product"}-4x3.webp`;
 }
 
 export async function adaptProductImage(file: File) {

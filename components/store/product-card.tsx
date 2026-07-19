@@ -69,7 +69,7 @@ export function ProductCard({
 
       <div className="relative z-20 flex flex-col pointer-events-none">
       {/* Cover：图像层级更“干净”，内容层与图像层用柔和分割，避免信息挤在同一层导致阅读压力 */}
-      <div className="relative aspect-video overflow-hidden bg-zinc-950">
+      <div className="relative aspect-[4/3] overflow-hidden bg-zinc-950">
         {coverImage ? (
           <Image
             src={coverImage}
