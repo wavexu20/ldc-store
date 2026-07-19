@@ -27,13 +27,13 @@ export function ProductImageGallery({
 
   return (
     <div className={cn("mb-6", className)}>
-      <div className="relative aspect-square overflow-hidden rounded-xl border bg-background">
+      <div className="relative aspect-video overflow-hidden rounded-xl border bg-background">
         <Image
           src={displayUrl}
           alt={productName}
           fill
           sizes="(max-width: 1024px) 100vw, 52vw"
-          className="object-contain p-2 sm:p-3"
+          className="object-cover"
           priority
           unoptimized={displayUrl.startsWith("/api/product-images/")}
         />
@@ -50,7 +50,7 @@ export function ProductImageGallery({
                 onClick={() => setSelectedUrl(url)}
                 aria-label={t("imageOf", { index: index + 1, total: safeImages.length })}
                 className={cn(
-                  "relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border bg-muted/30 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+                  "relative aspect-video h-14 shrink-0 overflow-hidden rounded-lg border bg-muted/30 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
                   isActive
                     ? "ring-2 ring-ring ring-offset-2 ring-offset-background"
                     : "hover:border-primary/40"
@@ -60,8 +60,8 @@ export function ProductImageGallery({
                   src={url}
                   alt={`${productName} - ${t("imageOf", { index: index + 1, total: safeImages.length })}`}
                   fill
-                  sizes="64px"
-                  className="object-contain p-1"
+                  sizes="100px"
+                  className="object-cover"
                   unoptimized={url.startsWith("/api/product-images/")}
                 />
               </button>

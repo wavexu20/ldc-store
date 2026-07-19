@@ -10,6 +10,7 @@ import { localeMeta, locales } from "@/lib/i18n";
 import { type AdminCategoryOption } from "@/lib/actions/categories";
 import { deleteProductImage } from "@/lib/actions/product-images";
 import { createProductPreview } from "@/lib/actions/product-previews";
+import { adaptProductImages, PRODUCT_IMAGE_MAX_SOURCE_BYTES } from "@/lib/product-image-adapter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -159,15 +160,16 @@ export function ProductForm({
       toast.error("仅支持 JPG、PNG 或 WebP 图片");
       return;
     }
-    const oversizedFile = selectedFiles.find((file) => file.size > 2 * 1024 * 1024);
+    const oversizedFile = selectedFiles.find((file) => file.size > PRODUCT_IMAGE_MAX_SOURCE_BYTES);
     if (oversizedFile) {
-      toast.error(`图片「${oversizedFile.name}」超过 2 MB`);
+      toast.error(`图片「${oversizedFile.name}」超过 10 MB`);
       return;
     }
-    const formData = new FormData();
-    selectedFiles.forEach((file) => formData.append("images", file));
     startImageTransition(async () => {
       try {
+        const adaptedFiles = await adaptProductImages(selectedFiles);
+        const formData = new FormData();
+        adaptedFiles.forEach((file) => formData.append("images", file));
         const response = await fetch("/api/admin/product-images", { method: "POST", body: formData });
         const result = await response.json().catch(() => null) as { success?: boolean; urls?: string[]; message?: string } | null;
         if (!response.ok || !result?.success || !result.urls) {
@@ -175,9 +177,9 @@ export function ProductForm({
           return;
         }
         updateImages([...images, ...result.urls]);
-        toast.success(result.message || `已上传 ${result.urls.length} 张图片`);
-      } catch {
-        toast.error("图片上传失败，请检查网络后重试");
+        toast.success(`已自动适配并上传 ${result.urls.length} 张图片`);
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "图片上传失败，请检查网络后重试");
       }
     });
   };
@@ -518,9 +520,9 @@ export function ProductForm({
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <input ref={imageInputRef} type="file" accept="image/jpeg,image/png,image/webp" multiple className="sr-only" onChange={(event) => { uploadImages(event.target.files); event.target.value = ""; }} />
-                  <div className="flex flex-wrap gap-2"><Button type="button" variant="outline" disabled={isImagePending || images.length >= 12} onClick={() => imageInputRef.current?.click()}>{isImagePending ? <><Loader2 className="animate-spin" />上传中...</> : <><Upload />上传图片</>}</Button><span className="self-center text-xs text-muted-foreground">JPG、PNG、WebP；单张最大 2 MB，最多 12 张</span></div>
+                  <div className="flex flex-wrap gap-2"><Button type="button" variant="outline" disabled={isImagePending || images.length >= 12} onClick={() => imageInputRef.current?.click()}>{isImagePending ? <><Loader2 className="animate-spin" />适配并上传...</> : <><Upload />上传图片</>}</Button><span className="self-center text-xs text-muted-foreground">自动生成 1200×675 WebP；原图最大 10 MB，最多 12 张</span></div>
                   <div className="flex gap-2"><Input value={externalImageUrl} onChange={(event) => setExternalImageUrl(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addExternalImage(); } }} placeholder="粘贴外部图片链接（https://...）" /><Button type="button" variant="outline" disabled={!externalImageUrl.trim() || images.length >= 12} onClick={addExternalImage}><Link2 />添加</Button></div>
-                  {images.length > 0 ? <div className="grid grid-cols-2 gap-3">{images.map((url, index) => { const isCover = form.getValues("coverImage") === url; return <div className="group relative aspect-[4/3] overflow-hidden rounded-lg border bg-muted/30" key={url}><Image src={url} alt={`商品图片 ${index + 1}`} fill sizes="(max-width: 640px) 45vw, 190px" className="object-contain p-2 pb-10" unoptimized={url.startsWith("/api/product-images/")} /><div className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-1 border-t bg-background/95 p-1.5 backdrop-blur-sm"><Button type="button" size="sm" variant={isCover ? "default" : "secondary"} className="h-7 px-2 text-[11px]" onClick={() => form.setValue("coverImage", url, { shouldDirty: true })}>{isCover ? "封面" : "设为封面"}</Button><Button type="button" size="icon" variant="ghost" className="size-7 text-destructive hover:text-destructive" disabled={isImagePending} onClick={() => removeImage(url)} aria-label={`删除图片 ${index + 1}`}><Trash2 className="size-3.5" /></Button></div></div>; })}</div> : <div className="rounded-lg border border-dashed p-5 text-center text-sm text-muted-foreground">上传本地图片，或添加外部图片链接。</div>}
+                  {images.length > 0 ? <div className="grid grid-cols-2 gap-3">{images.map((url, index) => { const isCover = form.getValues("coverImage") === url; return <div className="group relative aspect-video overflow-hidden rounded-lg border bg-muted/30" key={url}><Image src={url} alt={`商品图片 ${index + 1}`} fill sizes="(max-width: 640px) 45vw, 190px" className="object-cover" unoptimized={url.startsWith("/api/product-images/")} /><div className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-1 border-t bg-background/95 p-1.5 backdrop-blur-sm"><Button type="button" size="sm" variant={isCover ? "default" : "secondary"} className="h-7 px-2 text-[11px]" onClick={() => form.setValue("coverImage", url, { shouldDirty: true })}>{isCover ? "封面" : "设为封面"}</Button><Button type="button" size="icon" variant="ghost" className="size-7 text-destructive hover:text-destructive" disabled={isImagePending} onClick={() => removeImage(url)} aria-label={`删除图片 ${index + 1}`}><Trash2 className="size-3.5" /></Button></div></div>; })}</div> : <div className="rounded-lg border border-dashed p-5 text-center text-sm text-muted-foreground">本地图片会自动适配为 16:9，外部图片链接保持原始尺寸。</div>}
                   <FormField control={form.control} name="coverImage" render={({ field }) => <input type="hidden" {...field} value={field.value || ""} />} />
                   <FormField control={form.control} name="images" render={({ field }) => <input type="hidden" value={(field.value ?? []).join(",")} readOnly />} />
                 </CardContent>
