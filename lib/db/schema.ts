@@ -68,8 +68,10 @@ const supportConversationStatusValues = ["open", "closed"] as const;
 const supportSenderValues = ["visitor", "admin", "system"] as const;
 const voucherTypeValues = ["recharge", "product", "discount"] as const;
 const voucherStatusValues = ["available", "claimed", "reserved", "redeemed", "disabled", "expired"] as const;
+const productReviewStatusValues = ["published", "hidden", "deleted"] as const;
 export const voucherTypeEnum = { enumValues: voucherTypeValues };
 export const voucherStatusEnum = { enumValues: voucherStatusValues };
+export const productReviewStatusEnum = { enumValues: productReviewStatusValues };
 
 const id = (name: string) =>
   text(name).primaryKey().$defaultFn(() => crypto.randomUUID());
@@ -368,6 +370,31 @@ export const orders = sqliteTable("orders", {
 ]);
 
 // ============================================
+// Product reviews (verified purchases only)
+// ============================================
+
+export const productReviews = sqliteTable("product_reviews", {
+  id: id("id"),
+  productId: text("product_id").references(() => products.id, { onDelete: "cascade" }).notNull(),
+  orderId: text("order_id").references(() => orders.id, { onDelete: "restrict" }).notNull(),
+  userId: text("user_id").references(() => users.id, { onDelete: "restrict" }).notNull(),
+  rating: integer("rating").notNull(),
+  content: text("content").notNull(),
+  status: text("status", { enum: productReviewStatusValues }).default("published").notNull(),
+  adminReply: text("admin_reply"),
+  adminRepliedBy: text("admin_replied_by"),
+  adminRepliedAt: timestamp("admin_replied_at"),
+  deletedAt: timestamp("deleted_at"),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+}, (table) => [
+  uniqueIndex("product_reviews_order_unique").on(table.orderId),
+  index("product_reviews_product_status_created_idx").on(table.productId, table.status, table.createdAt),
+  index("product_reviews_user_created_idx").on(table.userId, table.createdAt),
+  index("product_reviews_status_created_idx").on(table.status, table.createdAt),
+]);
+
+// ============================================
 // Voucher batches & externally distributed vouchers
 // ============================================
 
@@ -548,6 +575,7 @@ export const productsRelations = relations(products, ({ one, many }) => ({
   restockRequests: many(restockRequests),
   voucherBatches: many(voucherBatches),
   vouchers: many(vouchers),
+  reviews: many(productReviews),
 }));
 
 export const productVariantsRelations = relations(productVariants, ({ one, many }) => ({
@@ -578,6 +606,13 @@ export const ordersRelations = relations(orders, ({ one, many }) => ({
   productVariant: one(productVariants, { fields: [orders.productVariantId], references: [productVariants.id] }),
   cards: many(cards),
   vouchers: many(vouchers),
+  reviews: many(productReviews),
+}));
+
+export const productReviewsRelations = relations(productReviews, ({ one }) => ({
+  product: one(products, { fields: [productReviews.productId], references: [products.id] }),
+  order: one(orders, { fields: [productReviews.orderId], references: [orders.id] }),
+  user: one(users, { fields: [productReviews.userId], references: [users.id], relationName: "reviewAuthor" }),
 }));
 
 export const voucherBatchesRelations = relations(voucherBatches, ({ one, many }) => ({
@@ -612,6 +647,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   memberTransactions: many(memberTransactions),
   voucherBatches: many(voucherBatches),
   vouchers: many(vouchers),
+  reviews: many(productReviews, { relationName: "reviewAuthor" }),
 }));
 
 export const oauthAccountsRelations = relations(oauthAccounts, ({ one }) => ({
@@ -672,6 +708,9 @@ export type NewCard = typeof cards.$inferInsert;
 
 export type Order = typeof orders.$inferSelect;
 export type NewOrder = typeof orders.$inferInsert;
+
+export type ProductReview = typeof productReviews.$inferSelect;
+export type NewProductReview = typeof productReviews.$inferInsert;
 
 export type Setting = typeof settings.$inferSelect;
 export type NewSetting = typeof settings.$inferInsert;

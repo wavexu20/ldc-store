@@ -3,10 +3,13 @@ import { getSecurityOverview } from "@/lib/actions/security";
 import { SecuritySettings } from "@/components/account/security-settings";
 
 export default async function SecurityPage() {
+  let overview;
+
   try {
-    const overview = await getSecurityOverview();
-    return <SecuritySettings overview={overview} />;
+    overview = await getSecurityOverview();
   } catch {
     redirect("/login?callbackUrl=/account/security");
   }
+
+  return <SecuritySettings overview={overview} />;
 }

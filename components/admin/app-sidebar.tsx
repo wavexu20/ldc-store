@@ -19,6 +19,7 @@ import {
   Megaphone,
   Headphones,
   Ticket,
+  MessageSquareText,
 } from "lucide-react";
 import { signOut } from "next-auth/react";
 
@@ -92,6 +93,11 @@ const mainNavItems = [
     title: "卡券管理",
     href: "/admin/vouchers",
     icon: Ticket,
+  },
+  {
+    title: "评价管理",
+    href: "/admin/reviews",
+    icon: MessageSquareText,
   },
 ];
 

@@ -12,6 +12,8 @@ import { getTranslator } from "@/lib/i18n-server";
 import { localizeProduct } from "@/lib/product-i18n";
 import { getCheckoutMembership } from "@/lib/actions/wallet";
 import { getLocalizedFulfillmentLabel, isManualFulfillment } from "@/lib/fulfillment";
+import { getProductReviewData } from "@/lib/actions/reviews";
+import { ReviewSection } from "./review-section";
 
 // 强制动态渲染，避免构建时查询数据库（docker build 无需 DATABASE_URL）
 export const dynamic = "force-dynamic";
@@ -27,6 +29,18 @@ async function getCheckoutMembershipSafely() {
     // product itself unavailable when an account record is temporarily bad.
     console.error("[ProductPage] Failed to load checkout membership", error);
     return null;
+  }
+}
+
+async function getProductReviewDataSafely(productId: string) {
+  try {
+    return await getProductReviewData(productId);
+  } catch (error) {
+    console.error("[ProductPage] Failed to load product reviews", error);
+    return {
+      summary: { total: 0, average: 0, distribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 } },
+      reviews: [], page: 1, totalPages: 1, eligibleOrders: [], ownReviews: [], isLoggedIn: false,
+    };
   }
 }
 
@@ -60,6 +74,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
     notFound();
   }
   const product = localizeProduct(sourceProduct, locale);
+  const reviewData = await getProductReviewDataSafely(product.id);
 
   const isOutOfStock = product.stock === 0;
   const hasDiscount =
@@ -190,6 +205,8 @@ export default async function ProductPage({ params }: ProductPageProps) {
           />
         </section>
       )}
+
+      <ReviewSection productId={product.id} initialData={reviewData} />
     </div>
   );
 }
