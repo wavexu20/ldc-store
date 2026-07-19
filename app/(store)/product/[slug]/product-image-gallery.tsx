@@ -8,11 +8,13 @@ import { useI18n } from "@/components/i18n-provider";
 interface ProductImageGalleryProps {
   productName: string;
   images: string[];
+  className?: string;
 }
 
 export function ProductImageGallery({
   productName,
   images,
+  className,
 }: ProductImageGalleryProps) {
   const { t } = useI18n();
   const safeImages = useMemo(() => images.filter((url) => url.trim().length > 0), [images]);
@@ -24,14 +26,14 @@ export function ProductImageGallery({
   }
 
   return (
-    <div className="mb-6">
-      <div className="relative aspect-[4/3] overflow-hidden rounded-xl border bg-muted/30">
+    <div className={cn("mb-6", className)}>
+      <div className="relative aspect-square overflow-hidden rounded-xl border bg-background">
         <Image
           src={displayUrl}
           alt={productName}
           fill
-          sizes="(max-width: 768px) 100vw, 50vw"
-          className="object-cover"
+          sizes="(max-width: 1024px) 100vw, 52vw"
+          className="object-contain p-2 sm:p-3"
           priority
           unoptimized={displayUrl.startsWith("/api/product-images/")}
         />
@@ -59,7 +61,7 @@ export function ProductImageGallery({
                   alt={`${productName} - ${t("imageOf", { index: index + 1, total: safeImages.length })}`}
                   fill
                   sizes="64px"
-                  className="object-cover"
+                  className="object-contain p-1"
                   unoptimized={url.startsWith("/api/product-images/")}
                 />
               </button>

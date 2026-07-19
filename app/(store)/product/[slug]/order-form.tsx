@@ -31,6 +31,7 @@ interface OrderFormProps {
   maxQuantity: number;
   variants?: Array<{ id: string; name: string; price: string; originalPrice: string | null; stock: number }>;
   membership?: { balanceCents: number; bonusBalanceCents: number; pointsBalance: number; discountVouchers: Array<{ id: string; code: string; discountAmountCents: number; minOrderCents: number; expiresAt: Date | null }> };
+  inventoryManaged?: boolean;
 }
 
 export function OrderForm({
@@ -42,6 +43,7 @@ export function OrderForm({
   maxQuantity,
   variants = [],
   membership,
+  inventoryManaged = true,
 }: OrderFormProps) {
   const [isPending, startTransition] = useTransition();
   const { t } = useI18n();
@@ -49,17 +51,17 @@ export function OrderForm({
   const [usePoints, setUsePoints] = useState(false);
   const [selectedVoucherId, setSelectedVoucherId] = useState("");
   const [selectedVariantId, setSelectedVariantId] = useState(
-    () => variants.find((variant) => variant.stock >= minQuantity)?.id || variants[0]?.id || ""
+    () => variants.find((variant) => !inventoryManaged || variant.stock >= minQuantity)?.id || variants[0]?.id || ""
   );
   const router = useRouter();
   const { data: session, status } = useSession();
   const selectedVariant = variants.length > 0
-    ? variants.find((variant) => variant.id === selectedVariantId)
-      ?? variants.find((variant) => variant.stock >= minQuantity)
+      ? variants.find((variant) => variant.id === selectedVariantId)
+      ?? variants.find((variant) => !inventoryManaged || variant.stock >= minQuantity)
       ?? variants[0]
     : null;
   const activePrice = selectedVariant ? Number(selectedVariant.price) : price;
-  const activeStock = selectedVariant ? selectedVariant.stock : stock;
+  const activeStock = inventoryManaged ? (selectedVariant ? selectedVariant.stock : stock) : maxQuantity;
   const effectiveMax = Math.min(maxQuantity, activeStock);
 
   // 检查是否是 Linux DO 登录用户
@@ -74,7 +76,6 @@ export function OrderForm({
   });
 
   const quantity = form.watch("quantity");
-  const totalPrice = (activePrice * quantity).toFixed(2);
   const totalCents = Math.round(activePrice * quantity * 100);
   const selectedVoucher = membership?.discountVouchers.find((voucher) => voucher.id === selectedVoucherId);
   const voucherDiscountCents = selectedVoucher && totalCents >= selectedVoucher.minOrderCents ? Math.min(totalCents, selectedVoucher.discountAmountCents) : 0;
@@ -189,7 +190,7 @@ export function OrderForm({
         </span>
       </div>
 
-      {variants.length > 0 ? <div className="space-y-2"><Label>选择规格</Label><div className="flex flex-wrap gap-2">{variants.map((variant) => { const selected = selectedVariant?.id === variant.id; const unavailable = variant.stock < minQuantity; return <Button key={variant.id} type="button" size="sm" variant={selected ? "default" : "outline"} disabled={unavailable} onClick={() => { setSelectedVariantId(variant.id); form.setValue("quantity", minQuantity); }}>{variant.name}<span className="ml-1 tabular-nums">¥{Number(variant.price).toFixed(2)}</span>{unavailable ? <span className="ml-1 text-xs opacity-70">缺货</span> : null}</Button>; })}</div>{selectedVariant ? <p className="text-xs text-muted-foreground">已选 {selectedVariant.name} · 可用 {selectedVariant.stock} 件</p> : null}</div> : null}
+      {variants.length > 0 ? <div className="space-y-2"><Label>选择规格</Label><div className="flex flex-wrap gap-2">{variants.map((variant) => { const selected = selectedVariant?.id === variant.id; const unavailable = inventoryManaged && variant.stock < minQuantity; return <Button key={variant.id} type="button" size="sm" variant={selected ? "default" : "outline"} disabled={unavailable} onClick={() => { setSelectedVariantId(variant.id); form.setValue("quantity", minQuantity); }}>{variant.name}<span className="ml-1 tabular-nums">¥{Number(variant.price).toFixed(2)}</span>{unavailable ? <span className="ml-1 text-xs opacity-70">缺货</span> : null}</Button>; })}</div>{selectedVariant ? <p className="text-xs text-muted-foreground">已选 {selectedVariant.name}{inventoryManaged ? ` · 可用 ${selectedVariant.stock} 件` : ""}</p> : null}</div> : null}
 
       <div className="space-y-2">
         <Label>{t("paymentMethod")}</Label>
