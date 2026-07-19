@@ -27,6 +27,10 @@ async function serveMediaObject(request: Request, env: WorkerEnv, objectKey: str
 export default {
   async fetch(request: Request, env: WorkerEnv, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
+    if (url.hostname === "www.game3dtech.com") {
+      url.hostname = "game3dtech.com";
+      return Response.redirect(url.toString(), 308);
+    }
     if (url.pathname.startsWith("/api/avatars/")) {
       return serveMediaObject(request, env, url.pathname.slice("/api/avatars/".length), avatarKeyPattern);
     }
