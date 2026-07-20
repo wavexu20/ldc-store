@@ -17,10 +17,12 @@ describe("currency display", () => {
     expect(formatCnyAmount(72, "USD", 7.2, "en-US")).toBe("$10.00");
   });
 
-  it("supports the storefront's six display currencies", () => {
-    expect(currencies).toEqual(["CNY", "USD", "EUR", "GBP", "JPY", "KRW"]);
+  it("supports the storefront's prioritized display currencies", () => {
+    expect(currencies).toEqual(["CNY", "USD", "EUR", "JPY", "KRW", "GBP", "INR", "IDR", "BRL"]);
     expect(cnyToDisplayAmount(7.8, "EUR", 7.2)).toBe(1);
     expect(cnyToDisplayAmount(4.8, "JPY", 7.2)).toBe(100);
     expect(formatCnyAmount(4.8, "JPY", 7.2, "ja-JP")).toBe("￥100");
+    expect(cnyToDisplayAmount(7.12, "INR", 7.2)).toBe(100);
+    expect(cnyToDisplayAmount(13.05, "BRL", 7.2)).toBeCloseTo(10);
   });
 });

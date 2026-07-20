@@ -214,7 +214,7 @@ export type ProductTranslation = {
 };
 
 export type ProductTranslations = Partial<
-  Record<"en" | "ko" | "zh" | "ru" | "de" | "id" | "hi", ProductTranslation>
+  Record<"en" | "zh" | "ja" | "ko" | "es" | "de" | "pt" | "ru" | "id" | "hi", ProductTranslation>
 >;
 
 export type ProductPreviewPayload = {

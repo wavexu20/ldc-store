@@ -6,6 +6,9 @@ describe("category localization", () => {
     expect(localizeCategoryName("game-accounts", "游戏账号", "en")).toBe("Game accounts");
     expect(localizeCategoryName("membership", "会员充值", "ko")).toBe("멤버십 충전");
     expect(localizeCategoryName("others", "其他", "de")).toBe("Weitere");
+    expect(localizeCategoryName("software", "软件授权", "ja")).toBe("ソフトウェアライセンス");
+    expect(localizeCategoryName("game-accounts", "游戏账号", "es")).toBe("Cuentas de juego");
+    expect(localizeCategoryName("membership", "会员充值", "pt")).toBe("Recargas de assinatura");
   });
 
   it("preserves custom category names", () => {

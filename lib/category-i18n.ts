@@ -2,23 +2,26 @@ import type { Locale } from "@/lib/i18n";
 
 const categoryLabels: Record<string, Record<Locale, string>> = {
   "game-accounts": {
-    en: "Game accounts", ko: "게임 계정", zh: "游戏账号", ru: "Игровые аккаунты",
-    de: "Spielkonten", id: "Akun game", hi: "गेम खाते",
+    en: "Game accounts", zh: "游戏账号", ja: "ゲームアカウント", ko: "게임 계정",
+    es: "Cuentas de juego", de: "Spielkonten", pt: "Contas de jogos", ru: "Игровые аккаунты",
+    id: "Akun game", hi: "गेम खाते",
   },
   membership: {
-    en: "Membership top-ups", ko: "멤버십 충전", zh: "会员充值", ru: "Пополнение подписок",
-    de: "Mitgliedschaften", id: "Isi ulang keanggotaan", hi: "सदस्यता रिचार्ज",
+    en: "Membership top-ups", zh: "会员充值", ja: "メンバーシップチャージ", ko: "멤버십 충전",
+    es: "Recargas de membresía", de: "Mitgliedschaften", pt: "Recargas de assinatura", ru: "Пополнение подписок",
+    id: "Isi ulang keanggotaan", hi: "सदस्यता रिचार्ज",
   },
   software: {
-    en: "Software licenses", ko: "소프트웨어 라이선스", zh: "软件授权", ru: "Лицензии ПО",
-    de: "Softwarelizenzen", id: "Lisensi perangkat lunak", hi: "सॉफ़्टवेयर लाइसेंस",
+    en: "Software licenses", zh: "软件授权", ja: "ソフトウェアライセンス", ko: "소프트웨어 라이선스",
+    es: "Licencias de software", de: "Softwarelizenzen", pt: "Licenças de software", ru: "Лицензии ПО",
+    id: "Lisensi perangkat lunak", hi: "सॉफ़्टवेयर लाइसेंस",
   },
   ai: {
-    en: "AI", ko: "AI", zh: "AI", ru: "ИИ", de: "KI", id: "AI", hi: "AI",
+    en: "AI", zh: "AI", ja: "AI", ko: "AI", es: "IA", de: "KI", pt: "IA", ru: "ИИ", id: "AI", hi: "AI",
   },
   others: {
-    en: "Other", ko: "기타", zh: "其他", ru: "Другое", de: "Weitere",
-    id: "Lainnya", hi: "अन्य",
+    en: "Other", zh: "其他", ja: "その他", ko: "기타", es: "Otros", de: "Weitere",
+    pt: "Outros", ru: "Другое", id: "Lainnya", hi: "अन्य",
   },
 };
 
@@ -32,4 +35,3 @@ export function localizeCategory<T extends { slug: string; name: string }>(categ
     name: localizeCategoryName(category.slug, category.name, locale),
   };
 }
-

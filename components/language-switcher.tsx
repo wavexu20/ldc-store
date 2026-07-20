@@ -10,10 +10,13 @@ import { currencies, currencySymbols, type Currency } from "@/lib/currency";
 
 const displayCurrencyLabels: Record<Locale, string> = {
   en: "Display currency",
-  ko: "표시 통화",
   zh: "显示货币",
-  ru: "Валюта отображения",
+  ja: "表示通貨",
+  ko: "표시 통화",
+  es: "Moneda mostrada",
   de: "Anzeigewährung",
+  pt: "Moeda exibida",
+  ru: "Валюта отображения",
   id: "Mata uang tampilan",
   hi: "प्रदर्शन मुद्रा",
 };
@@ -23,6 +26,9 @@ export function Flag({ code, compact = false }: { code: string; compact?: boolea
   if (code === "RU") return <span className={`${common} bg-[linear-gradient(#fff_0_33%,#1c57a7_33%_66%,#d52b1e_66%)]`} />;
   if (code === "DE") return <span className={`${common} bg-[linear-gradient(#000_0_33%,#dd0000_33%_66%,#ffce00_66%)]`} />;
   if (code === "ID") return <span className={`${common} bg-[linear-gradient(#e70011_0_50%,#fff_50%)]`} />;
+  if (code === "JP") return <span className={`${common} relative bg-white`}><span className="absolute inset-0 m-auto size-3 rounded-full bg-[#bc002d]" /></span>;
+  if (code === "ES") return <span className={`${common} bg-[linear-gradient(#aa151b_0_25%,#f1bf00_25%_75%,#aa151b_75%)]`} />;
+  if (code === "BR") return <span className={`${common} relative bg-[#009c3b]`}><span className="absolute inset-0 m-auto h-3.5 w-5 rotate-45 bg-[#ffdf00]" /><span className="absolute inset-0 m-auto size-2.5 rounded-full bg-[#002776]" /></span>;
   if (code === "CN") return (
     <span className={common}>
       <svg viewBox="0 0 30 20" className="h-full w-full" role="img" aria-label="中华人民共和国国旗">

@@ -22,6 +22,8 @@ describe("fulfillment", () => {
   it("provides storefront labels in supported locales", () => {
     expect(getLocalizedFulfillmentLabel("manual_10m", "zh")).toBe("10 分钟内发货");
     expect(getLocalizedFulfillmentLabel("manual_10m", "en")).toBe("Within 10 min");
+    expect(getLocalizedFulfillmentLabel("manual_10m", "ja")).toBe("10分以内");
+    expect(getLocalizedFulfillmentLabel("manual_10m", "es")).toBe("En 10 min");
+    expect(getLocalizedFulfillmentLabel("manual_10m", "pt")).toBe("Em até 10 min");
   });
 });
-

@@ -1,4 +1,4 @@
-export const currencies = ["CNY", "USD", "EUR", "GBP", "JPY", "KRW"] as const;
+export const currencies = ["CNY", "USD", "EUR", "JPY", "KRW", "GBP", "INR", "IDR", "BRL"] as const;
 export type Currency = (typeof currencies)[number];
 
 export const CURRENCY_COOKIE = "game3dtech_currency";
@@ -10,6 +10,9 @@ export const defaultCnyRates: Record<Currency, number> = {
   GBP: 9.2,
   JPY: 0.048,
   KRW: 0.0052,
+  INR: 0.0712,
+  IDR: 0.000377,
+  BRL: 1.305,
 };
 
 export const currencySymbols: Record<Currency, string> = {
@@ -19,6 +22,9 @@ export const currencySymbols: Record<Currency, string> = {
   GBP: "£",
   JPY: "¥",
   KRW: "₩",
+  INR: "₹",
+  IDR: "Rp",
+  BRL: "R$",
 };
 
 export function isCurrency(value: unknown): value is Currency {
