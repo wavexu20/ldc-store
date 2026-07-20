@@ -1,8 +1,25 @@
-export const currencies = ["CNY", "USD"] as const;
+export const currencies = ["CNY", "USD", "EUR", "GBP", "JPY", "KRW"] as const;
 export type Currency = (typeof currencies)[number];
 
 export const CURRENCY_COOKIE = "game3dtech_currency";
 export const DEFAULT_USD_CNY_RATE = 7.2;
+export const defaultCnyRates: Record<Currency, number> = {
+  CNY: 1,
+  USD: DEFAULT_USD_CNY_RATE,
+  EUR: 7.8,
+  GBP: 9.2,
+  JPY: 0.048,
+  KRW: 0.0052,
+};
+
+export const currencySymbols: Record<Currency, string> = {
+  CNY: "¥",
+  USD: "$",
+  EUR: "€",
+  GBP: "£",
+  JPY: "¥",
+  KRW: "₩",
+};
 
 export function isCurrency(value: unknown): value is Currency {
   return currencies.includes(value as Currency);
@@ -17,7 +34,10 @@ export function normalizeUsdCnyRate(value: unknown): number {
 
 export function cnyToDisplayAmount(amountCny: number, currency: Currency, usdCnyRate: number): number {
   if (currency === "CNY") return amountCny;
-  return amountCny / normalizeUsdCnyRate(usdCnyRate);
+  const cnyRate = currency === "USD"
+    ? normalizeUsdCnyRate(usdCnyRate)
+    : defaultCnyRates[currency];
+  return amountCny / cnyRate;
 }
 
 export function formatCnyAmount(
@@ -31,8 +51,6 @@ export function formatCnyAmount(
     style: "currency",
     currency,
     currencyDisplay: "narrowSymbol",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
   }).format(amount);
 }
 

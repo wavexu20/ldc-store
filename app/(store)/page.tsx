@@ -115,7 +115,7 @@ export default async function HomePage() {
           fallback={
             <div className="space-y-6">
               <Skeleton className="h-9 w-64" />
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-[repeat(auto-fill,minmax(15rem,18rem))]">
                 <ProductGridSkeleton />
               </div>
             </div>

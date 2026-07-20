@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cnyToDisplayAmount, formatCnyAmount, normalizeUsdCnyRate } from "@/lib/currency";
+import { currencies, cnyToDisplayAmount, formatCnyAmount, normalizeUsdCnyRate } from "@/lib/currency";
 
 describe("currency display", () => {
   it("keeps CNY unchanged and converts USD with the configured rate", () => {
@@ -15,5 +15,12 @@ describe("currency display", () => {
   it("formats both supported display currencies", () => {
     expect(formatCnyAmount(72, "CNY", 7.2, "zh-CN")).toContain("72.00");
     expect(formatCnyAmount(72, "USD", 7.2, "en-US")).toBe("$10.00");
+  });
+
+  it("supports the storefront's six display currencies", () => {
+    expect(currencies).toEqual(["CNY", "USD", "EUR", "GBP", "JPY", "KRW"]);
+    expect(cnyToDisplayAmount(7.8, "EUR", 7.2)).toBe(1);
+    expect(cnyToDisplayAmount(4.8, "JPY", 7.2)).toBe(100);
+    expect(formatCnyAmount(4.8, "JPY", 7.2, "ja-JP")).toBe("￥100");
   });
 });

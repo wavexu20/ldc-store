@@ -13,7 +13,7 @@ export const localeMeta: Record<Locale, { name: string; short: string; flag: str
 };
 
 const en = {
-  language: "Language", close: "Close", search: "Search", searchProducts: "Search products…", submitSearch: "Submit search", clearSearch: "Clear search",
+  language: "Language", displayCurrency: "Display currency", close: "Close", search: "Search", searchProducts: "Search products…", submitSearch: "Submit search", clearSearch: "Clear search",
   leaderboard: "Customer leaderboard", myOrders: "My orders", wallet: "Balance & top-up", admin: "Admin", logout: "Sign out", login: "Sign in", websiteIcon: "Website icon", clickMe: "Click me",
   allProducts: "All products", noProducts: "No products yet", comeBackLater: "Please check back later", viewProduct: "View product: {name}", popular: "Popular", soldOut: "Sold out", wantRestock: "Want a restock?", view: "View", sold: "{count} sold", onlyLeft: "Only {count} left",
   home: "Home", backHomePage: "Back to home", categoryNotFound: "Category not found", categoryProducts: "Products in {name}", emptyCategory: "No products in this category", productsComingSoon: "Products are coming soon", productNotFound: "Product not found", inStockSold: "{stock} in stock · {sold} sold", temporarilyOut: "Temporarily out of stock", restockPriority: "Request a restock and we will prioritize stock based on demand.", productDetails: "Product details", userAvatar: "User avatar",
@@ -37,7 +37,7 @@ const en = {
 export type MessageKey = keyof typeof en;
 
 const zh: Record<MessageKey, string> = {
-  language:"语言",close:"关闭",search:"搜索",searchProducts:"搜索商品…",submitSearch:"提交搜索",clearSearch:"清空搜索",leaderboard:"顾客消费榜",myOrders:"我的订单",wallet:"余额与充值",admin:"管理后台",logout:"退出登录",login:"登录",websiteIcon:"网站图标",clickMe:"点我一下",
+  language:"语言",displayCurrency:"显示货币",close:"关闭",search:"搜索",searchProducts:"搜索商品…",submitSearch:"提交搜索",clearSearch:"清空搜索",leaderboard:"顾客消费榜",myOrders:"我的订单",wallet:"余额与充值",admin:"管理后台",logout:"退出登录",login:"登录",websiteIcon:"网站图标",clickMe:"点我一下",
   allProducts:"全部商品",noProducts:"暂无商品",comeBackLater:"请稍后再来看看吧",viewProduct:"查看商品：{name}",popular:"热门",soldOut:"已售罄",wantRestock:"想要补货？",view:"查看",sold:"已售 {count}",onlyLeft:"仅剩 {count}",footerDisclaimer:"本站与 Linux DO 官方无任何关系",footerTagline:"数字商品与智能服务交易平台",footerSecurePayment:"安全支付",footerFastDelivery:"快速交付",footerMultilingual:"多语言服务",footerNavigation:"商城信息",footerTerms:"服务条款",footerPrivacy:"隐私说明",footerRefunds:"退款与售后",acceptedPayments:"支持的支付方式",
   home:"首页",backHomePage:"返回首页",categoryNotFound:"分类未找到",categoryProducts:"{name} 分类商品",emptyCategory:"该分类暂无商品",productsComingSoon:"商品即将上架，敬请期待",productNotFound:"商品未找到",inStockSold:"库存 {stock} · 已售 {sold}",temporarilyOut:"商品暂时缺货",restockPriority:"你可以先催补货，我们会根据需求优先补充库存。",productDetails:"商品详情",userAvatar:"用户头像",
   loginTitle:"登录或创建账号",loginDescription:"登录后可购买商品、查询订单和管理余额",orEmail:"或使用 Email",register:"注册",password:"密码",nickname:"昵称",confirmPassword:"确认密码",emailLogin:"Email 登录",loggingIn:"登录中…",creating:"创建中…",createAccount:"创建账号",verifyAndLogin:"验证并登录",verifying:"验证中…",back:"返回",resend:"重新发送",sending:"发送中…",codeSentTo:"验证码已发送至 {email}，10 分钟内有效。",verificationCode:"6 位验证码",passwordLength:"{min}–{max} 个字符",passwordClasses:"大写、小写、数字、特殊字符中至少 3 类",passwordIdentity:"不包含邮箱名前缀或昵称",passwordMismatch:"两次输入的密码不一致",completeCaptcha:"请先完成人机验证",captchaUnavailable:"Turnstile 未配置，Email 注册暂不可用。",invalidCredentials:"Email 或密码错误",

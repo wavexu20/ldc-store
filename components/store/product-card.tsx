@@ -76,7 +76,7 @@ export function ProductCard({
             src={coverImage}
             alt={name}
             fill
-            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+            sizes="(max-width: 639px) 100vw, 288px"
             className="object-cover object-center transition-transform duration-300 motion-safe:group-hover:scale-[1.025] motion-safe:group-focus-within:scale-[1.025] motion-reduce:transform-none"
             unoptimized={coverImage.startsWith("/api/product-images/")}
           />

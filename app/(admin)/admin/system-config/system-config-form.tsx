@@ -177,7 +177,7 @@ export function SystemConfigForm({ initialValues }: SystemConfigFormProps) {
                       <CreditCard className="h-5 w-5" />
                       货币与汇率
                     </CardTitle>
-                    <CardDescription>前台仅支持 CNY 与 USD；账户余额和订单始终按 CNY 结算。</CardDescription>
+                    <CardDescription>前台支持多种显示货币；账户余额和订单始终按 CNY 结算。</CardDescription>
                   </CardHeader>
                   <CardContent>
                     <FormField

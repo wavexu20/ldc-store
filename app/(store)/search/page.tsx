@@ -210,7 +210,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
             </span>
           </div>
 
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-[repeat(auto-fill,minmax(18rem,22rem))]">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-[repeat(auto-fill,minmax(15rem,18rem))]">
             {localizedItems.map((product) => (
               <ProductCard
                 key={product.id}
