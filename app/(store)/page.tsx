@@ -13,6 +13,7 @@ import {
 } from "@/components/store/home-category-filter";
 import { getTranslator } from "@/lib/i18n-server";
 import { localizeProducts } from "@/lib/product-i18n";
+import { localizeCategory } from "@/lib/category-i18n";
 
 // 强制动态渲染，避免构建时查询数据库
 export const dynamic = "force-dynamic";
@@ -25,11 +26,14 @@ async function HomeProductSection() {
   ]);
 
   const localizedProducts = localizeProducts(products, locale);
-  const categoryTabs = categories.map((category) => ({
+  const categoryTabs = categories.map((item) => {
+    const category = localizeCategory(item, locale);
+    return {
     id: category.id,
     name: category.name,
     slug: category.slug,
-  }));
+    };
+  });
 
   if (localizedProducts.length === 0) {
     return (

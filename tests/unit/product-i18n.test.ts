@@ -36,4 +36,15 @@ describe("product localization", () => {
     expect(localizeProduct(product, "ko")).toEqual(product);
     expect(localizeProducts([product], "ko")).toEqual([product]);
   });
+
+  it("localizes a built-in category even when the product has no translation", () => {
+    expect(localizeProduct({
+      ...product,
+      translations: null,
+      category: { id: "category-1", slug: "membership", name: "会员充值" },
+    }, "en")).toMatchObject({
+      name: "原始名称",
+      category: { id: "category-1", slug: "membership", name: "Membership top-ups" },
+    });
+  });
 });

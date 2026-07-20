@@ -12,6 +12,7 @@ import { searchProducts } from "@/lib/actions/products";
 import { getTranslator } from "@/lib/i18n-server";
 import type { MessageKey } from "@/lib/i18n";
 import { localizeProducts } from "@/lib/product-i18n";
+import { localizeCategory } from "@/lib/category-i18n";
 
 // 强制动态渲染，避免构建时查询数据库
 export const dynamic = "force-dynamic";
@@ -66,7 +67,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   const currentSort = normalizeSort(params.sort);
   const currentPage = Math.max(1, Number.parseInt(params.page || "1", 10) || 1);
 
-  const categories = await getActiveCategories();
+  const categories = (await getActiveCategories()).map((category) => localizeCategory(category, locale));
   const selectedCategory = params.category
     ? categories.find((c) => c.slug === params.category)
     : undefined;

@@ -1,11 +1,13 @@
 import type { Locale } from "@/lib/i18n";
 import type { ProductTranslations } from "@/lib/db/schema";
+import { localizeCategory } from "@/lib/category-i18n";
 
 type TranslatableProduct = {
   name: string;
   description: string | null;
   content?: string | null;
   translations?: ProductTranslations | null;
+  category?: ({ name: string; slug: string } & Record<string, unknown>) | null;
 };
 
 export function localizeProduct<T extends TranslatableProduct>(
@@ -13,14 +15,19 @@ export function localizeProduct<T extends TranslatableProduct>(
   locale: Locale
 ): T {
   const translation = product.translations?.[locale];
-  if (!translation) return product;
+  const category = product.category
+    ? localizeCategory(product.category, locale)
+    : product.category;
+
+  if (!translation && category === product.category) return product;
 
   return {
     ...product,
-    name: translation.name?.trim() || product.name,
-    description: translation.description?.trim() || product.description,
+    name: translation?.name?.trim() || product.name,
+    description: translation?.description?.trim() || product.description,
+    ...(Object.prototype.hasOwnProperty.call(product, "category") ? { category } : {}),
     ...(Object.prototype.hasOwnProperty.call(product, "content")
-      ? { content: translation.content?.trim() || product.content }
+      ? { content: translation?.content?.trim() || product.content }
       : {}),
   };
 }

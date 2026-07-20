@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { ChevronLeft, Package, Grid3X3 } from "lucide-react";
 import { getTranslator } from "@/lib/i18n-server";
 import { localizeProducts } from "@/lib/product-i18n";
+import { localizeCategory } from "@/lib/category-i18n";
 
 // 强制动态渲染，避免构建时查询数据库（docker build 无需 DATABASE_URL）
 export const dynamic = "force-dynamic";
@@ -16,7 +17,7 @@ interface CategoryPageProps {
 }
 
 export async function generateMetadata({ params }: CategoryPageProps) {
-  const { t } = await getTranslator();
+  const { locale, t } = await getTranslator();
   const { slug } = await params;
   const category = await getCategoryBySlug(slug);
 
@@ -24,9 +25,12 @@ export async function generateMetadata({ params }: CategoryPageProps) {
     return { title: t("categoryNotFound") };
   }
 
+  const localizedCategory = localizeCategory(category, locale);
   return {
-    title: `${category.name} - Game3DTech`,
-    description: category.description || t("categoryProducts", { name: category.name }),
+    title: `${localizedCategory.name} - Game3DTech`,
+    description: locale === "zh" && category.description
+      ? category.description
+      : t("categoryProducts", { name: localizedCategory.name }),
   };
 }
 
@@ -38,6 +42,7 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
   if (!category) {
     notFound();
   }
+  const localizedCategory = localizeCategory(category, locale);
 
   const products = await getActiveProducts({
     categoryId: category.id,
@@ -53,7 +58,7 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
           {t("home")}
         </Link>
         <ChevronLeft className="h-4 w-4 rotate-180" />
-        <span className="text-zinc-900 dark:text-zinc-100">{category.name}</span>
+        <span className="text-zinc-900 dark:text-zinc-100">{localizedCategory.name}</span>
       </nav>
 
       {/* Header */}
@@ -64,9 +69,9 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
           </div>
           <div>
             <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-50">
-              {category.name}
+              {localizedCategory.name}
             </h1>
-            {category.description && (
+            {locale === "zh" && category.description && (
               <p className="mt-1 text-zinc-600 dark:text-zinc-400">
                 {category.description}
               </p>
