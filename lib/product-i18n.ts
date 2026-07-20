@@ -14,7 +14,8 @@ export function localizeProduct<T extends TranslatableProduct>(
   product: T,
   locale: Locale
 ): T {
-  const translation = product.translations?.[locale];
+  const translation = product.translations?.[locale]
+    ?? (locale !== "zh" ? product.translations?.en : undefined);
   const category = product.category
     ? localizeCategory(product.category, locale)
     : product.category;

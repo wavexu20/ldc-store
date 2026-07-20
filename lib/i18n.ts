@@ -70,6 +70,29 @@ const translations: Record<Exclude<Locale,"en"|"zh">, Partial<Record<MessageKey,
   hi: { language:"भाषा",close:"बंद करें",search:"खोजें",searchProducts:"उत्पाद खोजें…",leaderboard:"ग्राहक रैंकिंग",myOrders:"मेरे ऑर्डर",wallet:"बैलेंस और रिचार्ज",logout:"साइन आउट",login:"साइन इन",register:"रजिस्टर",allProducts:"सभी उत्पाद",noProducts:"अभी कोई उत्पाद नहीं",comeBackLater:"कृपया बाद में देखें",popular:"लोकप्रिय",soldOut:"स्टॉक समाप्त",wantRestock:"दोबारा स्टॉक चाहिए?",view:"देखें",sold:"{count} बिके",onlyLeft:"केवल {count} बचे",footerDisclaimer:"यह साइट Linux DO से संबद्ध नहीं है।",footerTagline:"डिजिटल उत्पाद और स्मार्ट सेवाएँ",footerSecurePayment:"सुरक्षित भुगतान",footerFastDelivery:"तेज़ डिलीवरी",footerMultilingual:"बहुभाषी सहायता",loginTitle:"साइन इन करें या खाता बनाएँ",loginDescription:"खरीदारी, ऑर्डर और बैलेंस के लिए साइन इन करें",orEmail:"या Email का उपयोग करें",password:"पासवर्ड",nickname:"डिस्प्ले नाम",confirmPassword:"पासवर्ड की पुष्टि",emailLogin:"Email से साइन इन",createAccount:"खाता बनाएँ",availableBalance:"उपलब्ध बैलेंस",topupAmount:"रिचार्ज राशि",topupNow:"अभी रिचार्ज करें",balanceHistory:"बैलेंस इतिहास",noBalanceRecords:"कोई रिकॉर्ड नहीं",ordersTitle:"मेरे ऑर्डर",noOrders:"अभी कोई ऑर्डर नहीं",orderNo:"ऑर्डर नंबर",product:"उत्पाद",amount:"राशि",status:"स्थिति",details:"विवरण",previous:"पिछला",next:"अगला",searchTitle:"उत्पाद खोजें",allCategories:"सभी श्रेणियाँ",noSearchResults:"कोई उत्पाद नहीं मिला",rank:"रैंक",customer:"ग्राहक",completedOrders:"पूरे ऑर्डर",totalSpent:"कुल खर्च",noData:"कोई डेटा नहीं",buyNow:"अभी खरीदें",outOfStock:"स्टॉक समाप्त",quantity:"मात्रा",total:"कुल",submitOrder:"ऑर्डर करें",paymentSuccess:"भुगतान सफल",paymentPending:"भुगतान लंबित",paymentFailed:"भुगतान विफल",backHome:"स्टोर पर वापस जाएँ",viewOrders:"ऑर्डर देखें",loading:"लोड हो रहा है…",supportChat:"चैट",supportQuestion:"कोई सवाल? हमसे बात करें",supportOnline:"ऑनलाइन · आमतौर पर एक घंटे में जवाब",supportConnecting:"कनेक्ट हो रहा है…",supportWelcome:"नमस्ते! {site} के बारे में हम कैसे मदद करें?",supportPlaceholder:"अपना संदेश लिखें…",sendMessage:"संदेश भेजें",openSupport:"ग्राहक सहायता खोलें",closeChat:"चैट बंद करें",minimizeChat:"चैट छोटा करें",realtimeConnected:"लाइव कनेक्शन",realtimeDisconnected:"फिर से कनेक्ट हो रहा है…" },
 };
 
+const translationOverrides: Partial<
+  Record<Exclude<Locale, "en" | "zh">, Partial<Record<MessageKey, string>>>
+> = {
+  ja: {
+    requestRestock: "再入荷を依頼",
+    restockRequested: "再入荷を依頼済み",
+    requestRestockFailed: "再入荷依頼に失敗しました",
+    peopleRequested: "{count}人が再入荷を希望",
+  },
+  es: {
+    requestRestock: "Solicitar reposición",
+    restockRequested: "Reposición solicitada",
+    requestRestockFailed: "No se pudo solicitar la reposición",
+    peopleRequested: "{count} personas solicitaron reposición",
+  },
+  pt: {
+    requestRestock: "Solicitar reposição",
+    restockRequested: "Reposição solicitada",
+    requestRestockFailed: "Não foi possível solicitar reposição",
+    peopleRequested: "{count} pessoas solicitaram reposição",
+  },
+};
+
 export function detectLocale(value: string | null | undefined): Locale {
   const normalized = value?.toLowerCase() || "";
   if (normalized.startsWith("zh")) return "zh";
@@ -85,6 +108,10 @@ export function detectLocale(value: string | null | undefined): Locale {
 }
 
 export function translate(locale: Locale, key: MessageKey, params?: Record<string,string|number>) {
-  const template = locale === "zh" ? zh[key] : locale === "en" ? en[key] : translations[locale][key] || en[key];
+  const template = locale === "zh"
+    ? zh[key]
+    : locale === "en"
+      ? en[key]
+      : translationOverrides[locale]?.[key] || translations[locale][key] || en[key];
   return Object.entries(params || {}).reduce((text,[name,value]) => text.replaceAll(`{${name}}`,String(value)), template);
 }

@@ -32,9 +32,18 @@ describe("product localization", () => {
     });
   });
 
-  it("returns source content when the locale has no translation", () => {
-    expect(localizeProduct(product, "ko")).toEqual(product);
-    expect(localizeProducts([product], "ko")).toEqual([product]);
+  it("falls back to English for a non-Chinese locale without its own translation", () => {
+    expect(localizeProduct(product, "ja")).toMatchObject({
+      name: "Translated name",
+      description: "Translated summary",
+      content: "Translated details",
+    });
+    expect(localizeProducts([product], "ja")[0].name).toBe("Translated name");
+  });
+
+  it("returns source content when no usable translation exists", () => {
+    const sourceOnly = { ...product, translations: null };
+    expect(localizeProduct(sourceOnly, "ja")).toEqual(sourceOnly);
   });
 
   it("localizes a built-in category even when the product has no translation", () => {
