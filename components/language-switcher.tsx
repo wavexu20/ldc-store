@@ -63,13 +63,6 @@ export function LanguageSwitcher({ placement = "floating" }: { placement?: "floa
     setCurrency(next);
     setOpen(false);
   }
-  function currencyName(item: Currency) {
-    try {
-      return new Intl.DisplayNames([locale], { type: "currency" }).of(item) || item;
-    } catch {
-      return item;
-    }
-  }
   const inHeader = placement === "header";
   return (
     <div ref={rootRef} className={inHeader ? "relative z-[70]" : "fixed bottom-24 right-4 z-[70] flex flex-col items-end gap-2 sm:bottom-28 sm:right-6"}>
@@ -92,7 +85,7 @@ export function LanguageSwitcher({ placement = "floating" }: { placement?: "floa
                 <button key={item} role="menuitemradio" aria-checked={currency === item} className={`flex h-10 cursor-pointer items-center gap-2 rounded-lg px-3 text-sm transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${currency === item ? "bg-foreground text-background hover:bg-foreground/90" : ""}`} onClick={() => chooseCurrency(item)}>
                   <span className="w-5 text-center font-medium" aria-hidden="true">{currencySymbols[item]}</span>
                   <span className="font-medium">{item}</span>
-                  <span className={`ml-auto truncate text-xs ${currency === item ? "text-background/70" : "text-muted-foreground"}`}>{currencyName(item)}</span>
+                  {currency === item ? <Check className="ml-auto size-3.5" aria-hidden="true" /> : null}
                 </button>
               ))}
             </div>
