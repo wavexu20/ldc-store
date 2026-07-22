@@ -202,7 +202,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
         <section className="mt-6 rounded-2xl border bg-card p-5 shadow-sm sm:p-7 lg:p-8">
           <h2 className="mb-6 text-lg font-semibold">{t("productDetails")}</h2>
           <div
-            className="prose prose-sm prose-zinc max-w-none dark:prose-invert sm:prose-base"
+            className="prose prose-sm prose-zinc max-w-none dark:prose-invert sm:prose-base [&_img]:mx-auto [&_img]:max-h-[720px] [&_img]:rounded-xl [&_video]:mx-auto [&_video]:w-full [&_video]:max-w-4xl [&_video]:rounded-xl [&_video]:bg-black"
             dangerouslySetInnerHTML={{ __html: contentHtml }}
           />
         </section>

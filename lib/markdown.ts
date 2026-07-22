@@ -28,6 +28,8 @@ const ALLOWED_TAGS: IOptions["allowedTags"] = [
   "pre",
   "a",
   "img",
+  "video",
+  "source",
   "table",
   "thead",
   "tbody",
@@ -38,7 +40,9 @@ const ALLOWED_TAGS: IOptions["allowedTags"] = [
 
 const ALLOWED_ATTRIBUTES: IOptions["allowedAttributes"] = {
   a: ["href", "name", "target", "rel"],
-  img: ["src", "alt", "title", "width", "height"],
+  img: ["src", "alt", "title", "width", "height", "loading", "decoding"],
+  video: ["src", "controls", "preload", "poster", "width", "height", "playsinline"],
+  source: ["src", "type"],
   code: ["class"],
   pre: ["class"],
 };
@@ -54,6 +58,8 @@ export function renderMarkdownToSafeHtml(markdown: string): string {
     allowedSchemes: ["http", "https", "mailto"],
     allowedSchemesByTag: {
       img: ["http", "https"],
+      video: ["http", "https"],
+      source: ["http", "https"],
     },
     disallowedTagsMode: "discard",
     transformTags: {
@@ -64,6 +70,14 @@ export function renderMarkdownToSafeHtml(markdown: string): string {
           rel: "nofollow noopener noreferrer",
           target: "_blank",
         },
+      }),
+      img: (tagName, attribs) => ({
+        tagName,
+        attribs: { ...attribs, loading: "lazy", decoding: "async" },
+      }),
+      video: (tagName, attribs) => ({
+        tagName,
+        attribs: { ...attribs, controls: "", preload: "metadata", playsinline: "" },
       }),
     },
   });

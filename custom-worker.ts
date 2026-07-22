@@ -10,6 +10,7 @@ type WorkerEnv = {
 
 const avatarKeyPattern = /^avatars\/[0-9a-f-]{36}\/[0-9a-f-]{36}\.(?:jpg|png|webp)$/;
 const productImageKeyPattern = /^products\/[0-9a-f-]{36}\.(?:jpg|png|webp)$/;
+const productMediaKeyPattern = /^product-media\/[0-9a-f-]{36}\.(?:jpg|png|webp|mp4|webm)$/;
 
 async function serveMediaObject(request: Request, env: WorkerEnv, objectKey: string, pattern: RegExp): Promise<Response> {
   if (request.method !== "GET" && request.method !== "HEAD") return new Response("Method Not Allowed", { status: 405 });
@@ -36,6 +37,9 @@ export default {
     }
     if (url.pathname.startsWith("/api/product-images/")) {
       return serveMediaObject(request, env, url.pathname.slice("/api/product-images/".length), productImageKeyPattern);
+    }
+    if (url.pathname.startsWith("/api/product-media/")) {
+      return serveMediaObject(request, env, url.pathname.slice("/api/product-media/".length), productMediaKeyPattern);
     }
     if (url.pathname === "/api/support/ws") {
       const room = env.SUPPORT_CHAT.get(env.SUPPORT_CHAT.idFromName("global"));

@@ -73,10 +73,11 @@ async function translateMarkdown(
   sourceLocale: Locale,
   targetLocale: Locale
 ): Promise<string> {
-  const segments = markdown.split(/(```[\s\S]*?```)/g);
+  // 媒体标签、图片和链接中的 URL 必须保持原样，避免翻译模型破坏可访问地址。
+  const segments = markdown.split(/(```[\s\S]*?```|!\[[^\]]*\]\([^\n)]+\)|\[[^\]]+\]\([^\n)]+\)|<video\b[\s\S]*?<\/video>)/gi);
   const translated = await Promise.all(
     segments.map((segment) =>
-      segment.startsWith("```")
+      segment.startsWith("```") || /^!?(?:\[[^\]]+\]\(|<video\b)/i.test(segment)
         ? Promise.resolve(segment)
         : translatePlainText(ai, segment, sourceLocale, targetLocale)
     )

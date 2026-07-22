@@ -30,7 +30,7 @@ import {
 } from "@/components/ui/form";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { toast } from "sonner";
-import { Loader2, ArrowLeft, Package, Save, Copy, Languages, Eye, ImagePlus, Link2, Trash2, Upload, Layers3, Plus, Boxes, ExternalLink } from "lucide-react";
+import { Loader2, ArrowLeft, Package, Save, Copy, Languages, Eye, ImagePlus, Link2, Trash2, Upload, Layers3, Plus, Boxes, ExternalLink, Video } from "lucide-react";
 import Link from "next/link";
 
 export interface ProductFormInventory {
@@ -81,11 +81,16 @@ export function ProductForm({
 }: ProductFormProps) {
   const [isPending, startTransition] = useTransition();
   const [isImagePending, startImageTransition] = useTransition();
+  const [isContentMediaPending, startContentMediaTransition] = useTransition();
   const [isPreviewPending, startPreviewTransition] = useTransition();
   const [externalImageUrl, setExternalImageUrl] = useState("");
+  const [contentMediaUrl, setContentMediaUrl] = useState("");
   const [previewUrl, setPreviewUrl] = useState("");
   const [draftVariantName, setDraftVariantName] = useState("");
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const contentImageInputRef = useRef<HTMLInputElement>(null);
+  const contentVideoInputRef = useRef<HTMLInputElement>(null);
+  const contentTextareaRef = useRef<HTMLTextAreaElement>(null);
   const submitDestinationRef = useRef<"products" | "inventory">("products");
   const router = useRouter();
 
@@ -190,6 +195,75 @@ export function ProductForm({
     startImageTransition(async () => {
       const result = await deleteProductImage(url);
       if (!result.success) toast.error(result.message);
+    });
+  };
+
+  const insertContentSnippet = (snippet: string) => {
+    const textarea = contentTextareaRef.current;
+    const current = form.getValues("content") || "";
+    const start = textarea?.selectionStart ?? current.length;
+    const end = textarea?.selectionEnd ?? start;
+    const before = current.slice(0, start);
+    const after = current.slice(end);
+    const leadingBreak = before && !before.endsWith("\n") ? "\n\n" : "";
+    const trailingBreak = after && !after.startsWith("\n") ? "\n\n" : "";
+    const inserted = `${leadingBreak}${snippet}${trailingBreak}`;
+    form.setValue("content", `${before}${inserted}${after}`, { shouldDirty: true, shouldValidate: true });
+    requestAnimationFrame(() => {
+      textarea?.focus();
+      const cursor = start + inserted.length;
+      textarea?.setSelectionRange(cursor, cursor);
+    });
+  };
+
+  const mediaSnippet = (kind: "image" | "video" | "link", url: string) => {
+    if (kind === "image") return `![商品说明图片](<${url}>)`;
+    if (kind === "link") return `[打开相关内容](<${url}>)`;
+    const safeUrl = url.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+    return `<video controls preload="metadata" src="${safeUrl}"></video>`;
+  };
+
+  const insertExternalContentMedia = (kind: "image" | "video" | "link") => {
+    try {
+      const url = new URL(contentMediaUrl.trim());
+      if (url.protocol !== "https:" && url.protocol !== "http:") throw new Error();
+      insertContentSnippet(mediaSnippet(kind, url.toString()));
+      setContentMediaUrl("");
+    } catch {
+      toast.error("请输入有效的 HTTPS 或 HTTP 链接");
+    }
+  };
+
+  const uploadContentMedia = (files: FileList | null, expectedKind: "image" | "video") => {
+    const file = files?.[0];
+    if (!file) return;
+    const accepted = expectedKind === "image"
+      ? ["image/jpeg", "image/png", "image/webp"]
+      : ["video/mp4", "video/webm"];
+    const maxBytes = expectedKind === "image" ? 10 * 1024 * 1024 : 50 * 1024 * 1024;
+    if (!accepted.includes(file.type)) {
+      toast.error(expectedKind === "image" ? "仅支持 JPG、PNG 或 WebP 图片" : "仅支持 MP4 或 WebM 视频");
+      return;
+    }
+    if (file.size > maxBytes) {
+      toast.error(expectedKind === "image" ? "图片不能超过 10 MB" : "视频不能超过 50 MB");
+      return;
+    }
+    startContentMediaTransition(async () => {
+      try {
+        const formData = new FormData();
+        formData.append("file", file);
+        const response = await fetch("/api/admin/product-media", { method: "POST", body: formData });
+        const result = await response.json().catch(() => null) as { success?: boolean; url?: string; kind?: "image" | "video"; message?: string } | null;
+        if (!response.ok || !result?.success || !result.url || !result.kind) {
+          toast.error(result?.message || "媒体上传失败，请稍后重试");
+          return;
+        }
+        insertContentSnippet(mediaSnippet(result.kind, result.url));
+        toast.success(result.kind === "image" ? "图片已上传并插入描述" : "视频已上传并插入描述");
+      } catch {
+        toast.error("媒体上传失败，请检查网络后重试");
+      }
     });
   };
 
@@ -425,11 +499,34 @@ export function ProductForm({
                         <FormLabel>详细描述 (Markdown)</FormLabel>
                         <FormControl>
                           <Textarea
-                            placeholder="支持 Markdown 格式的详细商品介绍"
-                            rows={6}
+                            placeholder="输入商品详情，或在光标位置插入图片、视频和链接"
+                            rows={10}
                             {...field}
+                            ref={(node) => {
+                              field.ref(node);
+                              contentTextareaRef.current = node;
+                            }}
                           />
                         </FormControl>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <input ref={contentImageInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={(event) => { uploadContentMedia(event.target.files, "image"); event.target.value = ""; }} />
+                          <input ref={contentVideoInputRef} type="file" accept="video/mp4,video/webm" className="hidden" onChange={(event) => { uploadContentMedia(event.target.files, "video"); event.target.value = ""; }} />
+                          <Button type="button" size="sm" variant="outline" disabled={isContentMediaPending} onClick={() => contentImageInputRef.current?.click()}>
+                            {isContentMediaPending ? <Loader2 className="size-4 animate-spin" /> : <ImagePlus className="size-4" />} 上传图片
+                          </Button>
+                          <Button type="button" size="sm" variant="outline" disabled={isContentMediaPending} onClick={() => contentVideoInputRef.current?.click()}>
+                            <Video className="size-4" /> 上传视频
+                          </Button>
+                          <span className="text-xs text-muted-foreground">图片 ≤ 10 MB，视频 ≤ 50 MB</span>
+                        </div>
+                        <div className="flex flex-col gap-2 sm:flex-row">
+                          <Input value={contentMediaUrl} onChange={(event) => setContentMediaUrl(event.target.value)} placeholder="粘贴外部图片、视频或网页链接" />
+                          <div className="grid shrink-0 grid-cols-3 gap-2">
+                            <Button type="button" size="sm" variant="secondary" onClick={() => insertExternalContentMedia("image")}><ImagePlus className="size-4" />图片</Button>
+                            <Button type="button" size="sm" variant="secondary" onClick={() => insertExternalContentMedia("video")}><Video className="size-4" />视频</Button>
+                            <Button type="button" size="sm" variant="secondary" onClick={() => insertExternalContentMedia("link")}><Link2 className="size-4" />链接</Button>
+                          </div>
+                        </div>
                         <FormMessage />
                       </FormItem>
                     )}

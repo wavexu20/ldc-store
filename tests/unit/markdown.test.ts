@@ -60,5 +60,20 @@ describe("markdown", () => {
     expect(html).toContain("<img");
     expect(html).not.toContain("data:text/plain");
   });
-});
 
+  it("应安全渲染商品视频并强制使用播放器控件", () => {
+    const html = renderMarkdownToSafeHtml('<video autoplay src="/api/product-media/product-media/0195eb17-2db8-7f93-b950-7259b29c5a10.mp4"></video>');
+
+    expect(html).toContain("<video");
+    expect(html).toContain('src="/api/product-media/product-media/0195eb17-2db8-7f93-b950-7259b29c5a10.mp4"');
+    expect(html).toMatch(/<video[^>]*\scontrols(?:\s|>)/);
+    expect(html).toContain('preload="metadata"');
+    expect(html).not.toContain("autoplay");
+  });
+
+  it("视频应拒绝 javascript scheme", () => {
+    const html = renderMarkdownToSafeHtml('<video controls src="javascript:alert(1)"></video>');
+    expect(html).toContain("<video");
+    expect(html).not.toContain("javascript:");
+  });
+});
