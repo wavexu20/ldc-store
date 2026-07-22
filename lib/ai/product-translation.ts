@@ -74,10 +74,10 @@ async function translateMarkdown(
   targetLocale: Locale
 ): Promise<string> {
   // 媒体标签、图片和链接中的 URL 必须保持原样，避免翻译模型破坏可访问地址。
-  const segments = markdown.split(/(```[\s\S]*?```|!\[[^\]]*\]\([^\n)]+\)|\[[^\]]+\]\([^\n)]+\)|<video\b[\s\S]*?<\/video>)/gi);
+  const segments = markdown.split(/(```[\s\S]*?```|!\[[^\]]*\]\([^\n)]+\)|\[[^\]]+\]\([^\n)]+\)|<video\b[\s\S]*?<\/video>|<\/?span\b[^>]*>)/gi);
   const translated = await Promise.all(
     segments.map((segment) =>
-      segment.startsWith("```") || /^!?(?:\[[^\]]+\]\(|<video\b)/i.test(segment)
+      segment.startsWith("```") || /^!?(?:\[[^\]]+\]\(|<video\b|<\/?span\b)/i.test(segment)
         ? Promise.resolve(segment)
         : translatePlainText(ai, segment, sourceLocale, targetLocale)
     )

@@ -8,6 +8,7 @@ import { OrderForm } from "./order-form";
 import { renderMarkdownToSafeHtml } from "@/lib/markdown";
 import { ProductImageGallery } from "./product-image-gallery";
 import { RestockRequestInline } from "@/components/store/restock-request-inline";
+import { MarkdownContent } from "@/components/store/markdown-content";
 import { getTranslator } from "@/lib/i18n-server";
 import { localizeProduct } from "@/lib/product-i18n";
 import { getCheckoutMembership } from "@/lib/actions/wallet";
@@ -201,9 +202,9 @@ export default async function ProductPage({ params }: ProductPageProps) {
       {contentHtml && (
         <section className="mt-6 rounded-2xl border bg-card p-5 shadow-sm sm:p-7 lg:p-8">
           <h2 className="mb-6 text-lg font-semibold">{t("productDetails")}</h2>
-          <div
+          <MarkdownContent
+            html={contentHtml}
             className="prose prose-sm prose-zinc max-w-none dark:prose-invert sm:prose-base [&_img]:mx-auto [&_img]:max-h-[720px] [&_img]:rounded-xl [&_video]:mx-auto [&_video]:w-full [&_video]:max-w-4xl [&_video]:rounded-xl [&_video]:bg-black"
-            dangerouslySetInnerHTML={{ __html: contentHtml }}
           />
         </section>
       )}

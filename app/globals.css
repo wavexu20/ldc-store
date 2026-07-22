@@ -183,6 +183,53 @@
   .animate-ldc-store-shake {
     animation: ldc-store-shake 520ms ease-in-out;
   }
+
+  .md-text-xs {
+    font-size: 0.8em;
+  }
+  .md-text-base {
+    font-size: 1em;
+  }
+  .md-text-lg {
+    font-size: 1.25em;
+  }
+  .md-text-xl {
+    font-size: 1.5em;
+  }
+  .md-text-default {
+    color: var(--foreground);
+  }
+  .md-text-muted {
+    color: var(--muted-foreground);
+  }
+  .md-text-red {
+    color: var(--destructive);
+  }
+  .md-text-green {
+    color: oklch(0.44 0.14 151);
+  }
+  .md-text-blue {
+    color: oklch(0.48 0.16 245);
+  }
+  .md-text-orange {
+    color: oklch(0.5 0.15 60);
+  }
+  .md-text-purple {
+    color: oklch(0.5 0.19 300);
+  }
+
+  .dark .md-text-green {
+    color: oklch(0.76 0.14 151);
+  }
+  .dark .md-text-blue {
+    color: oklch(0.76 0.12 245);
+  }
+  .dark .md-text-orange {
+    color: oklch(0.78 0.14 70);
+  }
+  .dark .md-text-purple {
+    color: oklch(0.78 0.15 300);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

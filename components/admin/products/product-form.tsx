@@ -29,6 +29,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { MarkdownContent } from "@/components/store/markdown-content";
 import { toast } from "sonner";
 import { Loader2, ArrowLeft, Package, Save, Copy, Languages, Eye, ImagePlus, Link2, Trash2, Upload, Layers3, Plus, Boxes, ExternalLink, Video, Bold, Heading2, List, Quote, Code2, Pencil } from "lucide-react";
 import Link from "next/link";
@@ -559,6 +560,38 @@ export function ProductForm({
                               <Button type="button" size="icon" variant="ghost" className="size-8 cursor-pointer" title="列表" aria-label="插入列表" onClick={() => wrapContentSelection("- ", "", "列表项目")}><List className="size-4" /></Button>
                               <Button type="button" size="icon" variant="ghost" className="size-8 cursor-pointer" title="引用" aria-label="插入引用" onClick={() => wrapContentSelection("> ", "", "引用内容")}><Quote className="size-4" /></Button>
                               <Button type="button" size="icon" variant="ghost" className="size-8 cursor-pointer" title="代码块" aria-label="插入代码块" onClick={() => wrapContentSelection("```\n", "\n```", "代码内容")}><Code2 className="size-4" /></Button>
+                              <div className="mx-1 h-5 w-px bg-border" aria-hidden="true" />
+                              <select
+                                aria-label="设置字体大小"
+                                className="h-8 cursor-pointer rounded-md border bg-background px-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                value=""
+                                onChange={(event) => {
+                                  wrapContentSelection(`<span class="${event.target.value}">`, "</span>", "文字");
+                                }}
+                              >
+                                <option value="" disabled>字号</option>
+                                <option value="md-text-xs">小字</option>
+                                <option value="md-text-base">正文</option>
+                                <option value="md-text-lg">大字</option>
+                                <option value="md-text-xl">特大</option>
+                              </select>
+                              <select
+                                aria-label="设置文字颜色"
+                                className="h-8 cursor-pointer rounded-md border bg-background px-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                value=""
+                                onChange={(event) => {
+                                  wrapContentSelection(`<span class="${event.target.value}">`, "</span>", "文字");
+                                }}
+                              >
+                                <option value="" disabled>颜色</option>
+                                <option value="md-text-default">默认</option>
+                                <option value="md-text-muted">灰色</option>
+                                <option value="md-text-red">红色</option>
+                                <option value="md-text-green">绿色</option>
+                                <option value="md-text-blue">蓝色</option>
+                                <option value="md-text-orange">橙色</option>
+                                <option value="md-text-purple">紫色</option>
+                              </select>
                               <span className="ml-auto pr-1 text-[11px] text-muted-foreground">支持 Markdown</span>
                             </div>
                             <FormControl>
@@ -580,7 +613,7 @@ export function ProductForm({
                               {contentPreviewState === "loading" ? <span className="flex items-center gap-1 text-xs text-muted-foreground"><Loader2 className="size-3 animate-spin" />更新中</span> : null}
                             </div>
                             <div className="min-h-[360px] max-h-[640px] overflow-y-auto p-4 sm:p-5">
-                              {contentPreviewState === "error" ? <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">预览暂时无法生成，编辑内容不会丢失。</div> : contentPreviewHtml ? <div className="prose prose-sm prose-zinc max-w-none dark:prose-invert [&_img]:mx-auto [&_img]:max-h-[520px] [&_img]:rounded-lg [&_video]:w-full [&_video]:rounded-lg [&_video]:bg-black" dangerouslySetInnerHTML={{ __html: contentPreviewHtml }} /> : <div className="flex min-h-[300px] items-center justify-center text-center text-sm text-muted-foreground">在左侧输入内容后，这里会显示商品详情效果。</div>}
+                              {contentPreviewState === "error" ? <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">预览暂时无法生成，编辑内容不会丢失。</div> : contentPreviewHtml ? <MarkdownContent html={contentPreviewHtml} className="prose prose-sm prose-zinc max-w-none dark:prose-invert [&_img]:mx-auto [&_img]:max-h-[520px] [&_img]:rounded-lg [&_video]:w-full [&_video]:rounded-lg [&_video]:bg-black" /> : <div className="flex min-h-[300px] items-center justify-center text-center text-sm text-muted-foreground">在左侧输入内容后，这里会显示商品详情效果。</div>}
                             </div>
                           </div>
                         </div>
