@@ -106,7 +106,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
       </Link>
 
       <section className="overflow-hidden rounded-2xl border bg-card shadow-sm">
-        <div className="grid lg:grid-cols-[minmax(0,1.05fr)_minmax(360px,0.95fr)]">
+        <div className="grid lg:grid-cols-2">
           <div className="border-b bg-muted/20 p-4 sm:p-6 lg:border-b-0 lg:border-r">
             {uniqueImageUrls.length > 0 ? (
               <ProductImageGallery
@@ -127,14 +127,16 @@ export default async function ProductPage({ params }: ProductPageProps) {
               {product.category && <Badge variant="outline">{product.category.name}</Badge>}
             </div>
 
-            <h1 className="mt-4 text-2xl font-semibold tracking-tight sm:text-3xl">
-              {product.name}
-            </h1>
-            {product.description && (
-              <p className="mt-2 line-clamp-3 text-sm leading-6 text-muted-foreground">
-                {product.description}
-              </p>
-            )}
+            <div className="mt-4 max-w-[34rem] space-y-2.5">
+              <h1 className="text-balance break-words text-2xl font-semibold leading-[1.2] tracking-tight sm:text-[1.75rem] xl:text-3xl">
+                {product.name}
+              </h1>
+              {product.description && (
+                <p className="line-clamp-3 text-pretty text-sm leading-6 text-muted-foreground sm:text-[0.9375rem]">
+                  {product.description}
+                </p>
+              )}
+            </div>
 
             <div className="mt-5 rounded-xl border bg-muted/30 p-4">
               <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
