@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import {
   CheckCircle2,
   Clock,
+  Gift,
   Loader2,
   Home,
   Copy,
@@ -643,6 +644,23 @@ export default function OrderResultPage({ searchParams }: OrderResultPageProps) 
             <div className="flex flex-col gap-3 rounded-2xl border border-warning/30 bg-warning/10 p-4 text-sm sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-2 font-medium text-warning-foreground dark:text-warning"><ShieldCheck className="size-4 shrink-0" />卡密已受二次验证保护</div>
               <Button asChild size="sm"><Link href={`/account/verify-2fa?callbackUrl=${encodeURIComponent(`/order/result?out_trade_no=${order.orderNo}`)}`}>验证后查看</Link></Button>
+            </div>
+          ) : null}
+
+          {!isLoggedIn ? (
+            <div className="flex flex-col gap-3 rounded-2xl border border-success/20 bg-success/5 p-4 sm:flex-row sm:items-center">
+              <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-success/10 text-success">
+                <Gift className="size-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium">{t("memberRechargeBenefitTitle")}</p>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">{t("memberRechargeBenefit")}</p>
+              </div>
+              <Button asChild size="sm" variant="outline" className="shrink-0 bg-background">
+                <Link href={`/login?mode=register&callbackUrl=${encodeURIComponent(`/order/result?out_trade_no=${order.orderNo}`)}`}>
+                  {t("joinMembership")}
+                </Link>
+              </Button>
             </div>
           ) : null}
 

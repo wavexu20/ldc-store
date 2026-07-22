@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
-import { Github, Loader2, Mail, MailCheck, Store } from "lucide-react";
+import { Gift, Github, Loader2, Mail, MailCheck, Store } from "lucide-react";
 import { SiDiscord, SiHuggingface, SiSteam } from "@icons-pack/react-simple-icons";
 import { toast } from "sonner";
 import { registerWithEmail, resendEmailVerification, verifyEmailCode } from "@/lib/actions/auth";
@@ -31,6 +31,7 @@ export function AccountLoginForm({ providers, turnstileSiteKey }: {
   const { t } = useI18n();
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl") || "/";
+  const initialMode = searchParams.get("mode") === "register" ? "register" : "login";
   const [loading, setLoading] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -155,6 +156,15 @@ export function AccountLoginForm({ providers, turnstileSiteKey }: {
         <CardDescription>{t("loginDescription")}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
+        <div className="flex items-center gap-3 rounded-lg border border-success/20 bg-success/5 px-3 py-2.5">
+          <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-success/10 text-success">
+            <Gift className="size-4" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-xs font-medium">{t("memberRechargeBenefitTitle")}</p>
+            <p className="mt-0.5 text-[11px] leading-4 text-muted-foreground">{t("memberRechargeBenefit")}</p>
+          </div>
+        </div>
         {verificationEmail ? (
           <form className="space-y-5" onSubmit={verifyEmail}>
             <div className="flex items-center gap-3 rounded-lg border bg-muted/30 px-3 py-2.5 text-sm">
@@ -206,7 +216,7 @@ export function AccountLoginForm({ providers, turnstileSiteKey }: {
           <span className="relative bg-card px-3">{t("orEmail")}</span>
         </div>
 
-        <Tabs defaultValue="login">
+        <Tabs defaultValue={initialMode}>
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="login">{t("login")}</TabsTrigger>
             <TabsTrigger value="register">{t("register")}</TabsTrigger>

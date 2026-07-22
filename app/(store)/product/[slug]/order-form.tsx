@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Loader2, Minus, Plus, CheckCircle2, WalletCards } from "lucide-react";
+import { ArrowRight, Gift, Loader2, Minus, Plus, CheckCircle2, WalletCards } from "lucide-react";
 import { useI18n } from "@/components/i18n-provider";
 import { calculatePointsRedemption } from "@/lib/membership";
 import { CnySettlementHint, Money } from "@/components/store/money";
@@ -66,6 +66,7 @@ export function OrderForm({
     () => initialVariantId || variants.find((variant) => !inventoryManaged || variant.stock >= minQuantity)?.id || variants[0]?.id || ""
   );
   const router = useRouter();
+  const pathname = usePathname();
   const { data: session, status } = useSession();
   const selectedVariant = variants.length > 0
       ? variants.find((variant) => variant.id === selectedVariantId)
@@ -171,7 +172,23 @@ export function OrderForm({
         <div className="space-y-3 rounded-xl border bg-muted/20 p-4">
           <div>
             <p className="text-sm font-medium">{t("guestCheckoutTitle")}</p>
-            <p className="mt-1 text-xs leading-5 text-muted-foreground">{t("guestCheckoutHint")} <Link className="font-medium text-foreground underline underline-offset-4" href="/login">{t("login")}</Link> {t("guestLoginBenefits")}</p>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">{t("guestCheckoutHint")}</p>
+          </div>
+          <div className="flex items-center gap-3 rounded-lg border border-success/20 bg-success/5 p-3">
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-success/10 text-success">
+              <Gift className="size-4" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-medium text-foreground">{t("memberRechargeBenefit")}</p>
+              <p className="mt-0.5 text-[11px] leading-4 text-muted-foreground">{t("memberRechargeBenefitHint")}</p>
+            </div>
+            <Link
+              className="flex shrink-0 items-center gap-1 text-xs font-medium text-foreground underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              href={`/login?mode=register&callbackUrl=${encodeURIComponent(pathname)}`}
+            >
+              {t("joinMembership")}
+              <ArrowRight className="size-3.5" />
+            </Link>
           </div>
           <div className="space-y-2">
             <Label htmlFor="guest-order-email">{t("guestOrderEmail")}</Label>

@@ -60,6 +60,27 @@ beforeEach(() => {
 });
 
 describe("OrderResultPage", () => {
+  it("游客订单应展示注册后的充值奖励入口", async () => {
+    authMocks.useSession.mockReturnValue({ data: null, status: "unauthenticated" });
+    localStorage.setItem("g3d_guest_order:ORDER_1", "guest-token");
+    actionMocks.getOrderByNo.mockResolvedValueOnce({
+      success: true,
+      data: makeOrder("completed", ["card-001"]),
+    });
+
+    const { unmount } = renderPage("ORDER_1");
+
+    expect(await screen.findByText("商品 A")).toBeInTheDocument();
+    expect(screen.getByText("注册后充值余额，每次额外获得 1% 奖励金。")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "注册会员" })).toHaveAttribute(
+      "href",
+      "/login?mode=register&callbackUrl=%2Forder%2Fresult%3Fout_trade_no%3DORDER_1",
+    );
+    expect(actionMocks.getOrderByNo).toHaveBeenCalledWith("ORDER_1", "guest-token");
+
+    unmount();
+  });
+
   it("应展示 pending 状态与轮询提示", async () => {
     authMocks.useSession.mockReturnValue({
       data: { user: { id: "u1", provider: "linux-do" } },
