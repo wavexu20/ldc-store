@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useForm, type FieldErrors } from "react-hook-form";
@@ -30,7 +30,7 @@ import {
 } from "@/components/ui/form";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { toast } from "sonner";
-import { Loader2, ArrowLeft, Package, Save, Copy, Languages, Eye, ImagePlus, Link2, Trash2, Upload, Layers3, Plus, Boxes, ExternalLink, Video } from "lucide-react";
+import { Loader2, ArrowLeft, Package, Save, Copy, Languages, Eye, ImagePlus, Link2, Trash2, Upload, Layers3, Plus, Boxes, ExternalLink, Video, Bold, Heading2, List, Quote, Code2, Pencil } from "lucide-react";
 import Link from "next/link";
 
 export interface ProductFormInventory {
@@ -86,6 +86,9 @@ export function ProductForm({
   const [externalImageUrl, setExternalImageUrl] = useState("");
   const [contentMediaUrl, setContentMediaUrl] = useState("");
   const [previewUrl, setPreviewUrl] = useState("");
+  const [contentPreviewHtml, setContentPreviewHtml] = useState("");
+  const [contentPreviewState, setContentPreviewState] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [contentPane, setContentPane] = useState<"edit" | "preview">("edit");
   const [draftVariantName, setDraftVariantName] = useState("");
   const imageInputRef = useRef<HTMLInputElement>(null);
   const contentImageInputRef = useRef<HTMLInputElement>(null);
@@ -100,6 +103,7 @@ export function ProductForm({
   });
 
   const watchName = form.watch("name");
+  const content = form.watch("content") ?? "";
   const images = form.watch("images") ?? [];
   const variants = form.watch("variants") ?? [];
   const manualFulfillment = form.watch("fulfillmentMode") !== "auto";
@@ -120,6 +124,36 @@ export function ProductForm({
     0,
     knownAvailableStock - (usesVariantPricing ? activeVariantStock : publicStock)
   );
+
+  useEffect(() => {
+    if (!content.trim()) {
+      setContentPreviewHtml("");
+      setContentPreviewState("idle");
+      return;
+    }
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      setContentPreviewState("loading");
+      try {
+        const response = await fetch("/api/admin/markdown-preview", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ markdown: content }),
+          signal: controller.signal,
+        });
+        const result = await response.json().catch(() => null) as { success?: boolean; html?: string } | null;
+        if (!response.ok || !result?.success || typeof result.html !== "string") throw new Error();
+        setContentPreviewHtml(result.html);
+        setContentPreviewState("ready");
+      } catch (error) {
+        if ((error as Error).name !== "AbortError") setContentPreviewState("error");
+      }
+    }, 350);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [content]);
   const generateSlug = () => {
     const slug = watchName
       .toLowerCase()
@@ -213,6 +247,20 @@ export function ProductForm({
       textarea?.focus();
       const cursor = start + inserted.length;
       textarea?.setSelectionRange(cursor, cursor);
+    });
+  };
+
+  const wrapContentSelection = (before: string, after: string, placeholder: string) => {
+    const textarea = contentTextareaRef.current;
+    const current = form.getValues("content") || "";
+    const start = textarea?.selectionStart ?? current.length;
+    const end = textarea?.selectionEnd ?? start;
+    const selected = current.slice(start, end) || placeholder;
+    const replacement = `${before}${selected}${after}`;
+    form.setValue("content", `${current.slice(0, start)}${replacement}${current.slice(end)}`, { shouldDirty: true, shouldValidate: true });
+    requestAnimationFrame(() => {
+      textarea?.focus();
+      textarea?.setSelectionRange(start + before.length, start + before.length + selected.length);
     });
   };
 
@@ -496,18 +544,46 @@ export function ProductForm({
                     name="content"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>详细描述 (Markdown)</FormLabel>
-                        <FormControl>
-                          <Textarea
-                            placeholder="输入商品详情，或在光标位置插入图片、视频和链接"
-                            rows={10}
-                            {...field}
-                            ref={(node) => {
-                              field.ref(node);
-                              contentTextareaRef.current = node;
-                            }}
-                          />
-                        </FormControl>
+                        <div className="flex items-center justify-between gap-3">
+                          <FormLabel>详细描述 (Markdown)</FormLabel>
+                          <div className="flex rounded-lg border bg-muted/40 p-0.5 xl:hidden" aria-label="描述编辑模式">
+                            <Button type="button" size="sm" variant={contentPane === "edit" ? "secondary" : "ghost"} className="h-7 px-2.5" onClick={() => setContentPane("edit")}><Pencil className="size-3.5" />编辑</Button>
+                            <Button type="button" size="sm" variant={contentPane === "preview" ? "secondary" : "ghost"} className="h-7 px-2.5" onClick={() => setContentPane("preview")}><Eye className="size-3.5" />预览</Button>
+                          </div>
+                        </div>
+                        <div className="grid overflow-hidden rounded-xl border bg-background xl:grid-cols-2">
+                          <div className={`${contentPane === "preview" ? "hidden xl:block" : "block"} min-w-0 xl:border-r`}>
+                            <div className="flex flex-wrap items-center gap-1 border-b bg-muted/30 p-2" aria-label="Markdown 格式工具栏">
+                              <Button type="button" size="icon" variant="ghost" className="size-8 cursor-pointer" title="二级标题" aria-label="插入二级标题" onClick={() => wrapContentSelection("## ", "", "标题")}><Heading2 className="size-4" /></Button>
+                              <Button type="button" size="icon" variant="ghost" className="size-8 cursor-pointer" title="粗体" aria-label="插入粗体" onClick={() => wrapContentSelection("**", "**", "重点文字")}><Bold className="size-4" /></Button>
+                              <Button type="button" size="icon" variant="ghost" className="size-8 cursor-pointer" title="列表" aria-label="插入列表" onClick={() => wrapContentSelection("- ", "", "列表项目")}><List className="size-4" /></Button>
+                              <Button type="button" size="icon" variant="ghost" className="size-8 cursor-pointer" title="引用" aria-label="插入引用" onClick={() => wrapContentSelection("> ", "", "引用内容")}><Quote className="size-4" /></Button>
+                              <Button type="button" size="icon" variant="ghost" className="size-8 cursor-pointer" title="代码块" aria-label="插入代码块" onClick={() => wrapContentSelection("```\n", "\n```", "代码内容")}><Code2 className="size-4" /></Button>
+                              <span className="ml-auto pr-1 text-[11px] text-muted-foreground">支持 Markdown</span>
+                            </div>
+                            <FormControl>
+                              <Textarea
+                                placeholder="输入商品详情，或在光标位置插入图片、视频和链接"
+                                rows={16}
+                                className="min-h-[360px] resize-y rounded-none border-0 font-mono text-sm leading-6 shadow-none focus-visible:ring-0"
+                                {...field}
+                                ref={(node) => {
+                                  field.ref(node);
+                                  contentTextareaRef.current = node;
+                                }}
+                              />
+                            </FormControl>
+                          </div>
+                          <div className={`${contentPane === "edit" ? "hidden xl:block" : "block"} min-w-0 bg-muted/10`}>
+                            <div className="flex h-[49px] items-center justify-between border-b px-3">
+                              <span className="flex items-center gap-2 text-sm font-medium"><Eye className="size-4" />实时预览</span>
+                              {contentPreviewState === "loading" ? <span className="flex items-center gap-1 text-xs text-muted-foreground"><Loader2 className="size-3 animate-spin" />更新中</span> : null}
+                            </div>
+                            <div className="min-h-[360px] max-h-[640px] overflow-y-auto p-4 sm:p-5">
+                              {contentPreviewState === "error" ? <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">预览暂时无法生成，编辑内容不会丢失。</div> : contentPreviewHtml ? <div className="prose prose-sm prose-zinc max-w-none dark:prose-invert [&_img]:mx-auto [&_img]:max-h-[520px] [&_img]:rounded-lg [&_video]:w-full [&_video]:rounded-lg [&_video]:bg-black" dangerouslySetInnerHTML={{ __html: contentPreviewHtml }} /> : <div className="flex min-h-[300px] items-center justify-center text-center text-sm text-muted-foreground">在左侧输入内容后，这里会显示商品详情效果。</div>}
+                            </div>
+                          </div>
+                        </div>
                         <div className="flex flex-wrap items-center gap-2">
                           <input ref={contentImageInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={(event) => { uploadContentMedia(event.target.files, "image"); event.target.value = ""; }} />
                           <input ref={contentVideoInputRef} type="file" accept="video/mp4,video/webm" className="hidden" onChange={(event) => { uploadContentMedia(event.target.files, "video"); event.target.value = ""; }} />
