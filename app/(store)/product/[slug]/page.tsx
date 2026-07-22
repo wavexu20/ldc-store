@@ -132,7 +132,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
                 {product.name}
               </h1>
               {product.description && (
-                <p className="line-clamp-3 text-pretty text-sm leading-6 text-muted-foreground sm:text-[0.9375rem]">
+                <p className="line-clamp-3 text-balance text-sm leading-6 text-muted-foreground sm:text-[0.9375rem]">
                   {product.description}
                 </p>
               )}
