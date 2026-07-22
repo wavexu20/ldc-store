@@ -19,7 +19,7 @@ export interface AnnouncementBannerItem {
   updatedAt?: string;
 }
 
-const DISMISS_KEY = "ldc-store:announcement-banner:dismissed-signature";
+const DISMISS_KEY = "game3dtech:announcement-banner:dismissed-signature";
 
 export function AnnouncementBanner({
   announcements,

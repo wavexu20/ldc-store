@@ -26,10 +26,12 @@ import { cn } from "@/lib/utils";
 import { useI18n } from "@/components/i18n-provider";
 import { getLocalizedFulfillmentLabel, type FulfillmentMode } from "@/lib/fulfillment";
 import { Money } from "@/components/store/money";
+import { PendingOrderActions } from "@/components/store/pending-order-actions";
+import { guestOrderStorageKey } from "@/lib/order-access";
 
 interface OrderResultPageProps {
   // Next.js 期望 searchParams 为 Promise 类型；运行时保留 isThenable 检查以兼容测试传入对象。
-  searchParams?: Promise<{ out_trade_no?: string }>;
+  searchParams?: Promise<{ out_trade_no?: string; access_token?: string; cancelled?: string }> | { out_trade_no?: string; access_token?: string; cancelled?: string };
 }
 
 interface OrderData {
@@ -45,6 +47,7 @@ interface OrderData {
   fulfillmentMode: FulfillmentMode;
   deliveryDueAt: Date | null;
   fulfilledAt: Date | null;
+  expiredAt: Date | null;
 }
 
 // 轮询配置
@@ -116,10 +119,12 @@ export default function OrderResultPage({ searchParams }: OrderResultPageProps) 
   const { t, locale } = useI18n();
   // 兼容 undefined、Promise、纯对象（测试环境）三种情况
   const resolvedParams = searchParams
-    ? (isThenable<{ out_trade_no?: string }>(searchParams) ? use(searchParams) : searchParams)
+    ? (isThenable<{ out_trade_no?: string; access_token?: string; cancelled?: string }>(searchParams) ? use(searchParams) : searchParams)
     : {};
   const { data: session, status: sessionStatus } = useSession();
   const [orderNo, setOrderNo] = useState(resolvedParams.out_trade_no || "");
+  const [guestAccessToken, setGuestAccessToken] = useState(resolvedParams.access_token || "");
+  const [guestTokenReady, setGuestTokenReady] = useState(Boolean(resolvedParams.access_token));
 
   const [order, setOrder] = useState<OrderData | null>(null);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
@@ -136,17 +141,45 @@ export default function OrderResultPage({ searchParams }: OrderResultPageProps) 
   // 检查是否是 Linux DO 登录用户
   const user = session?.user as { id?: string } | undefined;
   const isLoggedIn = Boolean(user?.id);
+  const orderAccessState = isLoggedIn
+    ? "account"
+    : !guestTokenReady
+      ? "loading"
+      : guestAccessToken
+        ? `guest:${guestAccessToken}`
+        : "missing";
 
   // 如果 URL 没有订单号参数，尝试从 localStorage 读取
   useEffect(() => {
     if (!resolvedParams.out_trade_no) {
-      const savedOrderNo = localStorage.getItem("ldc_last_order_no");
+      const savedOrderNo = localStorage.getItem("g3d_last_order_no") || localStorage.getItem("ldc_last_order_no");
       if (savedOrderNo) {
         setOrderNo(savedOrderNo);
+        localStorage.removeItem("g3d_last_order_no");
         localStorage.removeItem("ldc_last_order_no");
       }
     }
   }, [resolvedParams.out_trade_no]);
+
+  useEffect(() => {
+    if (!orderNo) {
+      setGuestTokenReady(true);
+      return;
+    }
+
+    const token = resolvedParams.access_token || localStorage.getItem(guestOrderStorageKey(orderNo)) || "";
+    if (token) {
+      localStorage.setItem(guestOrderStorageKey(orderNo), token);
+      setGuestAccessToken(token);
+    }
+    setGuestTokenReady(true);
+
+    if (resolvedParams.access_token) {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("access_token");
+      window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+    }
+  }, [orderNo, resolvedParams.access_token]);
 
   // 清理轮询定时器
   useEffect(() => {
@@ -164,7 +197,10 @@ export default function OrderResultPage({ searchParams }: OrderResultPageProps) 
     }
 
     try {
-      const result = await getOrderByNo(orderNo);
+      setError("");
+      const result = guestAccessToken
+        ? await getOrderByNo(orderNo, guestAccessToken)
+        : await getOrderByNo(orderNo);
       if (result.success && result.data) {
         const orderData = result.data as OrderData;
         setOrder(orderData);
@@ -193,7 +229,7 @@ export default function OrderResultPage({ searchParams }: OrderResultPageProps) 
     } finally {
       setIsLoading(false);
     }
-  }, [orderNo, t]);
+  }, [guestAccessToken, orderNo, t]);
 
   // 加载订单数据
   useEffect(() => {
@@ -204,7 +240,9 @@ export default function OrderResultPage({ searchParams }: OrderResultPageProps) 
       return;
     }
 
-    if (!isLoggedIn) {
+    if (orderAccessState === "loading") return;
+
+    if (orderAccessState === "missing") {
       setError(t("loginRequired"));
       setIsLoading(false);
       return;
@@ -213,7 +251,7 @@ export default function OrderResultPage({ searchParams }: OrderResultPageProps) 
     // 重置轮询计数器
     pollCountRef.current = 0;
     loadOrder();
-  }, [sessionStatus, orderNo, isLoggedIn, loadOrder, t]);
+  }, [sessionStatus, orderNo, orderAccessState, loadOrder, t]);
 
   const copyToClipboard = async (text: string, index: number) => {
     try {
@@ -238,7 +276,7 @@ export default function OrderResultPage({ searchParams }: OrderResultPageProps) 
   }
 
   // 未登录
-  if (!isLoggedIn) {
+  if (!isLoggedIn && !guestAccessToken) {
     return (
       <CenteredStateCard
         icon={<XCircle className="h-6 w-6" />}
@@ -283,12 +321,14 @@ export default function OrderResultPage({ searchParams }: OrderResultPageProps) 
         description={error}
         actions={
           <div className="flex justify-center gap-3">
-            <Button asChild variant="outline">
-              <Link href="/order/my">
-                <ShoppingBag className="mr-2 h-4 w-4" />
-                {t("myOrders")}
-              </Link>
-            </Button>
+            {isLoggedIn ? (
+              <Button asChild variant="outline">
+                <Link href="/order/my">
+                  <ShoppingBag className="mr-2 h-4 w-4" />
+                  {t("myOrders")}
+                </Link>
+              </Button>
+            ) : null}
             <Button asChild>
               <Link href="/">{t("backHomePage")}</Link>
             </Button>
@@ -310,7 +350,7 @@ export default function OrderResultPage({ searchParams }: OrderResultPageProps) 
 
   // 已查询 - 显示订单详情
   const isPaid = order.status === "paid" || order.status === "completed";
-  const canShowReceipt = isPaid;
+  const canShowReceipt = isPaid && isLoggedIn;
   const hasCards = Boolean(order.cards && order.cards.length > 0);
 
   const statusMeta = (() => {
@@ -350,6 +390,15 @@ export default function OrderResultPage({ searchParams }: OrderResultPageProps) 
           label: t("expired"),
           title: t("orderExpired"),
           description: t("orderExpiredHint"),
+          icon: <XCircle className="h-5 w-5" />,
+          iconClassName: "bg-muted text-muted-foreground",
+          badgeClassName: "bg-muted text-muted-foreground hover:bg-muted",
+        };
+      case "cancelled":
+        return {
+          label: t("cancelled"),
+          title: t("orderCancelled"),
+          description: t("orderCancelledHint"),
           icon: <XCircle className="h-5 w-5" />,
           iconClassName: "bg-muted text-muted-foreground",
           badgeClassName: "bg-muted text-muted-foreground hover:bg-muted",
@@ -599,6 +648,14 @@ export default function OrderResultPage({ searchParams }: OrderResultPageProps) 
 
           {/* Actions */}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            {order.status === "pending" ? (
+              <PendingOrderActions
+                orderNo={order.orderNo}
+                accessToken={guestAccessToken || undefined}
+                className="sm:col-span-3"
+                onChanged={refreshOrder}
+              />
+            ) : null}
             {canShowReceipt ? (
               <Button asChild className="justify-center">
                 <Link href={`/order/receipt/${order.orderNo}`}>
@@ -617,12 +674,14 @@ export default function OrderResultPage({ searchParams }: OrderResultPageProps) 
                 {t("refreshStatus")}
               </Button>
             )}
-            <Button asChild variant="outline" className="justify-center">
-              <Link href="/order/my">
-                <ShoppingBag className="mr-2 h-4 w-4" />
-                {t("myOrders")}
-              </Link>
-            </Button>
+            {isLoggedIn ? (
+              <Button asChild variant="outline" className="justify-center">
+                <Link href="/order/my">
+                  <ShoppingBag className="mr-2 h-4 w-4" />
+                  {t("myOrders")}
+                </Link>
+              </Button>
+            ) : null}
             <Button asChild variant="ghost" className="justify-center">
               <Link href="/">
                 <Home className="mr-2 h-4 w-4" />

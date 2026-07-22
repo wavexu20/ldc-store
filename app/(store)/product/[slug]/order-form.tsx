@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -16,6 +17,9 @@ import { Loader2, Minus, Plus, CheckCircle2, WalletCards } from "lucide-react";
 import { useI18n } from "@/components/i18n-provider";
 import { calculatePointsRedemption } from "@/lib/membership";
 import { CnySettlementHint, Money } from "@/components/store/money";
+import { TurnstileWidget } from "@/components/turnstile-widget";
+import { guestOrderStorageKey } from "@/lib/order-access";
+import { launchPayment } from "@/lib/payment/launch-client";
 
 const orderFormSchema = z.object({
   quantity: z.number().int().min(1),
@@ -33,6 +37,8 @@ interface OrderFormProps {
   variants?: Array<{ id: string; name: string; price: string; originalPrice: string | null; stock: number }>;
   membership?: { balanceCents: number; bonusBalanceCents: number; pointsBalance: number; discountVouchers: Array<{ id: string; code: string; discountAmountCents: number; minOrderCents: number; expiresAt: Date | null }> };
   inventoryManaged?: boolean;
+  turnstileSiteKey?: string;
+  initialVariantId?: string;
 }
 
 export function OrderForm({
@@ -45,14 +51,19 @@ export function OrderForm({
   variants = [],
   membership,
   inventoryManaged = true,
+  turnstileSiteKey = "",
+  initialVariantId = "",
 }: OrderFormProps) {
   const [isPending, startTransition] = useTransition();
   const { t } = useI18n();
   const [paymentMethod, setPaymentMethod] = useState<"gateway" | "balance">("gateway");
   const [usePoints, setUsePoints] = useState(false);
   const [selectedVoucherId, setSelectedVoucherId] = useState("");
+  const [guestEmail, setGuestEmail] = useState("");
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const [turnstileKey, setTurnstileKey] = useState(0);
   const [selectedVariantId, setSelectedVariantId] = useState(
-    () => variants.find((variant) => !inventoryManaged || variant.stock >= minQuantity)?.id || variants[0]?.id || ""
+    () => initialVariantId || variants.find((variant) => !inventoryManaged || variant.stock >= minQuantity)?.id || variants[0]?.id || ""
   );
   const router = useRouter();
   const { data: session, status } = useSession();
@@ -90,13 +101,9 @@ export function OrderForm({
     }
   };
 
-  const handleLogin = () => {
-    router.push("/login");
-  };
-
   const onSubmit = (values: OrderFormValues) => {
-    if (!isLoggedIn) {
-      toast.error(t("loginRequired"));
+    if (!isLoggedIn && (!guestEmail.trim() || !turnstileToken)) {
+      toast.error("填写接收订单通知的邮箱并完成人机验证后即可购买");
       return;
     }
 
@@ -108,6 +115,8 @@ export function OrderForm({
         paymentMethod,
         usePoints: paymentMethod === "balance" && usePoints,
         voucherId: voucherDiscountCents > 0 ? selectedVoucherId : undefined,
+        email: isLoggedIn ? undefined : guestEmail.trim(),
+        turnstileToken: isLoggedIn ? undefined : turnstileToken || undefined,
       });
 
       if (result.success) {
@@ -116,35 +125,21 @@ export function OrderForm({
         });
 
         // 保存订单号到 localStorage，用于支付完成后回调页面读取
-        localStorage.setItem("ldc_last_order_no", result.orderNo!);
+        localStorage.setItem("g3d_last_order_no", result.orderNo!);
+        if (result.guestAccessToken && result.orderNo) {
+          localStorage.setItem(guestOrderStorageKey(result.orderNo), result.guestAccessToken);
+        }
 
         if (result.paymentForm) {
-          if (result.paymentForm.redirectUrl) {
-            window.location.assign(result.paymentForm.redirectUrl);
-            return;
-          }
-          if (!result.paymentForm.actionUrl || !result.paymentForm.params) {
-            throw new Error(t("invalidPaymentLink"));
-          }
-          const form = document.createElement("form");
-          form.method = "POST";
-          form.action = result.paymentForm.actionUrl;
-          form.style.display = "none";
-
-          Object.entries(result.paymentForm.params).forEach(([key, value]) => {
-            const input = document.createElement("input");
-            input.type = "hidden";
-            input.name = key;
-            input.value = value;
-            form.appendChild(input);
-          });
-
-          document.body.appendChild(form);
-          form.submit();
+          launchPayment(result.paymentForm);
         } else {
           router.push(`/order/result?out_trade_no=${result.orderNo}`);
         }
       } else {
+        if (!isLoggedIn) {
+          setTurnstileToken(null);
+          setTurnstileKey((value) => value + 1);
+        }
         if (result.requiresSecondFactor) {
           router.push(`/account/verify-2fa?callbackUrl=${encodeURIComponent(window.location.pathname)}`);
           return;
@@ -165,39 +160,39 @@ export function OrderForm({
     );
   }
 
-  // 未登录提示
-  if (!isLoggedIn) {
-    return (
-      <div className="space-y-4">
-        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-center dark:border-amber-900 dark:bg-amber-950">
-          <p className="text-sm text-amber-700 dark:text-amber-300">
-            {t("signInToBuy")}
-          </p>
-        </div>
-        <Button onClick={handleLogin} className="w-full">
-          {t("loginTitle")}
-        </Button>
-      </div>
-    );
-  }
-
   return (
     <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-      {/* 登录用户提示 */}
-      <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300">
-        <CheckCircle2 className="h-4 w-4 flex-shrink-0" />
-        <span>
-          {t("signedInAs", { name: user?.name || user?.username || "" })}
-        </span>
-      </div>
+      {isLoggedIn ? (
+        <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300">
+          <CheckCircle2 className="h-4 w-4 flex-shrink-0" />
+          <span>{t("signedInAs", { name: user?.name || user?.username || "" })}</span>
+        </div>
+      ) : (
+        <div className="space-y-3 rounded-xl border bg-muted/20 p-4">
+          <div>
+            <p className="text-sm font-medium">{t("guestCheckoutTitle")}</p>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">{t("guestCheckoutHint")} <Link className="font-medium text-foreground underline underline-offset-4" href="/login">{t("login")}</Link> {t("guestLoginBenefits")}</p>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="guest-order-email">{t("guestOrderEmail")}</Label>
+            <Input id="guest-order-email" type="email" inputMode="email" autoComplete="email" placeholder="name@example.com" value={guestEmail} onChange={(event) => setGuestEmail(event.target.value)} required />
+          </div>
+          {turnstileSiteKey ? (
+            <TurnstileWidget key={turnstileKey} siteKey={turnstileSiteKey} action="guest_checkout" onVerify={setTurnstileToken} />
+          ) : (
+            <p className="text-xs text-destructive">{t("checkoutCaptchaUnavailable")}</p>
+          )}
+          <p className="text-[11px] leading-5 text-muted-foreground">{t("checkoutAgreement")} <Link href="/terms" className="underline underline-offset-4">{t("footerTerms")}</Link> · <Link href="/privacy" className="underline underline-offset-4">{t("footerPrivacy")}</Link> · <Link href="/refund-policy" className="underline underline-offset-4">{t("footerRefunds")}</Link>.</p>
+        </div>
+      )}
 
-      {variants.length > 0 ? <div className="space-y-2"><Label>选择规格</Label><div className="flex flex-wrap gap-2">{variants.map((variant) => { const selected = selectedVariant?.id === variant.id; const unavailable = inventoryManaged && variant.stock < minQuantity; return <Button key={variant.id} type="button" size="sm" variant={selected ? "default" : "outline"} disabled={unavailable} onClick={() => { setSelectedVariantId(variant.id); form.setValue("quantity", minQuantity); }}>{variant.name}<Money amount={variant.price} className="ml-1" />{unavailable ? <span className="ml-1 text-xs opacity-70">缺货</span> : null}</Button>; })}</div>{selectedVariant ? <p className="text-xs text-muted-foreground">已选 {selectedVariant.name}{inventoryManaged ? ` · 可用 ${selectedVariant.stock} 件` : ""}</p> : null}</div> : null}
+      {variants.length > 0 ? <div className="space-y-2"><Label>{t("selectVariant")}</Label><div className="flex flex-wrap gap-2">{variants.map((variant) => { const selected = selectedVariant?.id === variant.id; const unavailable = inventoryManaged && variant.stock < minQuantity; return <Button key={variant.id} type="button" size="sm" variant={selected ? "default" : "outline"} disabled={unavailable} onClick={() => { setSelectedVariantId(variant.id); form.setValue("quantity", minQuantity); }}>{variant.name}<Money amount={variant.price} className="ml-1" />{unavailable ? <span className="ml-1 text-xs opacity-70">{t("variantOutOfStock")}</span> : null}</Button>; })}</div>{selectedVariant ? <p className="text-xs text-muted-foreground">{t("selectedVariant", { name: selectedVariant.name })}{inventoryManaged ? ` · ${t("availableUnits", { count: selectedVariant.stock })}` : ""}</p> : null}</div> : null}
 
       <div className="space-y-2">
         <Label>{t("paymentMethod")}</Label>
-        <div className="grid grid-cols-2 gap-2">
+        <div className={isLoggedIn ? "grid grid-cols-2 gap-2" : "grid grid-cols-1 gap-2"}>
           <Button type="button" variant={paymentMethod === "gateway" ? "default" : "outline"} onClick={() => setPaymentMethod("gateway")}>{t("onlinePayment")}</Button>
-          <Button type="button" variant={paymentMethod === "balance" ? "default" : "outline"} onClick={() => setPaymentMethod("balance")}><WalletCards />{t("accountBalance")}</Button>
+          {isLoggedIn ? <Button type="button" variant={paymentMethod === "balance" ? "default" : "outline"} onClick={() => setPaymentMethod("balance")}><WalletCards />{t("accountBalance")}</Button> : null}
         </div>
       </div>
 
@@ -265,7 +260,7 @@ export function OrderForm({
           <CnySettlementHint amount={(afterVoucherCents - redemption.discountCents) / 100} className="block" />
           {voucherDiscountCents > 0 ? <p className="text-xs text-muted-foreground">已使用满减券 -¥{(voucherDiscountCents / 100).toFixed(2)}</p> : null}
         </div>
-        <Button type="submit" disabled={isPending || effectiveMax < minQuantity}>
+        <Button type="submit" disabled={isPending || effectiveMax < minQuantity || (!isLoggedIn && (!turnstileSiteKey || !turnstileToken || !guestEmail.trim()))}>
           {isPending ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />

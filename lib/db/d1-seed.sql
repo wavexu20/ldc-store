@@ -10,4 +10,4 @@ VALUES
 INSERT OR IGNORE INTO announcements
   (id, title, content, is_active, sort_order, created_at, updated_at)
 VALUES
-  ('00000000-0000-4000-8000-000000000010', '欢迎使用', '欢迎使用 Game3DTech 自动发卡系统，购买商品后将自动发放卡密到您的邮箱。', 1, 1, unixepoch(), unixepoch());
+  ('00000000-0000-4000-8000-000000000010', '购买与发货', '选择商品与规格后即可下单。未登录用户填写邮箱，支付完成后会收到订单与发货通知。\n\n[服务条款](/terms) · [隐私说明](/privacy) · [退款与售后](/refund-policy)', 1, 1, unixepoch(), unixepoch());

@@ -22,9 +22,11 @@ declare global {
 
 export function TurnstileWidget({
   siteKey,
+  action = "register",
   onVerify,
 }: {
   siteKey: string;
+  action?: string;
   onVerify(token: string | null): void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -39,14 +41,14 @@ export function TurnstileWidget({
     if (!window.turnstile || !containerRef.current || widgetIdRef.current) return;
     widgetIdRef.current = window.turnstile.render(containerRef.current, {
       sitekey: siteKey,
-      action: "register",
+      action,
       theme: "auto",
       size: "flexible",
       callback: (token) => onVerifyRef.current(token),
       "expired-callback": () => onVerifyRef.current(null),
       "error-callback": () => onVerifyRef.current(null),
     });
-  }, [siteKey]);
+  }, [action, siteKey]);
 
   useEffect(() => {
     renderWidget();

@@ -27,7 +27,7 @@ import {
   type ClientRefundParams,
 } from "@/lib/payment/ldc";
 import type { PaymentLaunchData } from "@/lib/payment/types";
-import { createGatewayPayment, queryGatewayPayment } from "@/lib/payment/gateway";
+import { cancelGatewayPayment, createGatewayPayment, queryGatewayPayment } from "@/lib/payment/gateway";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { requireAdmin } from "@/lib/auth-utils";
@@ -40,6 +40,10 @@ import { awardOrderPoints, reverseExternalOrderPoints } from "@/lib/member-servi
 import { getFulfillmentDueAt, isManualFulfillment } from "@/lib/fulfillment";
 import { getGatewayLanguage } from "@/lib/payment/language";
 import { isSecondFactorVerificationRequired, SECOND_FACTOR_REQUIRED_MESSAGE, requireSecondFactor } from "@/lib/security/two-factor-session";
+import { verifyTurnstileToken } from "@/lib/security/turnstile";
+import { normalizeEmail } from "@/lib/email-address";
+import { createGuestOrderAccessToken, hashGuestOrderAccessToken, verifyGuestOrderAccessToken } from "@/lib/order-access";
+import { sendGuestOrderCreatedEmail, sendGuestOrderDeliveryEmail } from "@/lib/email/cloudflare";
 import {
   sendNewOrderNotification,
   sendPaymentSuccessNotification,
@@ -81,34 +85,24 @@ export interface CreateOrderResult {
   orderNo?: string;
   paymentForm?: PaymentLaunchData;
   requiresSecondFactor?: boolean;
+  guestAccessToken?: string;
 }
 
 /**
  * 创建订单
- * 1. 验证登录状态
+ * 1. 验证账号或游客联系方式
  * 2. 验证输入
  * 3. 检查库存
  * 4. 创建订单并锁定卡密（使用事务）
  * 5. 调用支付接口获取支付链接
- * 
- * 仅登录用户可下单
  */
 export async function createOrder(input: CreateOrderInput): Promise<CreateOrderResult> {
   const requestId = await getRequestIdFromHeaders();
   const log = logger.child({ requestId, action: "createOrder" });
 
-  // 1. 验证登录状态
+  // 1. 识别登录用户或游客。游客只能使用在线支付，并需通过邮箱与 Turnstile 验证。
   const session = await auth();
   const user = session?.user as { id?: string; username?: string; image?: string; provider?: string } | undefined;
-
-  if (!user?.id || user.id === "admin") {
-    log.warn("未登录用户尝试创建订单");
-    return {
-      success: false,
-      message: "请先登录后再下单",
-    };
-  }
-  const userId = user.id;
 
   // 2. 验证输入
   const validationResult = createOrderSchema.safeParse(input);
@@ -120,16 +114,47 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     };
   }
 
-  try {
-    await requireSecondFactor(userId);
-  } catch (error) {
-    return { success: false, message: error instanceof Error ? error.message : SECOND_FACTOR_REQUIRED_MESSAGE, requiresSecondFactor: true };
+  if (user?.id === "admin") {
+    return { success: false, message: "管理员账号不能创建前台订单" };
+  }
+
+  const isGuest = !user?.id;
+  const userId = user?.id ?? null;
+  const guestEmail = isGuest && validationResult.data.email
+    ? normalizeEmail(validationResult.data.email)
+    : null;
+
+  if (isGuest) {
+    if (!guestEmail || !validationResult.data.turnstileToken) {
+      return { success: false, message: "填写接收订单通知的邮箱并完成人机验证后即可购买" };
+    }
+    if (validationResult.data.paymentMethod !== "gateway") {
+      return { success: false, message: "游客订单仅支持在线支付，登录后可使用余额、积分和优惠券" };
+    }
+    if (validationResult.data.usePoints || validationResult.data.voucherId) {
+      return { success: false, message: "积分和优惠券仅限登录账号使用" };
+    }
+    const requestHeaders = await headers();
+    const turnstile = await verifyTurnstileToken({
+      token: validationResult.data.turnstileToken,
+      remoteIp: requestHeaders.get("cf-connecting-ip") || undefined,
+      expectedAction: "guest_checkout",
+    });
+    if (!turnstile.success) return { success: false, message: turnstile.message };
+  }
+
+  if (userId) {
+    try {
+      await requireSecondFactor(userId);
+    } catch (error) {
+      return { success: false, message: error instanceof Error ? error.message : SECOND_FACTOR_REQUIRED_MESSAGE, requiresSecondFactor: true };
+    }
   }
 
   const { productId, variantId, quantity, paymentMethod, usePoints, voucherId } = validationResult.data;
 
   try {
-    log.info({ userId: user.id, productId, quantity, paymentMethod }, "开始创建订单");
+    log.info({ userId, guestEmail, productId, quantity, paymentMethod }, "开始创建订单");
 
     // 2.1 释放过期订单，确保库存准确（懒加载策略）
     await releaseExpiredOrders();
@@ -180,6 +205,10 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     const orderId = crypto.randomUUID();
     const walletTransactionId = crypto.randomUUID();
     const orderNo = generateOrderNo();
+    const guestAccessToken = isGuest ? createGuestOrderAccessToken() : undefined;
+    const guestAccessHash = guestAccessToken
+      ? await hashGuestOrderAccessToken(orderNo, guestAccessToken)
+      : null;
     const totalAmount = parseFloat(unitPrice) * quantity;
     const totalCents = Math.round(totalAmount * 100);
     const createdAt = new Date();
@@ -187,7 +216,7 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     const createdEpoch = Math.floor(createdAt.getTime() / 1000);
     const expiredEpoch = Math.floor(expiredAt.getTime() / 1000);
     const placeholders = cardIds.length > 0 ? cardIds.map(() => "?").join(", ") : "NULL";
-    const selectedVoucher = voucherId
+    const selectedVoucher = userId && voucherId
       ? await db.query.vouchers.findFirst({ where: eq(vouchers.id, voucherId) })
       : null;
     if (voucherId) {
@@ -209,7 +238,7 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     const isBalance = effectivePaymentMethod === "balance";
     const isImmediatePayment = isBalance || effectivePaymentMethod === "voucher";
     const member = isBalance ? await db.query.users.findFirst({
-      where: eq(users.id, userId),
+      where: eq(users.id, userId!),
       columns: { balanceCents: true, bonusBalanceCents: true, pointsBalance: true },
     }) : null;
     if (isBalance && !member) throw new Error("账号不存在");
@@ -246,9 +275,9 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
           id, order_no, product_id, product_variant_id, product_variant_name, product_name, product_price, quantity,
           total_amount, original_amount, cash_spent_cents, bonus_spent_cents, points_redeemed, points_earned,
           payment_method, status, fulfillment_mode, trade_no, user_id, username,
-          user_image, paid_at, delivery_due_at, fulfilled_at, expired_at, created_at, updated_at
+          user_image, email, query_password, paid_at, delivery_due_at, fulfilled_at, expired_at, created_at, updated_at
         )
-        SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+        SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
         WHERE ${stockGuardSql}
         AND (? <> 'balance' OR EXISTS (
           SELECT 1 FROM users WHERE id = ? AND balance_cents >= ? AND bonus_balance_cents >= ? AND points_balance >= ?
@@ -263,7 +292,7 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
         effectivePaymentMethod,
         initialStatus, product.fulfillmentMode,
         isImmediatePayment ? `${effectivePaymentMethod.toUpperCase()}-${orderNo}` : null,
-        userId, user.username ?? null, user.image ?? null,
+        userId, user?.username ?? null, user?.image ?? null, guestEmail, guestAccessHash,
         isImmediatePayment ? createdEpoch : null, initialDueEpoch, initialFulfilledEpoch, expiredEpoch, createdEpoch, createdEpoch,
         ...stockGuardBinds, effectivePaymentMethod, userId, cashSpentCents, bonusSpentCents, redemption.points,
         voucherId ?? null, voucherId ?? "", userId
@@ -341,9 +370,9 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
 
     // 5. 为外部支付创建托管收银台链接。
     let paymentForm: PaymentLaunchData | undefined;
+    const siteUrl = await getSiteUrl();
     if (effectivePaymentMethod === "gateway" || effectivePaymentMethod === "ldc") {
       try {
-        const siteUrl = await getSiteUrl();
         paymentForm = effectivePaymentMethod === "gateway"
           ? await createGatewayPayment({
               orderId: result.order.orderNo,
@@ -351,15 +380,15 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
               productName: `${product.name}${variantLabel}`,
               productDescription: product.description || undefined,
               siteUrl,
-              successPath: `/order/result?out_trade_no=${encodeURIComponent(result.order.orderNo)}`,
-              cancelPath: `/order/result?out_trade_no=${encodeURIComponent(result.order.orderNo)}&cancelled=1`,
+              successPath: `/order/result?out_trade_no=${encodeURIComponent(result.order.orderNo)}${guestAccessToken ? `&access_token=${encodeURIComponent(guestAccessToken)}` : ""}`,
+              cancelPath: `/order/result?out_trade_no=${encodeURIComponent(result.order.orderNo)}&cancelled=1${guestAccessToken ? `&access_token=${encodeURIComponent(guestAccessToken)}` : ""}`,
               language: await getPaymentLanguage(),
             })
           : createPayment(result.order.orderNo, result.totalAmount, `${product.name}${variantLabel}`, siteUrl);
       } catch (error) {
         // 支付接口调用失败，但订单已创建
         log.error(
-          { err: error, orderNo: result.order.orderNo, userId: user.id },
+          { err: error, orderNo: result.order.orderNo, userId, guestEmail },
           "创建支付链接失败（订单已创建）"
         );
         return {
@@ -373,7 +402,8 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     log.info(
       {
         orderNo: result.order.orderNo,
-        userId: user.id,
+        userId,
+        guestEmail,
         productId, variantId: selectedVariant?.id,
         quantity,
         totalAmount: result.totalAmount,
@@ -392,7 +422,7 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
           quantity,
           totalAmount: result.totalAmount.toFixed(2),
           paymentMethod: effectivePaymentMethod,
-          username: user.username || null,
+          username: user?.username || guestEmail,
           createdAt: result.order.createdAt,
           expiredAt: result.order.expiredAt!,
         };
@@ -402,15 +432,35 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
       }
     });
 
+    if (guestEmail && guestAccessToken) {
+      after(async () => {
+        try {
+          const accessUrl = new URL("/order/result", siteUrl);
+          accessUrl.searchParams.set("out_trade_no", result.order.orderNo);
+          accessUrl.searchParams.set("access_token", guestAccessToken);
+          await sendGuestOrderCreatedEmail({
+            to: guestEmail,
+            orderNo: result.order.orderNo,
+            productName: `${product.name}${variantLabel}`,
+            amount: result.totalAmount.toFixed(2),
+            accessUrl: accessUrl.toString(),
+          });
+        } catch (error) {
+          log.error({ err: error, orderNo: result.order.orderNo }, "游客订单邮件发送失败");
+        }
+      });
+    }
+
     return {
       success: true,
       message: "订单创建成功",
       orderNo: result.order.orderNo,
       paymentForm,
+      guestAccessToken,
     };
   } catch (error) {
     log.error(
-      { err: error, userId: user.id, productId, quantity, paymentMethod },
+      { err: error, userId, guestEmail, productId, quantity, paymentMethod },
       "创建订单失败"
     );
     return {
@@ -517,6 +567,28 @@ export async function handlePaymentSuccess(
         console.error("[Telegram] 支付成功通知发送失败:", e);
       }
     });
+
+    if (result.email && !manualFulfillment) {
+      after(async () => {
+        try {
+          const deliveredCards = await db.query.cards.findMany({
+            where: and(eq(cards.orderId, result.id), eq(cards.status, "sold")),
+            columns: { content: true },
+          });
+          if (deliveredCards.length > 0) {
+            await sendGuestOrderDeliveryEmail({
+              to: result.email!,
+              orderNo: result.orderNo,
+              productName: result.productVariantName ? `${result.productName} · ${result.productVariantName}` : result.productName,
+              cards: deliveredCards.map((card) => card.content),
+              orderUrl: `https://game3dtech.com/order/result?out_trade_no=${encodeURIComponent(result.orderNo)}`,
+            });
+          }
+        } catch (error) {
+          log.error({ err: error }, "游客自动发货邮件发送失败");
+        }
+      });
+    }
 
     log.info("支付成功回调处理完成");
     return true;
@@ -682,12 +754,14 @@ export async function adminFulfillManualOrder(
       where: eq(orders.id, normalizedOrderId),
       columns: {
         id: true,
+        orderNo: true,
         productId: true,
         productVariantId: true,
         productName: true,
         quantity: true,
         status: true,
         fulfillmentMode: true,
+        email: true,
       },
     });
     if (!order) throw new Error("订单不存在");
@@ -733,6 +807,21 @@ export async function adminFulfillManualOrder(
     revalidatePath("/admin/orders");
     revalidatePath(`/admin/orders/${order.id}`);
     revalidatePath("/order/my");
+    if (order.email) {
+      after(async () => {
+        try {
+          await sendGuestOrderDeliveryEmail({
+            to: order.email!,
+            orderNo: order.orderNo,
+            productName: order.productName,
+            cards: deliveryItems,
+            orderUrl: `https://game3dtech.com/order/result?out_trade_no=${encodeURIComponent(order.orderNo)}`,
+          });
+        } catch (error) {
+          logger.error({ err: error, action: "adminFulfillManualOrder", orderNo: order.orderNo }, "游客人工发货邮件发送失败");
+        }
+      });
+    }
     return { success: true, message: "发货成功，用户已可查看卡密" };
   } catch (error) {
     console.error("人工发货失败:", error);
@@ -740,6 +829,116 @@ export async function adminFulfillManualOrder(
       success: false,
       message: error instanceof Error ? error.message : "发货失败，请稍后重试",
     };
+  }
+}
+
+async function authorizeOrderAccess(
+  order: { orderNo: string; userId: string | null; queryPassword: string | null },
+  accessToken?: string | null
+): Promise<{ authorized: boolean; userId: string | null }> {
+  const session = await auth();
+  const sessionUser = session?.user as { id?: string } | undefined;
+  const userId = sessionUser?.id && sessionUser.id !== "admin" ? sessionUser.id : null;
+  if (userId && order.userId === userId) return { authorized: true, userId };
+  if (!order.userId && await verifyGuestOrderAccessToken({
+    orderNo: order.orderNo,
+    token: accessToken,
+    expectedHash: order.queryPassword,
+  })) {
+    return { authorized: true, userId: null };
+  }
+  return { authorized: false, userId };
+}
+
+export async function resumePendingOrderPayment(
+  orderNo: string,
+  accessToken?: string
+): Promise<{ success: boolean; message: string; paymentForm?: PaymentLaunchData }> {
+  const normalizedOrderNo = orderNo.trim();
+  if (!normalizedOrderNo) return { success: false, message: "订单号无效" };
+
+  try {
+    const order = await db.query.orders.findFirst({ where: eq(orders.orderNo, normalizedOrderNo) });
+    if (!order) return { success: false, message: "订单不存在" };
+    const access = await authorizeOrderAccess(order, accessToken);
+    if (!access.authorized) return { success: false, message: "订单访问凭证无效" };
+    if (order.status !== "pending") return { success: false, message: "该订单当前不需要支付" };
+    if (order.expiredAt && order.expiredAt <= new Date()) {
+      await releaseExpiredOrders();
+      return { success: false, message: "订单已过期，库存已经释放，请重新下单" };
+    }
+
+    const siteUrl = await getSiteUrl();
+    const amount = Number(order.totalAmount);
+    if (!Number.isFinite(amount) || amount <= 0) return { success: false, message: "订单金额无效" };
+    const paymentForm = order.paymentMethod === "gateway"
+      ? await createGatewayPayment({
+          orderId: order.orderNo,
+          amount,
+          productName: order.productVariantName ? `${order.productName} · ${order.productVariantName}` : order.productName,
+          siteUrl,
+          successPath: `/order/result?out_trade_no=${encodeURIComponent(order.orderNo)}${accessToken ? `&access_token=${encodeURIComponent(accessToken)}` : ""}`,
+          cancelPath: `/order/result?out_trade_no=${encodeURIComponent(order.orderNo)}&cancelled=1${accessToken ? `&access_token=${encodeURIComponent(accessToken)}` : ""}`,
+          language: await getPaymentLanguage(),
+        })
+      : order.paymentMethod === "ldc"
+        ? createPayment(order.orderNo, amount, order.productName, siteUrl)
+        : undefined;
+    if (!paymentForm) return { success: false, message: "该支付方式不支持重新发起付款" };
+    return { success: true, message: "正在打开支付页面", paymentForm };
+  } catch (error) {
+    logger.error({ err: error, action: "resumePendingOrderPayment", orderNo: normalizedOrderNo }, "重新发起订单支付失败");
+    return { success: false, message: error instanceof Error ? error.message : "重新支付失败，请稍后重试" };
+  }
+}
+
+export async function cancelPendingOrder(
+  orderNo: string,
+  accessToken?: string
+): Promise<{ success: boolean; message: string }> {
+  const normalizedOrderNo = orderNo.trim();
+  if (!normalizedOrderNo) return { success: false, message: "订单号无效" };
+
+  try {
+    const order = await db.query.orders.findFirst({ where: eq(orders.orderNo, normalizedOrderNo) });
+    if (!order) return { success: false, message: "订单不存在" };
+    const access = await authorizeOrderAccess(order, accessToken);
+    if (!access.authorized) return { success: false, message: "订单访问凭证无效" };
+    if (order.status !== "pending") return { success: false, message: "只有待支付订单可以取消" };
+
+    if (order.paymentMethod === "gateway") {
+      await cancelGatewayPayment(order.orderNo);
+    } else if (order.paymentMethod === "ldc") {
+      return { success: false, message: "该历史支付方式无法安全取消，请等待订单自动过期" };
+    }
+
+    const nowEpoch = Math.floor(Date.now() / 1000);
+    const d1 = getD1Binding();
+    const results = await d1.batch<{ id: string }>([
+      d1.prepare(`
+        UPDATE cards SET status = 'available', order_id = NULL, locked_at = NULL
+        WHERE order_id = ? AND status = 'locked'
+          AND EXISTS (SELECT 1 FROM orders WHERE id = ? AND status = 'pending')
+      `).bind(order.id, order.id),
+      d1.prepare(`
+        UPDATE vouchers SET status = 'claimed', order_id = NULL
+        WHERE order_id = ? AND status = 'reserved'
+          AND EXISTS (SELECT 1 FROM orders WHERE id = ? AND status = 'pending')
+      `).bind(order.id, order.id),
+      d1.prepare(`
+        UPDATE orders SET status = 'cancelled', updated_at = ?
+        WHERE id = ? AND status = 'pending' RETURNING id
+      `).bind(nowEpoch, order.id),
+    ]);
+    if (!results[2]?.results[0]) return { success: false, message: "订单已被处理，请刷新后重试" };
+    revalidatePath("/");
+    revalidatePath("/order/my");
+    revalidatePath(`/order/result?out_trade_no=${encodeURIComponent(order.orderNo)}`);
+    revalidatePath("/admin/orders");
+    return { success: true, message: "订单已取消，锁定库存已经释放" };
+  } catch (error) {
+    logger.error({ err: error, action: "cancelPendingOrder", orderNo: normalizedOrderNo }, "取消待支付订单失败");
+    return { success: false, message: error instanceof Error ? error.message : "取消订单失败，请稍后重试" };
   }
 }
 
@@ -790,6 +989,7 @@ export async function getUserOrders() {
         fulfillmentMode: order.fulfillmentMode,
         deliveryDueAt: order.deliveryDueAt,
         fulfilledAt: order.fulfilledAt,
+        expiredAt: order.expiredAt,
         cards: deliveryLocked ? [] : cardsToShow.map((c) => c.content),
         deliveryLocked: deliveryLocked && cardsToShow.length > 0,
       };
@@ -812,20 +1012,10 @@ export async function getUserOrders() {
 /**
  * 根据订单号获取订单详情（需验证用户身份）
  */
-export async function getOrderByNo(orderNo: string) {
+export async function getOrderByNo(orderNo: string, accessToken?: string) {
   try {
     const requestId = await getRequestIdFromHeaders();
     const log = logger.child({ requestId, action: "getOrderByNo", orderNo });
-
-    const session = await auth();
-    const user = session?.user as { id?: string; provider?: string } | undefined;
-
-    if (!user?.id || user.id === "admin") {
-      return { success: false, message: "请先登录" };
-    }
-
-    const userId = user.id;
-    const deliveryLocked = await isSecondFactorVerificationRequired(userId);
 
     function toCents(value: string): number | null {
       const amount = parseWalletAmount(value);
@@ -835,7 +1025,7 @@ export async function getOrderByNo(orderNo: string) {
 
     const fetchOrder = () =>
       db.query.orders.findFirst({
-        where: and(eq(orders.orderNo, orderNo), eq(orders.userId, userId)),
+        where: eq(orders.orderNo, orderNo),
         with: {
           cards: {
             columns: {
@@ -850,8 +1040,13 @@ export async function getOrderByNo(orderNo: string) {
     let order = await fetchOrder();
 
     if (!order) {
-      return { success: false, message: "订单不存在或无权访问" };
+      return { success: false, message: "订单不存在" };
     }
+    const access = await authorizeOrderAccess(order, accessToken);
+    if (!access.authorized) return { success: false, message: "订单不存在或访问凭证无效" };
+    const deliveryLocked = access.userId
+      ? await isSecondFactorVerificationRequired(access.userId)
+      : false;
 
     // notify 可能因为网络/平台重试失败而迟迟未到；这里做一次“按需补偿查询”。
     // 回调延迟时主动查单补偿，仍会校验订单号与金额后才允许发货。
@@ -929,6 +1124,7 @@ export async function getOrderByNo(orderNo: string) {
         fulfillmentMode: order.fulfillmentMode,
         deliveryDueAt: order.deliveryDueAt,
         fulfilledAt: order.fulfilledAt,
+        expiredAt: order.expiredAt,
         cards: deliveryLocked ? [] : cardsToShow.map((c) => c.content),
         deliveryLocked: deliveryLocked && cardsToShow.length > 0,
       },

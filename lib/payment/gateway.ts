@@ -118,3 +118,41 @@ export async function queryGatewayPayment(orderId: string): Promise<GatewayWebho
     paid_at: row.paid_at ? String(row.paid_at) : null,
   };
 }
+
+export async function cancelGatewayPayment(orderId: string): Promise<{
+  status: string;
+  cancelled: boolean;
+  canRetry: boolean;
+}> {
+  const { baseUrl, appId, apiKey } = getConfig();
+  const response = await fetch(`${baseUrl}/v1/payments/cancel`, {
+    method: "POST",
+    headers: {
+      "X-API-Key": apiKey,
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ app_id: appId, client_order_id: orderId }),
+    signal: AbortSignal.timeout(15_000),
+    cache: "no-store",
+  });
+  const body = await response.json().catch(() => null) as {
+    status?: string;
+    cancelled?: boolean;
+    can_retry?: boolean;
+    detail?: string | { code?: string; message?: string };
+  } | null;
+  if (!response.ok) {
+    const detail = body?.detail;
+    const code = typeof detail === "object" ? detail?.code : undefined;
+    const message = typeof detail === "object" ? detail?.message : detail;
+    if (code === "ORDER_PAID") throw new Error("订单已经支付，不能取消");
+    if (code === "CANCEL_NOT_SUPPORTED") throw new Error("当前支付渠道已生成付款单，暂时不能安全取消，请等待订单过期或联系客服");
+    throw new Error(message || `支付网关取消失败（${response.status}）`);
+  }
+  return {
+    status: body?.status || "cancelled",
+    cancelled: Boolean(body?.cancelled),
+    canRetry: Boolean(body?.can_retry),
+  };
+}

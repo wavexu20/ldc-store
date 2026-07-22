@@ -35,6 +35,10 @@ export const orderStatusConfig: Record<
     label: "已过期",
     color: "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
   },
+  cancelled: {
+    label: "已取消",
+    color: "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
+  },
   refund_pending: {
     label: "退款审核中",
     color: "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300",

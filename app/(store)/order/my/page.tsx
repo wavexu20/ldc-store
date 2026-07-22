@@ -38,6 +38,7 @@ import { useI18n } from "@/components/i18n-provider";
 import type { MessageKey } from "@/lib/i18n";
 import { getLocalizedFulfillmentLabel, type FulfillmentMode } from "@/lib/fulfillment";
 import { Money } from "@/components/store/money";
+import { PendingOrderActions } from "@/components/store/pending-order-actions";
 
 interface OrderData {
   orderNo: string;
@@ -53,6 +54,7 @@ interface OrderData {
   fulfillmentMode: FulfillmentMode;
   deliveryDueAt: Date | null;
   fulfilledAt: Date | null;
+  expiredAt: Date | null;
 }
 
 const statusConfig: Record<
@@ -77,6 +79,11 @@ const statusConfig: Record<
   },
   expired: {
     label: "expired",
+    variant: "secondary",
+    icon: <XCircle className="h-3 w-3" />,
+  },
+  cancelled: {
+    label: "cancelled",
     variant: "secondary",
     icon: <XCircle className="h-3 w-3" />,
   },
@@ -368,8 +375,12 @@ export default function MyOrdersPage() {
 
                     {/* Pending Notice */}
                     {order.status === "pending" && (
-                      <div className="mt-3 rounded bg-warning/10 p-2 text-xs text-warning-foreground dark:text-warning">
-                        {t("orderPendingHint")}
+                      <div className="mt-3 space-y-3 rounded-lg border border-warning/25 bg-warning/10 p-3">
+                        <div className="text-xs text-warning-foreground dark:text-warning">
+                          {t("orderPendingHint")}
+                          {order.expiredAt ? ` · ${new Date(order.expiredAt).toLocaleString()}` : ""}
+                        </div>
+                        <PendingOrderActions orderNo={order.orderNo} onChanged={() => loadOrders(true)} />
                       </div>
                     )}
                     {order.status === "paid" && order.fulfillmentMode !== "auto" && (

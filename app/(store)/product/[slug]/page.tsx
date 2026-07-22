@@ -79,9 +79,15 @@ export default async function ProductPage({ params }: ProductPageProps) {
   const reviewData = await getProductReviewDataSafely(product.id);
 
   const isOutOfStock = product.stock === 0;
+  const availableVariants = product.variants
+    .filter((variant) => isManualFulfillment(product.fulfillmentMode) || variant.stock >= product.minQuantity)
+    .sort((left, right) => Number(left.price) - Number(right.price));
+  const initialVariant = availableVariants[0] ?? product.variants[0] ?? null;
+  const displayPrice = initialVariant?.price ?? product.price;
+  const displayOriginalPrice = initialVariant?.originalPrice ?? product.originalPrice;
   const hasDiscount =
-    product.originalPrice &&
-    parseFloat(product.originalPrice) > parseFloat(product.price);
+    displayOriginalPrice &&
+    parseFloat(displayOriginalPrice) > parseFloat(displayPrice);
   const contentHtml = product.content
     ? renderMarkdownToSafeHtml(product.content)
     : "";
@@ -140,12 +146,14 @@ export default async function ProductPage({ params }: ProductPageProps) {
 
             <div className="mt-5 rounded-xl border bg-muted/30 p-4">
               <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                <Money amount={product.price} className="text-3xl font-semibold tracking-tight" />
+                {product.variants.length > 1 ? <span className="text-sm font-medium text-muted-foreground">起</span> : null}
+                <Money amount={displayPrice} className="text-3xl font-semibold tracking-tight" />
                 {hasDiscount && (
-                  <Money amount={product.originalPrice!} className="text-sm text-muted-foreground line-through" />
+                  <Money amount={displayOriginalPrice!} className="text-sm text-muted-foreground line-through" />
                 )}
               </div>
-              <CnySettlementHint amount={product.price} className="mt-1 block" />
+              <CnySettlementHint amount={displayPrice} className="mt-1 block" />
+              {product.variants.length > 1 ? <p className="mt-1 text-xs text-muted-foreground">{t("finalAmountByVariant")}</p> : null}
               <div className="mt-3 grid gap-2 text-sm text-muted-foreground sm:grid-cols-2">
                 <div className="flex items-center gap-2">
                   <Clock3 className="h-4 w-4 text-foreground" aria-hidden="true" />
@@ -170,13 +178,15 @@ export default async function ProductPage({ params }: ProductPageProps) {
               <OrderForm
                 productId={product.id}
                 productName={product.name}
-                price={parseFloat(product.price)}
+                price={parseFloat(displayPrice)}
                 stock={product.stock}
                 minQuantity={product.minQuantity}
                 maxQuantity={product.maxQuantity}
                 variants={product.variants}
                 membership={membership || undefined}
                 inventoryManaged={!isManualFulfillment(product.fulfillmentMode)}
+                turnstileSiteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || ""}
+                initialVariantId={initialVariant?.id}
               />
             ) : (
               <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4">

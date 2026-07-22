@@ -24,6 +24,7 @@ const orderStatusValues = [
   "pending",          // 待支付
   "paid",             // 已支付
   "completed",        // 已完成（卡密已发放）
+  "cancelled",        // 用户主动取消
   "expired",          // 已过期
   "refund_pending",   // 退款审核中
   "refund_rejected",  // 退款已拒绝
