@@ -40,7 +40,7 @@ export function ProductImageGallery({
       </div>
 
       {safeImages.length > 1 && (
-        <div className="mt-3 flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+        <div className="mt-3 flex gap-2 overflow-x-auto p-1 scrollbar-hide">
           {safeImages.map((url, index) => {
             const isActive = url === displayUrl;
             return (
