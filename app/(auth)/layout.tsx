@@ -15,7 +15,7 @@ export default async function AuthLayout({
     <div className="h-full overflow-hidden">
       {children}
       <LanguageSwitcher />
-      <SupportWidget siteName={siteName} />
+      <SupportWidget siteName={siteName} placement="auth" />
       <Toaster position="top-center" richColors />
     </div>
   );

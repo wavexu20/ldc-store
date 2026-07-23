@@ -15,7 +15,13 @@ type SessionResponse = {
   token: string;
 };
 
-export function SupportWidget({ siteName }: { siteName: string }) {
+export function SupportWidget({
+  siteName,
+  placement = "store",
+}: {
+  siteName: string;
+  placement?: "store" | "auth";
+}) {
   const { locale, t } = useI18n();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -95,7 +101,16 @@ export function SupportWidget({ siteName }: { siteName: string }) {
   }
 
   return (
-    <div className={cn("fixed right-4 z-[80] sm:right-6", open ? "bottom-5 sm:bottom-8" : "bottom-36 sm:bottom-28")}>
+    <div
+      className={cn(
+        "fixed right-4 z-[80] sm:right-6",
+        open
+          ? "bottom-5 sm:bottom-8"
+          : placement === "auth"
+            ? "bottom-5 sm:bottom-6"
+            : "bottom-36 sm:bottom-28",
+      )}
+    >
       {open ? (
         <section
           aria-label={t("supportChat")}
