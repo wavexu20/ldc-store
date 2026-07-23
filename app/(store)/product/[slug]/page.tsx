@@ -172,12 +172,11 @@ export default async function ProductPage({ params }: ProductPageProps) {
               </div>
             </div>
 
-            <div className="my-5 border-t" />
+            <div className="my-4 border-t" />
 
             {canPurchase ? (
               <OrderForm
                 productId={product.id}
-                productName={product.name}
                 price={parseFloat(displayPrice)}
                 stock={product.stock}
                 minQuantity={product.minQuantity}

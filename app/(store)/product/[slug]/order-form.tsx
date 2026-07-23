@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { ArrowRight, Gift, Loader2, Minus, Plus, CheckCircle2, WalletCards } from "lucide-react";
+import { ArrowRight, Loader2, Minus, Plus, CheckCircle2, WalletCards } from "lucide-react";
 import { useI18n } from "@/components/i18n-provider";
 import { calculatePointsRedemption } from "@/lib/membership";
 import { CnySettlementHint, Money } from "@/components/store/money";
@@ -29,7 +29,6 @@ type OrderFormValues = z.infer<typeof orderFormSchema>;
 
 interface OrderFormProps {
   productId: string;
-  productName: string;
   price: number;
   stock: number;
   minQuantity: number;
@@ -43,7 +42,6 @@ interface OrderFormProps {
 
 export function OrderForm({
   productId,
-  productName,
   price,
   stock,
   minQuantity,
@@ -162,40 +160,37 @@ export function OrderForm({
   }
 
   return (
-    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
       {isLoggedIn ? (
         <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300">
           <CheckCircle2 className="h-4 w-4 flex-shrink-0" />
           <span>{t("signedInAs", { name: user?.name || user?.username || "" })}</span>
         </div>
       ) : (
-        <div className="space-y-3 rounded-xl border bg-muted/20 p-4">
-          <div>
-            <p className="text-sm font-medium">{t("guestCheckoutTitle")}</p>
-            <p className="mt-1 text-xs leading-5 text-muted-foreground">{t("guestCheckoutHint")}</p>
-          </div>
-          <div className="flex items-center gap-3 rounded-lg border border-success/20 bg-success/5 p-3">
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-success/10 text-success">
-              <Gift className="size-4" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-xs font-medium text-foreground">{t("memberRechargeBenefit")}</p>
-              <p className="mt-0.5 text-[11px] leading-4 text-muted-foreground">{t("memberRechargeBenefitHint")}</p>
-            </div>
+        <div className="space-y-2.5 rounded-xl border bg-muted/15 p-3.5">
+          <div className="flex items-center justify-between gap-3">
+            <Label htmlFor="guest-order-email">{t("guestOrderEmail")}</Label>
             <Link
-              className="flex shrink-0 items-center gap-1 text-xs font-medium text-foreground underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="flex shrink-0 items-center gap-1 text-xs font-medium text-success underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               href={`/login?mode=register&callbackUrl=${encodeURIComponent(pathname)}`}
             >
-              {t("joinMembership")}
+              {t("memberRechargeBenefitShort")}
               <ArrowRight className="size-3.5" />
             </Link>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="guest-order-email">{t("guestOrderEmail")}</Label>
-            <Input id="guest-order-email" type="email" inputMode="email" autoComplete="email" placeholder="name@example.com" value={guestEmail} onChange={(event) => setGuestEmail(event.target.value)} required />
-          </div>
+          <Input id="guest-order-email" className="h-10" type="email" inputMode="email" autoComplete="email" placeholder="name@example.com" value={guestEmail} onChange={(event) => setGuestEmail(event.target.value)} required />
           {turnstileSiteKey ? (
-            <TurnstileWidget key={turnstileKey} siteKey={turnstileSiteKey} action="guest_checkout" onVerify={setTurnstileToken} />
+            <>
+              <div className={turnstileToken ? "hidden" : undefined}>
+                <TurnstileWidget key={turnstileKey} siteKey={turnstileSiteKey} action="guest_checkout" onVerify={setTurnstileToken} />
+              </div>
+              {turnstileToken ? (
+                <div className="flex h-10 items-center gap-2 rounded-lg border border-success/20 bg-success/5 px-3 text-xs font-medium text-success">
+                  <CheckCircle2 className="size-4" />
+                  {t("securityVerified")}
+                </div>
+              ) : null}
+            </>
           ) : (
             <p className="text-xs text-destructive">{t("checkoutCaptchaUnavailable")}</p>
           )}
@@ -205,13 +200,13 @@ export function OrderForm({
 
       {variants.length > 0 ? <div className="space-y-2"><Label>{t("selectVariant")}</Label><div className="flex flex-wrap gap-2">{variants.map((variant) => { const selected = selectedVariant?.id === variant.id; const unavailable = inventoryManaged && variant.stock < minQuantity; return <Button key={variant.id} type="button" size="sm" variant={selected ? "default" : "outline"} disabled={unavailable} onClick={() => { setSelectedVariantId(variant.id); form.setValue("quantity", minQuantity); }}>{variant.name}<Money amount={variant.price} className="ml-1" />{unavailable ? <span className="ml-1 text-xs opacity-70">{t("variantOutOfStock")}</span> : null}</Button>; })}</div>{selectedVariant ? <p className="text-xs text-muted-foreground">{t("selectedVariant", { name: selectedVariant.name })}{inventoryManaged ? ` · ${t("availableUnits", { count: selectedVariant.stock })}` : ""}</p> : null}</div> : null}
 
-      <div className="space-y-2">
+      {isLoggedIn ? <div className="space-y-2">
         <Label>{t("paymentMethod")}</Label>
-        <div className={isLoggedIn ? "grid grid-cols-2 gap-2" : "grid grid-cols-1 gap-2"}>
+        <div className="grid grid-cols-2 gap-2">
           <Button type="button" variant={paymentMethod === "gateway" ? "default" : "outline"} onClick={() => setPaymentMethod("gateway")}>{t("onlinePayment")}</Button>
-          {isLoggedIn ? <Button type="button" variant={paymentMethod === "balance" ? "default" : "outline"} onClick={() => setPaymentMethod("balance")}><WalletCards />{t("accountBalance")}</Button> : null}
+          <Button type="button" variant={paymentMethod === "balance" ? "default" : "outline"} onClick={() => setPaymentMethod("balance")}><WalletCards />{t("accountBalance")}</Button>
         </div>
-      </div>
+      </div> : null}
 
       {paymentMethod === "balance" && membership && <div className="rounded-lg border bg-muted/30 p-3 text-sm">
         <div className="flex justify-between"><span>现金余额</span><Money amount={membership.balanceCents} cents /></div>
@@ -226,10 +221,10 @@ export function OrderForm({
 
       {membership && membership.discountVouchers.length > 0 && <div className="space-y-2 rounded-lg border bg-muted/20 p-3"><Label htmlFor="discount-voucher">满减券</Label><Select value={selectedVoucherId || "none"} onValueChange={(value) => setSelectedVoucherId(value === "none" ? "" : value)}><SelectTrigger id="discount-voucher"><SelectValue placeholder="不使用满减券" /></SelectTrigger><SelectContent><SelectItem value="none">不使用满减券</SelectItem>{membership.discountVouchers.map((voucher) => <SelectItem key={voucher.id} value={voucher.id}>满 ¥{(voucher.minOrderCents / 100).toFixed(2)} 减 ¥{(voucher.discountAmountCents / 100).toFixed(2)}</SelectItem>)}</SelectContent></Select>{selectedVoucher ? <p className={voucherDiscountCents > 0 ? "text-xs text-muted-foreground" : "text-xs text-destructive"}>{voucherDiscountCents > 0 ? `本单已减 ¥${(voucherDiscountCents / 100).toFixed(2)}` : `还差 ¥${((selectedVoucher.minOrderCents - totalCents) / 100).toFixed(2)} 可使用`}</p> : null}</div>}
 
-      {/* Quantity */}
-      <div className="space-y-2">
-        <Label>{t("quantity")}</Label>
-        <div className="flex items-center gap-3">
+      <div className="rounded-xl border bg-muted/10 p-3.5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-3">
+            <Label>{t("quantity")}</Label>
           <div className="flex items-center rounded-md border">
             <Button
               type="button"
@@ -263,21 +258,20 @@ export function OrderForm({
               <Plus className="h-4 w-4" />
             </Button>
           </div>
-          <span className="text-sm text-muted-foreground">
+          </div>
+          <span className="text-xs text-muted-foreground">
             {t("purchaseLimit", { min: minQuantity, max: effectiveMax })}
           </span>
         </div>
-      </div>
 
-      {/* Total & Submit */}
-      <div className="flex items-center justify-between pt-2">
+        <div className="mt-3 flex items-end justify-between gap-3 border-t pt-3">
         <div>
-          <span className="text-sm text-muted-foreground">{productName}{selectedVariant ? ` · ${selectedVariant.name}` : ""} × {quantity}</span>
-          <Money amount={afterVoucherCents - redemption.discountCents} cents className="block text-xl font-bold" />
+          <span className="text-xs text-muted-foreground">{t("total")}{selectedVariant ? ` · ${selectedVariant.name}` : ""}</span>
+          <Money amount={afterVoucherCents - redemption.discountCents} cents className="mt-0.5 block text-xl font-bold" />
           <CnySettlementHint amount={(afterVoucherCents - redemption.discountCents) / 100} className="block" />
           {voucherDiscountCents > 0 ? <p className="text-xs text-muted-foreground">已使用满减券 -¥{(voucherDiscountCents / 100).toFixed(2)}</p> : null}
         </div>
-        <Button type="submit" disabled={isPending || effectiveMax < minQuantity || (!isLoggedIn && (!turnstileSiteKey || !turnstileToken || !guestEmail.trim()))}>
+        <Button className="min-w-28" type="submit" disabled={isPending || effectiveMax < minQuantity || (!isLoggedIn && (!turnstileSiteKey || !turnstileToken || !guestEmail.trim()))}>
           {isPending ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -287,6 +281,7 @@ export function OrderForm({
             t("buyNow")
           )}
         </Button>
+      </div>
       </div>
     </form>
   );
