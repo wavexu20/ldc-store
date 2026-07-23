@@ -144,30 +144,31 @@ export default async function ProductPage({ params }: ProductPageProps) {
               )}
             </div>
 
-            <div className="mt-5 rounded-xl border bg-muted/30 p-4">
-              <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                {product.variants.length > 1 ? <span className="text-sm font-medium text-muted-foreground">起</span> : null}
-                <Money amount={displayPrice} className="text-3xl font-semibold tracking-tight" />
-                {hasDiscount && (
-                  <Money amount={displayOriginalPrice!} className="text-sm text-muted-foreground line-through" />
-                )}
-              </div>
-              <CnySettlementHint amount={displayPrice} className="mt-1 block" />
-              {product.variants.length > 1 ? <p className="mt-1 text-xs text-muted-foreground">{t("finalAmountByVariant")}</p> : null}
-              <div className="mt-3 grid gap-2 text-sm text-muted-foreground sm:grid-cols-2">
-                <div className="flex items-center gap-2">
-                  <Clock3 className="h-4 w-4 text-foreground" aria-hidden="true" />
-                  <span>{fulfillmentLabel}</span>
+            <div className="mt-5 rounded-xl border bg-muted/30 px-4 py-3.5">
+              <div className="flex flex-wrap items-center gap-x-5 gap-y-2.5 sm:flex-nowrap">
+                <div className="flex min-w-0 shrink-0 items-baseline gap-2">
+                  {product.variants.length > 1 ? <span className="text-sm font-medium text-muted-foreground">起</span> : null}
+                  <Money amount={displayPrice} className="text-3xl font-semibold tracking-tight" />
+                  {hasDiscount && (
+                    <Money amount={displayOriginalPrice!} className="text-sm text-muted-foreground line-through" />
+                  )}
                 </div>
-                <div className="flex items-center gap-2">
-                  <PackageCheck className="h-4 w-4 text-foreground" aria-hidden="true" />
-                  <span className={!canPurchase ? "text-destructive" : undefined}>
-                    {isManualFulfillment(product.fulfillmentMode)
-                      ? t("sold", { count: product.salesCount })
-                      : isOutOfStock
-                        ? t("outOfStock")
-                        : t("inStockSold", { stock: product.stock, sold: product.salesCount })}
-                  </span>
+                <CnySettlementHint amount={displayPrice} className="shrink-0" />
+                <div className="ml-auto flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-muted-foreground sm:flex-nowrap">
+                  <div className="flex shrink-0 items-center gap-2">
+                    <Clock3 className="h-4 w-4 text-foreground" aria-hidden="true" />
+                    <span>{fulfillmentLabel}</span>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <PackageCheck className="h-4 w-4 text-foreground" aria-hidden="true" />
+                    <span className={!canPurchase ? "text-destructive" : undefined}>
+                      {isManualFulfillment(product.fulfillmentMode)
+                        ? t("sold", { count: product.salesCount })
+                        : isOutOfStock
+                          ? t("outOfStock")
+                          : t("inStockSold", { stock: product.stock, sold: product.salesCount })}
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>

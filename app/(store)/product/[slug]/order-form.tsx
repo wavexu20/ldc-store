@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { ArrowRight, Loader2, Minus, Plus, CheckCircle2, WalletCards } from "lucide-react";
+import { ArrowRight, Loader2, Minus, Plus, CheckCircle2, CreditCard, WalletCards } from "lucide-react";
 import { useI18n } from "@/components/i18n-provider";
 import { calculatePointsRedemption } from "@/lib/membership";
 import { CnySettlementHint, Money } from "@/components/store/money";
@@ -200,11 +200,31 @@ export function OrderForm({
 
       {variants.length > 0 ? <div className="space-y-2"><Label>{t("selectVariant")}</Label><div className="flex flex-wrap gap-2">{variants.map((variant) => { const selected = selectedVariant?.id === variant.id; const unavailable = inventoryManaged && variant.stock < minQuantity; return <Button key={variant.id} type="button" size="sm" variant={selected ? "default" : "outline"} disabled={unavailable} onClick={() => { setSelectedVariantId(variant.id); form.setValue("quantity", minQuantity); }}>{variant.name}<Money amount={variant.price} className="ml-1" />{unavailable ? <span className="ml-1 text-xs opacity-70">{t("variantOutOfStock")}</span> : null}</Button>; })}</div>{selectedVariant ? <p className="text-xs text-muted-foreground">{t("selectedVariant", { name: selectedVariant.name })}{inventoryManaged ? ` · ${t("availableUnits", { count: selectedVariant.stock })}` : ""}</p> : null}</div> : null}
 
-      {isLoggedIn ? <div className="space-y-2">
-        <Label>{t("paymentMethod")}</Label>
-        <div className="grid grid-cols-2 gap-2">
-          <Button type="button" variant={paymentMethod === "gateway" ? "default" : "outline"} onClick={() => setPaymentMethod("gateway")}>{t("onlinePayment")}</Button>
-          <Button type="button" variant={paymentMethod === "balance" ? "default" : "outline"} onClick={() => setPaymentMethod("balance")}><WalletCards />{t("accountBalance")}</Button>
+      {isLoggedIn ? <div className="flex flex-wrap items-center gap-2.5">
+        <Label className="shrink-0">{t("paymentMethod")}</Label>
+        <div role="group" aria-label={t("paymentMethod")} className="inline-flex min-w-0 items-center rounded-lg border bg-muted/40 p-1">
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            aria-pressed={paymentMethod === "gateway"}
+            className={paymentMethod === "gateway" ? "h-8 cursor-pointer bg-foreground px-3 text-background shadow-sm hover:bg-foreground/90 hover:text-background" : "h-8 cursor-pointer px-3 text-muted-foreground hover:text-foreground"}
+            onClick={() => setPaymentMethod("gateway")}
+          >
+            <CreditCard className="size-4" />
+            {t("onlinePayment")}
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            aria-pressed={paymentMethod === "balance"}
+            className={paymentMethod === "balance" ? "h-8 cursor-pointer bg-foreground px-3 text-background shadow-sm hover:bg-foreground/90 hover:text-background" : "h-8 cursor-pointer px-3 text-muted-foreground hover:text-foreground"}
+            onClick={() => setPaymentMethod("balance")}
+          >
+            <WalletCards className="size-4" />
+            {t("accountBalance")}
+          </Button>
         </div>
       </div> : null}
 
