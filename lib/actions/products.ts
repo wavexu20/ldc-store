@@ -93,8 +93,16 @@ export async function getActiveProducts(options?: {
   limit?: number;
   offset?: number;
   search?: string;
+  sort?: "default" | "sales_desc";
 }) {
-  const { categoryId, featured, limit = 20, offset = 0, search } = options || {};
+  const {
+    categoryId,
+    featured,
+    limit = 20,
+    offset = 0,
+    search,
+    sort = "default",
+  } = options || {};
 
   const conditions = [eq(products.isActive, true)];
 
@@ -148,7 +156,10 @@ export async function getActiveProducts(options?: {
           },
         },
       },
-      orderBy: [desc(products.isFeatured), asc(products.sortOrder), desc(products.createdAt)],
+      orderBy:
+        sort === "sales_desc"
+          ? [desc(products.salesCount), desc(products.isFeatured), asc(products.sortOrder), desc(products.createdAt)]
+          : [desc(products.isFeatured), asc(products.sortOrder), desc(products.createdAt)],
       limit,
       offset,
     }),

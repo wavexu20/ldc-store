@@ -17,7 +17,7 @@ export const localeMeta: Record<Locale, { name: string; short: string; flag: str
 
 const en = {
   language: "Language", displayCurrency: "Display currency", close: "Close", search: "Search", searchProducts: "Search products…", submitSearch: "Submit search", clearSearch: "Clear search",
-  leaderboard: "Customer leaderboard", myOrders: "My orders", wallet: "Balance & top-up", admin: "Admin", logout: "Sign out", login: "Sign in", websiteIcon: "Website icon", clickMe: "Click me",
+  leaderboard: "Best sellers", myOrders: "My orders", wallet: "Balance & top-up", admin: "Admin", logout: "Sign out", login: "Sign in", websiteIcon: "Website icon", clickMe: "Click me",
   allProducts: "All products", noProducts: "No products yet", comeBackLater: "Please check back later", viewProduct: "View product: {name}", popular: "Popular", soldOut: "Sold out", wantRestock: "Want a restock?", view: "View", sold: "{count} sold", onlyLeft: "Only {count} left",
   home: "Home", backHomePage: "Back to home", categoryNotFound: "Category not found", categoryProducts: "Products in {name}", emptyCategory: "No products in this category", productsComingSoon: "Products are coming soon", productNotFound: "Product not found", inStockSold: "{stock} in stock · {sold} sold", temporarilyOut: "Temporarily out of stock", restockPriority: "Request a restock and we will prioritize stock based on demand.", productDetails: "Product details", userAvatar: "User avatar",
   footerDisclaimer: "This site is not affiliated with Linux DO.", footerTagline: "Digital products and intelligent services", footerSecurePayment: "Secure payment", footerFastDelivery: "Fast delivery", footerMultilingual: "Multilingual", footerNavigation: "Store information", footerTerms: "Terms", footerPrivacy: "Privacy", footerRefunds: "Refund policy", acceptedPayments: "Accepted payment methods",
@@ -32,7 +32,7 @@ const en = {
   deliveryReady: "Delivery details are ready. Save them securely.", deliveryPreparing: "Payment received. Delivery details are being prepared…", confirmingPayment: "Confirming payment", awaitingPayment: "Waiting for payment", autoUpdateHint: "This usually updates automatically within 30 seconds…", manualRefreshHint: "If you have paid, refresh or check My orders later.", orderExpired: "Order expired", orderExpiredHint: "Payment was not completed in time.", refundProcessing: "Refund processing", refundSubmitted: "Your refund request was submitted for review.", refundRejectedHint: "Contact the administrator or check the order notes if you have questions.", orderRefunded: "Order refunded", orderRefundedHint: "This order has been refunded.", statusUpdating: "Order status updating", statusUpdatingHint: "Refresh later or check My orders for the latest status.", sensitiveDeliveryHint: "Delivery details are sensitive. Be careful where you paste or save screenshots.", preparingDeliveryHint: "Delivery details are being prepared. Refresh shortly or check My orders.", requestRefund: "Request refund", refundReason: "Refund reason", refundDialogHint: "Describe the reason. An administrator will review your request.", refundReasonPlaceholder: "Describe the reason in at least 5 characters", cancel: "Cancel", submitRequest: "Submit request", orderPendingHint: "Payment is pending. Please complete it soon.",
   receiptSubtitle: "For support verification and sharing (no delivery secrets)", verificationInfo: "Verification details", username: "Username", receiptDisclaimer: "This receipt is for information and sharing only. Final verification uses the platform order and admin records.", verifyBeforeSharing: "Verify the information before sharing (no delivery secrets)", copyLink: "Copy link", copyText: "Copy text", downloadPoster: "Download poster", exporting: "Exporting…", link: "Link", receiptTextCopied: "Receipt text copied", linkCopied: "Share link copied", downloadStarted: "Poster download started", exportFailed: "Export failed. Use a screenshot or copy the link instead.",
   searchTitle: "Search products", searchDescription: "Search product names, descriptions, or details", allCategories: "All categories", keyword: "Keyword", category: "Category", enterKeyword: "Enter a keyword to start searching", searchHint: "Try a product name, tag, or use case.", searchMin: "Enter at least 2 characters for better results.", noSearchResults: "No matching products", resultCount: "{count} results · Page {page}/{pages}", relevance: "Relevance", sales: "Sales", newest: "Newest", priceLow: "Price ↑", priceHigh: "Price ↓",
-  rank: "Rank", customer: "Customer", completedOrders: "Completed orders", totalSpent: "Total spent", leaderboardDescription: "Only completed orders are included", noData: "No data",
+  rank: "Rank", customer: "Customer", completedOrders: "Completed orders", totalSpent: "Total spent", leaderboardDescription: "Products ranked by completed sales", noData: "No data",
   buyNow: "Buy now", outOfStock: "Out of stock", quantity: "Quantity", total: "Total", payWithBalance: "Pay with balance", submitOrder: "Submit order", submitting: "Submitting…", loginRequired: "Please sign in first", orderCreated: "Order created", paymentResult: "Payment result", paymentSuccess: "Payment successful", paymentPending: "Payment pending", paymentFailed: "Payment failed", backHome: "Back to store", viewOrders: "View orders", signInToBuy: "Sign in to purchase", signedInAs: "Signed in as {name}. Your delivery details will appear in My orders after payment.", paymentMethod: "Payment method", onlinePayment: "Online payment", accountBalance: "Account balance", purchaseLimit: "Limit {min}–{max}", processing: "Processing…", orderNumberValue: "Order number: {number}", orderFailed: "Could not place order",
   loading: "Loading…", imagePrevious: "Previous image", imageNext: "Next image", imageOf: "Image {index} of {total}", announcementDetails: "View details", previousAnnouncement: "Previous announcement", nextAnnouncement: "Next announcement", closeAnnouncement: "Close announcement",
   customerReviews: "Customer reviews", basedOnReviews: "Based on {count} verified reviews", noReviews: "No reviews yet", verifiedPurchase: "Verified purchase", merchantReply: "Store reply", writeReview: "Write a review", selectOrder: "Purchased order", rating: "Rating", reviewContent: "Review", reviewPlaceholder: "Share your real experience (5–1000 characters)", publishReview: "Publish review", reviewPublished: "Review published", purchaseToReview: "Complete a purchase of this product to leave a review.", loginToReview: "Sign in to review a completed purchase.", yourReviews: "Your reviews", editReview: "Edit", deleteReview: "Delete", reviewUpdated: "Review updated", reviewDeleted: "Review deleted", hiddenByAdmin: "This review is hidden from the public", loadMoreReviews: "Load more reviews", stars: "{count} stars",
@@ -42,7 +42,7 @@ const en = {
 export type MessageKey = keyof typeof en;
 
 const zh: Record<MessageKey, string> = {
-  language:"语言",displayCurrency:"显示货币",close:"关闭",search:"搜索",searchProducts:"搜索商品…",submitSearch:"提交搜索",clearSearch:"清空搜索",leaderboard:"顾客消费榜",myOrders:"我的订单",wallet:"余额与充值",admin:"管理后台",logout:"退出登录",login:"登录",websiteIcon:"网站图标",clickMe:"点我一下",
+  language:"语言",displayCurrency:"显示货币",close:"关闭",search:"搜索",searchProducts:"搜索商品…",submitSearch:"提交搜索",clearSearch:"清空搜索",leaderboard:"热销榜",myOrders:"我的订单",wallet:"余额与充值",admin:"管理后台",logout:"退出登录",login:"登录",websiteIcon:"网站图标",clickMe:"点我一下",
   allProducts:"全部商品",noProducts:"暂无商品",comeBackLater:"请稍后再来看看吧",viewProduct:"查看商品：{name}",popular:"热门",soldOut:"已售罄",wantRestock:"想要补货？",view:"查看",sold:"已售 {count}",onlyLeft:"仅剩 {count}",footerDisclaimer:"本站与 Linux DO 官方无任何关系",footerTagline:"数字商品与智能服务交易平台",footerSecurePayment:"安全支付",footerFastDelivery:"快速交付",footerMultilingual:"多语言服务",footerNavigation:"商城信息",footerTerms:"服务条款",footerPrivacy:"隐私说明",footerRefunds:"退款与售后",acceptedPayments:"支持的支付方式",
   home:"首页",backHomePage:"返回首页",categoryNotFound:"分类未找到",categoryProducts:"{name} 分类商品",emptyCategory:"该分类暂无商品",productsComingSoon:"商品即将上架，敬请期待",productNotFound:"商品未找到",inStockSold:"库存 {stock} · 已售 {sold}",temporarilyOut:"商品暂时缺货",restockPriority:"你可以先催补货，我们会根据需求优先补充库存。",productDetails:"商品详情",userAvatar:"用户头像",
   loginTitle:"登录或创建账号",loginDescription:"登录后可购买商品、查询订单和管理余额",orEmail:"或使用 Email",register:"注册",password:"密码",nickname:"昵称",confirmPassword:"确认密码",emailLogin:"Email 登录",loggingIn:"登录中…",creating:"创建中…",createAccount:"创建账号",verifyAndLogin:"验证并登录",verifying:"验证中…",back:"返回",resend:"重新发送",sending:"发送中…",codeSentTo:"验证码已发送至 {email}，10 分钟内有效。",verificationCode:"6 位验证码",passwordLength:"{min}–{max} 个字符",passwordClasses:"大写、小写、数字、特殊字符中至少 3 类",passwordIdentity:"不包含邮箱名前缀或昵称",passwordMismatch:"两次输入的密码不一致",completeCaptcha:"请先完成人机验证",securityVerified:"验证完成",captchaUnavailable:"Turnstile 未配置，Email 注册暂不可用。",invalidCredentials:"Email 或密码错误",
@@ -55,7 +55,7 @@ const zh: Record<MessageKey, string> = {
   deliveryReady:"卡密已发放，请及时保存",deliveryPreparing:"订单已支付，卡密发放中…",confirmingPayment:"正在确认支付状态",awaitingPayment:"等待支付完成",autoUpdateHint:"通常会在 30 秒内自动更新，请稍候…",manualRefreshHint:"如果你已完成支付，可点击刷新或稍后查看“我的订单”。",orderExpired:"订单已过期",orderExpiredHint:"该订单未在有效期内完成支付。",refundProcessing:"退款处理中",refundSubmitted:"你的退款申请已提交，正在等待审核。",refundRejectedHint:"如有疑问，请联系管理员或查看订单备注。",orderRefunded:"订单已退款",orderRefundedHint:"该订单已完成退款。",statusUpdating:"订单状态更新中",statusUpdatingHint:"请稍后刷新或前往“我的订单”查看最新状态。",sensitiveDeliveryHint:"卡密属于敏感信息，复制或截图后请注意粘贴范围与聊天记录留存。",preparingDeliveryHint:"卡密发放中，请稍后刷新，或前往“我的订单”查看。",requestRefund:"申请退款",refundReason:"退款原因",refundDialogHint:"请填写退款原因，提交后将由管理员审核",refundReasonPlaceholder:"请详细描述退款原因（至少5个字符）",cancel:"取消",submitRequest:"提交申请",orderPendingHint:"订单待支付，请尽快完成支付",
   receiptSubtitle:"用于客服核验和对外分享（不包含卡密）",verificationInfo:"核验信息",username:"用户名",receiptDisclaimer:"该凭证仅用于信息展示与便捷分享，最终核验以平台订单与后台记录为准。",verifyBeforeSharing:"分享前请确认信息无误（不包含卡密）",copyLink:"复制链接",copyText:"复制文本",downloadPoster:"下载海报",exporting:"导出中…",link:"链接",receiptTextCopied:"已复制凭证文本",linkCopied:"已复制分享链接",downloadStarted:"已开始下载海报",exportFailed:"导出失败，请改用截图或复制链接。",
   searchTitle:"搜索商品",searchDescription:"搜索商品名称、描述或详情内容",allCategories:"全部分类",keyword:"关键词",category:"分类",enterKeyword:"请输入关键词开始搜索",searchHint:"请输入商品名称、标签或用途。",searchMin:"请输入至少 2 个字符以获得更准确的结果。",noSearchResults:"未找到相关商品",resultCount:"共 {count} 条结果 · 第 {page}/{pages} 页",relevance:"相关度",sales:"销量",newest:"最新",priceLow:"价格↑",priceHigh:"价格↓",
-  rank:"排名",customer:"顾客",completedOrders:"完成订单",totalSpent:"累计消费",leaderboardDescription:"仅统计已完成订单",noData:"暂无数据",
+  rank:"排名",customer:"顾客",completedOrders:"完成订单",totalSpent:"累计消费",leaderboardDescription:"按已完成订单的商品销量排序",noData:"暂无数据",
   buyNow:"立即购买",outOfStock:"库存不足",quantity:"数量",total:"合计",payWithBalance:"使用余额支付",submitOrder:"提交订单",submitting:"提交中…",loginRequired:"请先登录",orderCreated:"订单已创建",paymentResult:"支付结果",paymentSuccess:"支付成功",paymentPending:"等待支付",paymentFailed:"支付失败",backHome:"返回商城",viewOrders:"查看订单",signInToBuy:"请登录后购买商品",signedInAs:"已登录为 {name}，支付完成后可在“我的订单”查看卡密",paymentMethod:"支付方式",onlinePayment:"在线支付",accountBalance:"账户余额",purchaseLimit:"限购 {min}–{max} 件",processing:"处理中…",orderNumberValue:"订单号：{number}",orderFailed:"下单失败",
   loading:"加载中…",imagePrevious:"上一张图片",imageNext:"下一张图片",imageOf:"第 {index}/{total} 张图片",announcementDetails:"查看详情",previousAnnouncement:"上一条公告",nextAnnouncement:"下一条公告",closeAnnouncement:"关闭公告",
   customerReviews:"商品评价",basedOnReviews:"来自 {count} 条真实购买评价",noReviews:"暂无评价",verifiedPurchase:"已购",merchantReply:"商家回复",writeReview:"发表评价",selectOrder:"购买订单",rating:"评分",reviewContent:"评价内容",reviewPlaceholder:"分享真实使用体验（5–1000 个字符）",publishReview:"发布评价",reviewPublished:"评价已发布",purchaseToReview:"完成该商品订单后即可发表评价。",loginToReview:"登录后可评价已完成的订单。",yourReviews:"我的评价",editReview:"编辑",deleteReview:"删除",reviewUpdated:"评价已更新",reviewDeleted:"评价已删除",hiddenByAdmin:"该评价暂未公开展示",loadMoreReviews:"加载更多评价",stars:"{count} 星",
@@ -78,22 +78,48 @@ const translationOverrides: Partial<
   Record<Exclude<Locale, "en" | "zh">, Partial<Record<MessageKey, string>>>
 > = {
   ja: {
+    leaderboard: "売れ筋ランキング",
+    leaderboardDescription: "完了した注文の商品販売数順",
     requestRestock: "再入荷を依頼",
     restockRequested: "再入荷を依頼済み",
     requestRestockFailed: "再入荷依頼に失敗しました",
     peopleRequested: "{count}人が再入荷を希望",
   },
   es: {
+    leaderboard: "Más vendidos",
+    leaderboardDescription: "Productos ordenados por ventas completadas",
     requestRestock: "Solicitar reposición",
     restockRequested: "Reposición solicitada",
     requestRestockFailed: "No se pudo solicitar la reposición",
     peopleRequested: "{count} personas solicitaron reposición",
   },
   pt: {
+    leaderboard: "Mais vendidos",
+    leaderboardDescription: "Produtos classificados por vendas concluídas",
     requestRestock: "Solicitar reposição",
     restockRequested: "Reposição solicitada",
     requestRestockFailed: "Não foi possível solicitar reposição",
     peopleRequested: "{count} pessoas solicitaram reposição",
+  },
+  ko: {
+    leaderboard: "베스트셀러",
+    leaderboardDescription: "완료된 주문의 상품 판매량 순위",
+  },
+  ru: {
+    leaderboard: "Хиты продаж",
+    leaderboardDescription: "Товары по количеству завершённых продаж",
+  },
+  de: {
+    leaderboard: "Bestseller",
+    leaderboardDescription: "Produkte nach abgeschlossenen Verkäufen",
+  },
+  id: {
+    leaderboard: "Produk terlaris",
+    leaderboardDescription: "Produk diurutkan berdasarkan penjualan selesai",
+  },
+  hi: {
+    leaderboard: "सर्वाधिक बिकने वाले",
+    leaderboardDescription: "पूरी हुई बिक्री के आधार पर उत्पाद रैंकिंग",
   },
 };
 

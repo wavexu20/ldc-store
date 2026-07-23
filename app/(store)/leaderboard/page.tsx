@@ -1,14 +1,16 @@
 import type { Metadata } from "next";
-import { Trophy } from "lucide-react";
+import Image from "next/image";
+import Link from "next/link";
+import { Package, Trophy } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 
-import { getCustomersSpendLeaderboard } from "@/lib/actions/customers";
+import { getActiveProducts } from "@/lib/actions/products";
 import { getTranslator } from "@/lib/i18n-server";
 import { Money } from "@/components/store/money";
+import { localizeProducts } from "@/lib/product-i18n";
 
 // 强制动态渲染，避免构建时查询数据库
 export const dynamic = "force-dynamic";
@@ -18,34 +20,12 @@ export async function generateMetadata(): Promise<Metadata> {
   return { title: t("leaderboard") };
 }
 
-function formatAmount(value: string): string {
-  const num = Number.parseFloat(value || "0");
-  if (!Number.isFinite(num)) return "0.00";
-  return num.toFixed(2);
-}
-
-/**
- * Get avatar ring/border styles based on rank
- * - 1st place: Gold
- * - 2nd place: Silver
- * - 3rd place: Bronze
- */
-function getRankAvatarStyles(rank: number): string {
-  switch (rank) {
-    case 1:
-      return "ring-2 ring-yellow-400 shadow-lg shadow-yellow-200/50 dark:shadow-yellow-900/30";
-    case 2:
-      return "ring-2 ring-slate-300 shadow-md shadow-slate-200/50 dark:shadow-slate-700/30";
-    case 3:
-      return "ring-2 ring-orange-400 shadow-sm shadow-orange-200/50 dark:shadow-orange-900/30";
-    default:
-      return "";
-  }
-}
-
-export default async function CustomersLeaderboardPage() {
-  const { t } = await getTranslator();
-  const items = await getCustomersSpendLeaderboard({ limit: 50 });
+export default async function BestSellersPage() {
+  const { locale, t } = await getTranslator();
+  const items = localizeProducts(
+    await getActiveProducts({ limit: 50, sort: "sales_desc" }),
+    locale
+  );
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 space-y-6">
@@ -72,46 +52,57 @@ export default async function CustomersLeaderboardPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-16">{t("rank")}</TableHead>
-                    <TableHead>{t("customer")}</TableHead>
-                    <TableHead className="text-right">{t("completedOrders")}</TableHead>
-                    <TableHead className="text-right">{t("totalSpent")}</TableHead>
+                    <TableHead>{t("product")}</TableHead>
+                    <TableHead className="hidden sm:table-cell">{t("category")}</TableHead>
+                    <TableHead className="text-right">{t("sales")}</TableHead>
+                    <TableHead className="text-right">{t("amount")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {items.map((row, index) => {
+                  {items.map((product, index) => {
                     const rank = index + 1;
                     const badgeVariant =
                       rank === 1 ? "default" : rank <= 3 ? "secondary" : "outline";
-                    const avatarStyles = getRankAvatarStyles(rank);
 
                     return (
-                      <TableRow key={row.userId}>
+                      <TableRow key={product.id}>
                         <TableCell className="font-medium tabular-nums">
                           <div className="flex items-center gap-2">
                             <Badge variant={badgeVariant}>#{rank}</Badge>
                           </div>
                         </TableCell>
                         <TableCell>
-                          <div className="flex items-center gap-2">
-                            <Avatar className={`h-8 w-8 ${avatarStyles}`}>
-                              <AvatarImage
-                                src={row.userImage || undefined}
-                                alt={row.username || t("userAvatar")}
-                              />
-                              <AvatarFallback className="text-xs font-medium">
-                                {row.username?.charAt(0).toUpperCase() || "U"}
-                              </AvatarFallback>
-                            </Avatar>
-                            <span className="font-medium">
-                              {row.username ? `@${row.username}` : "-"}
+                          <Link
+                            href={`/product/${product.slug}`}
+                            className="group flex min-w-0 items-center gap-3 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          >
+                            <div className="relative h-12 w-16 shrink-0 overflow-hidden rounded-md bg-muted">
+                              {product.coverImage ? (
+                                <Image
+                                  src={product.coverImage}
+                                  alt=""
+                                  fill
+                                  sizes="64px"
+                                  className="object-cover"
+                                  unoptimized={product.coverImage.startsWith("/api/product-images/")}
+                                />
+                              ) : (
+                                <Package className="absolute inset-0 m-auto size-5 text-muted-foreground" />
+                              )}
+                            </div>
+                            <span className="line-clamp-2 font-medium group-hover:underline">
+                              {product.name}
                             </span>
-                          </div>
+                          </Link>
+                        </TableCell>
+                        <TableCell className="hidden text-muted-foreground sm:table-cell">
+                          {product.category?.name ?? "-"}
+                        </TableCell>
+                        <TableCell className="text-right font-medium tabular-nums">
+                          {product.salesCount}
                         </TableCell>
                         <TableCell className="text-right tabular-nums">
-                          {row.orderCount}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          <Money amount={formatAmount(row.totalSpent)} />
+                          <Money amount={product.price} />
                         </TableCell>
                       </TableRow>
                     );
