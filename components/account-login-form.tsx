@@ -225,7 +225,7 @@ export function AccountLoginForm({ providers, turnstileSiteKey }: {
             <form className="space-y-4 pt-3" onSubmit={emailLogin}>
               <div className="space-y-2"><Label htmlFor="login-email">Email</Label><Input id="login-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required /></div>
               <div className="space-y-2"><Label htmlFor="login-password">{t("password")}</Label><Input id="login-password" type="password" minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} required /></div>
-              <div className="text-right text-sm"><Link className="text-primary hover:underline" href="/account/reset-password">忘记密码？</Link></div>
+              <div className="text-right text-sm"><Link className="text-primary hover:underline" href="/account/reset-password">{t("forgotPassword")}</Link></div>
               <Button className="w-full" disabled={!!loading} type="submit"><Mail />{loading === "email-login" ? t("loggingIn") : t("emailLogin")}</Button>
             </form>
           </TabsContent>

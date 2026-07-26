@@ -642,8 +642,8 @@ export default function OrderResultPage({ searchParams }: OrderResultPageProps) 
 
           {order.deliveryLocked ? (
             <div className="flex flex-col gap-3 rounded-2xl border border-warning/30 bg-warning/10 p-4 text-sm sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-center gap-2 font-medium text-warning-foreground dark:text-warning"><ShieldCheck className="size-4 shrink-0" />卡密已受二次验证保护</div>
-              <Button asChild size="sm"><Link href={`/account/verify-2fa?callbackUrl=${encodeURIComponent(`/order/result?out_trade_no=${order.orderNo}`)}`}>验证后查看</Link></Button>
+              <div className="flex items-center gap-2 font-medium text-warning-foreground dark:text-warning"><ShieldCheck className="size-4 shrink-0" />{t("deliveryProtected")}</div>
+              <Button asChild size="sm"><Link href={`/account/verify-2fa?callbackUrl=${encodeURIComponent(`/order/result?out_trade_no=${order.orderNo}`)}`}>{t("verifyToView")}</Link></Button>
             </div>
           ) : null}
 

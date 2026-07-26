@@ -22,15 +22,15 @@ export const dynamic = "force-dynamic";
 const getSystemSettingsCached = cache(getSystemSettings);
 
 export async function generateMetadata(): Promise<Metadata> {
-  const { siteName, siteDescription } = await getSystemSettingsCached();
-  const { locale } = await getTranslator();
+  const { siteName } = await getSystemSettingsCached();
+  const { t } = await getTranslator();
 
   return {
     title: {
-      default: locale === "zh" ? `${siteName} - 自动发卡系统` : `${siteName} - Digital Goods Store`,
+      default: t("storeMetaTitle", { site: siteName }),
       template: `%s | ${siteName}`,
     },
-    description: siteDescription,
+    description: t("storeMetaDescription", { site: siteName }),
   };
 }
 

@@ -119,7 +119,7 @@ export function AnnouncementBanner({
                     className={`h-1.5 w-1.5 rounded-full transition-colors ${
                       idx === safeIndex ? "bg-foreground" : "bg-muted-foreground/40"
                     }`}
-                    aria-label={`切换到第 ${idx + 1} 条公告`}
+                    aria-label={t("announcementGoTo", { index: idx + 1 })}
                   />
                 ))}
               </div>

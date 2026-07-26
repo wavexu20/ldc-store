@@ -22,7 +22,7 @@ export function Money({
 
 export function CnySettlementHint({ amount, className }: { amount: number | string; className?: string }) {
   const { currency } = useCurrency();
-  const { locale } = useI18n();
+  const { t } = useI18n();
   if (currency === "CNY") return null;
-  return <span className={cn("text-xs text-muted-foreground", className)}>{locale === "zh" ? "结算" : "Settled as"} ¥{Number(amount).toFixed(2)} CNY</span>;
+  return <span className={cn("text-xs text-muted-foreground", className)}>{t("settledAs")} ¥{Number(amount).toFixed(2)} CNY</span>;
 }

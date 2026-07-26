@@ -102,7 +102,7 @@ export function OrderForm({
 
   const onSubmit = (values: OrderFormValues) => {
     if (!isLoggedIn && (!guestEmail.trim() || !turnstileToken)) {
-      toast.error("填写接收订单通知的邮箱并完成人机验证后即可购买");
+      toast.error(t("guestCheckoutRequired"));
       return;
     }
 
@@ -230,26 +230,26 @@ export function OrderForm({
         </div> : null}
 
         {paymentMethod === "balance" && membership ? <div className="border-b bg-muted/10 p-3 text-sm">
-          <div className="flex justify-between"><span>现金余额</span><Money amount={membership.balanceCents} cents /></div>
-          <div className="mt-1 flex justify-between"><span>奖励金</span><Money amount={membership.bonusBalanceCents} cents /></div>
+          <div className="flex justify-between"><span>{t("cashBalance")}</span><Money amount={membership.balanceCents} cents /></div>
+          <div className="mt-1 flex justify-between"><span>{t("bonusBalance")}</span><Money amount={membership.bonusBalanceCents} cents /></div>
           <label className="mt-3 flex cursor-pointer items-center gap-2 border-t pt-3">
             <input className="h-4 w-4 accent-primary" type="checkbox" checked={usePoints} onChange={(event) => setUsePoints(event.target.checked)} disabled={membership.pointsBalance < 2} />
-            <span className="flex-1">使用积分（现有 {membership.pointsBalance}）</span>
+            <span className="flex-1">{t("usePoints", { count: membership.pointsBalance })}</span>
             {redemption.discountCents > 0 ? <Money amount={-redemption.discountCents} cents className="text-emerald-600" /> : null}
           </label>
-          <p className="mt-2 text-xs text-muted-foreground">200 积分抵 ¥1，单笔最多抵扣 10%</p>
+          <p className="mt-2 text-xs text-muted-foreground">{t("pointsRule")}</p>
         </div> : null}
 
         {membership && membership.discountVouchers.length > 0 ? <div className="space-y-2 border-b bg-muted/10 p-3">
-          <Label htmlFor="discount-voucher">满减券</Label>
+          <Label htmlFor="discount-voucher">{t("discountVoucher")}</Label>
           <Select value={selectedVoucherId || "none"} onValueChange={(value) => setSelectedVoucherId(value === "none" ? "" : value)}>
-            <SelectTrigger id="discount-voucher"><SelectValue placeholder="不使用满减券" /></SelectTrigger>
+            <SelectTrigger id="discount-voucher"><SelectValue placeholder={t("noDiscountVoucher")} /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="none">不使用满减券</SelectItem>
-              {membership.discountVouchers.map((voucher) => <SelectItem key={voucher.id} value={voucher.id}>满 ¥{(voucher.minOrderCents / 100).toFixed(2)} 减 ¥{(voucher.discountAmountCents / 100).toFixed(2)}</SelectItem>)}
+              <SelectItem value="none">{t("noDiscountVoucher")}</SelectItem>
+              {membership.discountVouchers.map((voucher) => <SelectItem key={voucher.id} value={voucher.id}>{t("voucherDiscountDetail", { minimum: `¥${(voucher.minOrderCents / 100).toFixed(2)}`, discount: `¥${(voucher.discountAmountCents / 100).toFixed(2)}` })}</SelectItem>)}
             </SelectContent>
           </Select>
-          {selectedVoucher ? <p className={voucherDiscountCents > 0 ? "text-xs text-muted-foreground" : "text-xs text-destructive"}>{voucherDiscountCents > 0 ? `本单已减 ¥${(voucherDiscountCents / 100).toFixed(2)}` : `还差 ¥${((selectedVoucher.minOrderCents - totalCents) / 100).toFixed(2)} 可使用`}</p> : null}
+          {selectedVoucher ? <p className={voucherDiscountCents > 0 ? "text-xs text-muted-foreground" : "text-xs text-destructive"}>{voucherDiscountCents > 0 ? t("voucherApplied", { amount: `¥${(voucherDiscountCents / 100).toFixed(2)}` }) : t("voucherAmountRemaining", { amount: `¥${((selectedVoucher.minOrderCents - totalCents) / 100).toFixed(2)}` })}</p> : null}
         </div> : null}
 
         <div className="grid grid-cols-2 items-end gap-3 p-3.5 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center sm:gap-5">
@@ -301,7 +301,7 @@ export function OrderForm({
             <span className="text-xs text-muted-foreground">{t("total")}{selectedVariant ? ` · ${selectedVariant.name}` : ""}</span>
             <Money amount={afterVoucherCents - redemption.discountCents} cents className="mt-0.5 block text-xl font-bold" />
             <CnySettlementHint amount={(afterVoucherCents - redemption.discountCents) / 100} className="block" />
-            {voucherDiscountCents > 0 ? <p className="text-xs text-muted-foreground">已使用满减券 -¥{(voucherDiscountCents / 100).toFixed(2)}</p> : null}
+            {voucherDiscountCents > 0 ? <p className="text-xs text-muted-foreground">{t("voucherDiscountApplied", { amount: `¥${(voucherDiscountCents / 100).toFixed(2)}` })}</p> : null}
           </div>
 
           <Button

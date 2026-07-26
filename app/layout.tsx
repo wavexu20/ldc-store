@@ -3,7 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { Providers } from "@/components/providers";
 import { I18nProvider } from "@/components/i18n-provider";
 import { localeMeta } from "@/lib/i18n";
-import { getLocale } from "@/lib/i18n-server";
+import { getLocale, getTranslator } from "@/lib/i18n-server";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -17,16 +17,15 @@ const geistMono = Geist_Mono({
 });
 
 const siteName = process.env.NEXT_PUBLIC_SITE_NAME || "Game3DTech";
-const siteDescription = process.env.NEXT_PUBLIC_SITE_DESCRIPTION || "基于 Linux DO Credit 的虚拟商品自动发卡平台";
 
-export const metadata: Metadata = {
-  title: {
-    default: `${siteName} - 自动发卡系统`,
-    template: `%s | ${siteName}`,
-  },
-  description: siteDescription,
-  keywords: ["自动发卡", "虚拟商品", "Linux DO", "LDC"],
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getTranslator();
+  return {
+    title: { default: t("storeMetaTitle", { site: siteName }), template: `%s | ${siteName}` },
+    description: t("storeMetaDescription", { site: siteName }),
+    keywords: ["digital goods", "software", "AI", "Game3DTech"],
+  };
+}
 
 export default async function RootLayout({
   children,

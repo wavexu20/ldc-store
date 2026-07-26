@@ -260,7 +260,7 @@ export function Header({ siteName = "Game3DTech", siteIcon, siteIconUrl = "/bran
                 {user?.id !== "admin" && <DropdownMenuItem asChild>
                   <Link href="/account/profile" className="cursor-pointer">
                     <UserRoundPen className="mr-2 h-4 w-4" />
-                    个人资料
+                    {t("profile")}
                   </Link>
                 </DropdownMenuItem>}
                 <DropdownMenuItem asChild>
@@ -278,13 +278,13 @@ export function Header({ siteName = "Game3DTech", siteIcon, siteIconUrl = "/bran
                 {user?.id !== "admin" && <DropdownMenuItem asChild>
                   <Link href="/account/vouchers" className="cursor-pointer">
                     <Ticket className="mr-2 h-4 w-4" />
-                    卡券兑换
+                    {t("voucherRedeem")}
                   </Link>
                 </DropdownMenuItem>}
                 {user?.id !== "admin" && <DropdownMenuItem asChild>
                   <Link href="/account/security" className="cursor-pointer">
                     <Shield className="mr-2 h-4 w-4" />
-                    账号与安全
+                    {t("accountSecurity")}
                   </Link>
                 </DropdownMenuItem>}
                 {isAdmin && (

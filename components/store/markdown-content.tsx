@@ -4,6 +4,7 @@ import { useState, type KeyboardEvent, type MouseEvent } from "react";
 
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/components/i18n-provider";
 
 interface MarkdownImage {
   src: string;
@@ -15,15 +16,16 @@ interface MarkdownContentProps {
   className?: string;
 }
 
-function imageFromTarget(target: EventTarget | null): MarkdownImage | null {
+function imageFromTarget(target: EventTarget | null, fallbackAlt: string): MarkdownImage | null {
   if (!(target instanceof HTMLImageElement)) return null;
   return {
     src: target.currentSrc || target.src,
-    alt: target.alt || "商品图片",
+    alt: target.alt || fallbackAlt,
   };
 }
 
 export function MarkdownContent({ html, className }: MarkdownContentProps) {
+  const { t } = useI18n();
   const [activeImage, setActiveImage] = useState<MarkdownImage | null>(null);
 
   const openImage = (image: MarkdownImage, event: MouseEvent | KeyboardEvent) => {
@@ -32,13 +34,13 @@ export function MarkdownContent({ html, className }: MarkdownContentProps) {
   };
 
   const handleClick = (event: MouseEvent<HTMLDivElement>) => {
-    const image = imageFromTarget(event.target);
+    const image = imageFromTarget(event.target, t("productImage"));
     if (image) openImage(image, event);
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key !== "Enter" && event.key !== " ") return;
-    const image = imageFromTarget(event.target);
+    const image = imageFromTarget(event.target, t("productImage"));
     if (image) openImage(image, event);
   };
 
@@ -58,8 +60,8 @@ export function MarkdownContent({ html, className }: MarkdownContentProps) {
         <DialogContent
           className="max-w-[min(96vw,1200px)] border-0 bg-transparent p-0 shadow-none sm:max-w-[min(96vw,1200px)] [&_[data-slot=dialog-close]]:top-2 [&_[data-slot=dialog-close]]:right-2 [&_[data-slot=dialog-close]]:rounded-full [&_[data-slot=dialog-close]]:bg-black/70 [&_[data-slot=dialog-close]]:p-2 [&_[data-slot=dialog-close]]:text-white [&_[data-slot=dialog-close]]:opacity-100"
         >
-          <DialogTitle className="sr-only">图片预览</DialogTitle>
-          <DialogDescription className="sr-only">放大查看商品详情图片，按 Escape 键关闭。</DialogDescription>
+          <DialogTitle className="sr-only">{t("imagePreview")}</DialogTitle>
+          <DialogDescription className="sr-only">{t("imagePreviewDescription")}</DialogDescription>
           {activeImage ? (
             <figure className="flex max-h-[92vh] min-h-24 flex-col items-center justify-center overflow-hidden rounded-xl bg-black/90">
               {/* Arbitrary R2/external Markdown URLs cannot be statically allow-listed for next/image. */}

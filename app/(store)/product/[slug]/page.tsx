@@ -147,7 +147,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
             <div className="mt-5 rounded-xl border bg-muted/30 px-4 py-3.5">
               <div className="flex flex-wrap items-center gap-x-5 gap-y-2.5 sm:flex-nowrap">
                 <div className="flex min-w-0 shrink-0 items-baseline gap-2">
-                  {product.variants.length > 1 ? <span className="text-sm font-medium text-muted-foreground">起</span> : null}
+                  {product.variants.length > 1 ? <span className="text-sm font-medium text-muted-foreground">{t("startsAt")}</span> : null}
                   <Money amount={displayPrice} className="text-3xl font-semibold tracking-tight" />
                   {hasDiscount && (
                     <Money amount={displayOriginalPrice!} className="text-sm text-muted-foreground line-through" />
