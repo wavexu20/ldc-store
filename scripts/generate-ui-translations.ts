@@ -7,6 +7,7 @@ import {
   type Locale,
   type MessageKey,
 } from "../lib/i18n";
+import { generatedTranslations as currentGeneratedTranslations } from "../lib/i18n-generated";
 
 const accountId = process.env.CLOUDFLARE_ACCOUNT_ID || process.env.ACCOUNT_ID;
 const apiToken = process.env.CLOUDFLARE_API_TOKEN || process.env.CLOUDFLARE_TOKEN;
@@ -61,8 +62,16 @@ async function translateSynchronously(text: string, locale: Locale) {
 }
 
 async function translateLocale(locale: Exclude<Locale, "en" | "zh">) {
-  const existing = { ...partialTranslations[locale], ...translationOverrides[locale] };
+  const existing: Partial<Record<MessageKey, string>> = {
+    ...currentGeneratedTranslations[locale],
+    ...partialTranslations[locale],
+    ...translationOverrides[locale],
+  };
   const missingKeys = keys.filter((key) => !existing[key]);
+  if (missingKeys.length === 0) {
+    process.stdout.write(`${locale}: already complete\n`);
+    return [locale, Object.fromEntries(keys.map((key) => [key, existing[key] as string]))] as const;
+  }
   const plans = missingKeys.map((key) => {
     const placeholders = [...enMessages[key].matchAll(/\{([a-zA-Z0-9_]+)\}/g)].map((match) => match[1]);
     const protectedText = placeholders.reduce(

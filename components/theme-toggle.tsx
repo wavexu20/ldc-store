@@ -11,8 +11,10 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useI18n } from "@/components/i18n-provider";
 
 export function ThemeToggle() {
+  const { t } = useI18n();
   const { setTheme, theme } = useTheme();
   const [mounted, setMounted] = React.useState(false);
 
@@ -25,7 +27,7 @@ export function ThemeToggle() {
     return (
       <Button variant="ghost" size="icon" className="h-8 w-8">
         <Sun className="h-4 w-4" />
-        <span className="sr-only">切换主题</span>
+        <span className="sr-only">{t("toggleTheme")}</span>
       </Button>
     );
   }
@@ -41,24 +43,23 @@ export function ThemeToggle() {
           ) : (
             <Sun className="h-4 w-4" />
           )}
-          <span className="sr-only">切换主题</span>
+          <span className="sr-only">{t("toggleTheme")}</span>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <DropdownMenuItem onClick={() => setTheme("light")}>
           <Sun className="mr-2 h-4 w-4" />
-          浅色
+          {t("lightTheme")}
         </DropdownMenuItem>
         <DropdownMenuItem onClick={() => setTheme("dark")}>
           <Moon className="mr-2 h-4 w-4" />
-          深色
+          {t("darkTheme")}
         </DropdownMenuItem>
         <DropdownMenuItem onClick={() => setTheme("system")}>
           <Monitor className="mr-2 h-4 w-4" />
-          跟随系统
+          {t("systemTheme")}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );
 }
-
