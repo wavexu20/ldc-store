@@ -94,7 +94,7 @@ export function AnnouncementForm({ announcementId }: { announcementId?: string }
         : await createAnnouncement(values);
 
       if (result.success) {
-        toast.success(announcementId ? "公告更新成功" : "公告创建成功");
+        toast.success(result.message || (announcementId ? "公告更新成功" : "公告创建成功"));
         router.push("/admin/announcements");
       } else {
         toast.error(result.message);

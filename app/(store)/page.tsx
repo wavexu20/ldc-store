@@ -14,6 +14,7 @@ import {
 import { getTranslator } from "@/lib/i18n-server";
 import { localizeProducts } from "@/lib/product-i18n";
 import { localizeCategory } from "@/lib/category-i18n";
+import { localizeAnnouncement } from "@/lib/announcement-i18n";
 
 // 强制动态渲染，避免构建时查询数据库
 export const dynamic = "force-dynamic";
@@ -100,14 +101,20 @@ function ProductGridSkeleton() {
 }
 
 export default async function HomePage() {
-  const announcements = await getActiveAnnouncements();
-  const bannerItems = announcements.map((a) => ({
-    id: a.id,
-    title: a.title,
+  const [{ locale }, announcements] = await Promise.all([
+    getTranslator(),
+    getActiveAnnouncements(),
+  ]);
+  const bannerItems = announcements.map((item) => {
+    const announcement = localizeAnnouncement(item, locale);
+    return {
+    id: announcement.id,
+    title: announcement.title,
     // 关键：在服务端完成 Markdown → 安全 HTML，避免把 sanitize-html 打进客户端包
-    contentHtml: renderMarkdownToSafeHtml(a.content),
-    updatedAt: a.updatedAt.toISOString(),
-  }));
+    contentHtml: renderMarkdownToSafeHtml(announcement.content),
+    updatedAt: announcement.updatedAt.toISOString(),
+    };
+  });
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8">

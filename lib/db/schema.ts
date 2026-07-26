@@ -218,6 +218,15 @@ export type ProductTranslations = Partial<
   Record<"en" | "zh" | "ja" | "ko" | "es" | "de" | "pt" | "ru" | "id" | "hi", ProductTranslation>
 >;
 
+export type AnnouncementTranslation = {
+  title?: string;
+  content?: string;
+};
+
+export type AnnouncementTranslations = Partial<
+  Record<"en" | "zh" | "ja" | "ko" | "es" | "de" | "pt" | "ru" | "id" | "hi", AnnouncementTranslation>
+>;
+
 export type ProductPreviewPayload = {
   name: string;
   description: string;
@@ -465,6 +474,7 @@ export const announcements = sqliteTable("announcements", {
   id: id("id"),
   title: text("title").notNull(),
   content: text("content").notNull(),
+  translations: text("translations", { mode: "json" }).$type<AnnouncementTranslations>(),
   isActive: integer("is_active", { mode: "boolean" }).default(true).notNull(),
   sortOrder: integer("sort_order").default(0).notNull(),
   startAt: timestamp("start_at"),
