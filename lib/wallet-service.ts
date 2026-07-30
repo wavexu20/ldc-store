@@ -18,6 +18,7 @@ export async function handleRechargePaymentSuccess(
 
   const nowEpoch = Math.floor(Date.now() / 1000);
   const idempotencyKey = `recharge:${recharge.id}`;
+  const bonusKey = `recharge:bonus:${recharge.id}`;
   const d1 = getD1Binding();
   const results = await d1.batch<{ id: string }>([
     d1.prepare(`
@@ -45,6 +46,17 @@ export async function handleRechargePaymentSuccess(
       crypto.randomUUID(), recharge.amountCents, recharge.id, idempotencyKey,
       "在线支付充值", nowEpoch, recharge.userId
     ),
+    d1.prepare(`
+      UPDATE users SET bonus_balance_cents = bonus_balance_cents + ?, updated_at = ?
+      WHERE id = ? AND EXISTS (SELECT 1 FROM recharge_orders WHERE id = ? AND status = 'paid')
+        AND NOT EXISTS (SELECT 1 FROM member_transactions WHERE idempotency_key = ?)
+    `).bind(recharge.bonusCents, nowEpoch, recharge.userId, recharge.id, bonusKey),
+    d1.prepare(`
+      INSERT INTO member_transactions
+        (id,user_id,asset,type,amount,balance_after,reference_type,reference_id,idempotency_key,description,created_at)
+      SELECT ?,id,'bonus','recharge_bonus',?,bonus_balance_cents,'recharge',?,?,?,?
+      FROM users WHERE id = ? AND ? > 0 ON CONFLICT(idempotency_key) DO NOTHING
+    `).bind(crypto.randomUUID(), recharge.bonusCents, recharge.id, bonusKey, "充值 1% 赠送", nowEpoch, recharge.userId, recharge.bonusCents),
   ]);
   return { found: true, success: Boolean(results[0]?.results[0]) };
 }

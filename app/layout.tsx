@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Providers } from "@/components/providers";
+import { I18nProvider } from "@/components/i18n-provider";
+import { localeMeta } from "@/lib/i18n";
+import { getLocale, getTranslator } from "@/lib/i18n-server";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -13,29 +16,32 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-const siteName = process.env.NEXT_PUBLIC_SITE_NAME || "LDC Store";
-const siteDescription = process.env.NEXT_PUBLIC_SITE_DESCRIPTION || "基于 Linux DO Credit 的虚拟商品自动发卡平台";
+const siteName = process.env.NEXT_PUBLIC_SITE_NAME || "Game3DTech";
 
-export const metadata: Metadata = {
-  title: {
-    default: `${siteName} - 自动发卡系统`,
-    template: `%s | ${siteName}`,
-  },
-  description: siteDescription,
-  keywords: ["自动发卡", "虚拟商品", "Linux DO", "LDC"],
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getTranslator();
+  return {
+    title: { default: t("storeMetaTitle", { site: siteName }), template: `%s | ${siteName}` },
+    description: t("storeMetaDescription", { site: siteName }),
+    keywords: ["digital goods", "software", "AI", "Game3DTech"],
+  };
+}
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const locale = await getLocale();
   return (
-    <html lang="zh-CN" suppressHydrationWarning>
+    <html lang={localeMeta[locale].htmlLang} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: "globalThis.__name ||= ((target, value) => Object.defineProperty(target, 'name', { value, configurable: true }));" }} />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased`}
       >
-        <Providers>{children}</Providers>
+        <Providers><I18nProvider initialLocale={locale}>{children}</I18nProvider></Providers>
       </body>
     </html>
   );

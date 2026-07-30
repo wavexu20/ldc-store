@@ -13,6 +13,7 @@ import {
 } from "@/lib/email/verification";
 import { verifyTurnstileToken } from "@/lib/security/turnstile";
 import { passwordContainsIdentity, strongPasswordSchema } from "@/lib/validations/password";
+import { createMemberNo } from "@/lib/membership";
 import {
   checkRateLimit,
   recordFailedAttempt,
@@ -87,10 +88,14 @@ export async function registerWithEmail(input: {
 
   try {
     const passwordHash = await hash(parsed.data.password, 12);
+    const id = crypto.randomUUID();
     const [created] = await db.insert(users).values({
+      id,
       name: parsed.data.name,
+      nameSource: "custom",
       email: parsed.data.email,
       passwordHash,
+      memberNo: createMemberNo(id),
     }).returning({ id: users.id, email: users.email, name: users.name });
     await issueEmailVerification({ userId: created.id, email: created.email, name: created.name });
     return {

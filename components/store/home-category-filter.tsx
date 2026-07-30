@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { Button } from "@/components/ui/button";
+import { useI18n } from "@/components/i18n-provider";
 
 export interface CategoryTabItem {
   id: string;
@@ -38,6 +39,7 @@ interface HomeCategoryFilterProps {
 }
 
 export function HomeCategoryFilter({ categories, children }: HomeCategoryFilterProps) {
+  const { t } = useI18n();
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
 
   const ctx = useMemo<HomeCategoryFilterContextValue>(
@@ -59,7 +61,7 @@ export function HomeCategoryFilter({ categories, children }: HomeCategoryFilterP
             onClick={() => setSelectedCategoryId(null)}
             aria-pressed={!selectedCategoryId}
           >
-            全部商品
+            {t("allProducts")}
           </Button>
 
           {categories.map((category) => (
@@ -81,7 +83,7 @@ export function HomeCategoryFilter({ categories, children }: HomeCategoryFilterP
           ))}
         </div>
 
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-[repeat(auto-fill,minmax(15rem,18rem))]">
           {children}
         </div>
       </div>

@@ -58,6 +58,7 @@ async function getProductsWithStock() {
       createdAt: true,
       categoryId: true,
     },
+    with: { variants: { where: (variants, { eq }) => eq(variants.isActive, true), columns: { id: true, name: true } } },
     orderBy: [asc(products.sortOrder), desc(products.createdAt)],
   });
 
@@ -132,8 +133,12 @@ async function getCardsPage(
         status: true,
         createdAt: true,
         orderId: true,
+        variantId: true,
       },
       with: {
+        variant: {
+          columns: { id: true, name: true },
+        },
         order: {
           columns: {
             id: true,
@@ -280,8 +285,8 @@ export default async function CardsPage({ searchParams }: CardsPageProps) {
             ) : null}
             {selectedProductId ? (
               <CardAction className="flex items-center gap-2">
-                <CreateCardDialog productId={selectedProductId} />
-                <ImportCardsDialog productId={selectedProductId} />
+                <CreateCardDialog productId={selectedProductId} variants={selectedProduct?.variants} />
+                <ImportCardsDialog productId={selectedProductId} variants={selectedProduct?.variants} />
               </CardAction>
             ) : null}
           </CardHeader>
@@ -297,6 +302,7 @@ export default async function CardsPage({ searchParams }: CardsPageProps) {
                 q={q}
                 status={status}
                 orderNo={orderNo}
+                variants={selectedProduct?.variants ?? []}
               />
             ) : (
               <div className="py-12 text-center">

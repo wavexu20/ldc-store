@@ -1,6 +1,7 @@
 "use server";
 
 import { db, announcements } from "@/lib/db";
+import type { Announcement, AnnouncementTranslations } from "@/lib/db/schema";
 import {
   and,
   asc,
@@ -20,8 +21,33 @@ import {
   type UpdateAnnouncementInput,
 } from "@/lib/validations/announcement";
 import { revalidateAnnouncementCache } from "@/lib/cache";
+import { generateProductTranslations } from "@/lib/ai/product-translation";
 
 const SITE_TIMEZONE = process.env.STATS_TIMEZONE || "Asia/Shanghai";
+
+async function generateAndSaveAnnouncementTranslations(
+  announcement: Announcement
+): Promise<Announcement> {
+  const sourceLocale = /[\u3400-\u9fff]/u.test(`${announcement.title}\n${announcement.content}`)
+    ? "zh"
+    : "en";
+  const generated = await generateProductTranslations(
+    { name: announcement.title, content: announcement.content },
+    sourceLocale
+  );
+  const translations = Object.fromEntries(
+    Object.entries(generated.translations).map(([locale, translation]) => [
+      locale,
+      { title: translation?.name, content: translation?.content },
+    ])
+  ) as AnnouncementTranslations;
+  const [saved] = await db
+    .update(announcements)
+    .set({ translations, updatedAt: new Date() })
+    .where(eq(announcements.id, announcement.id))
+    .returning();
+  return saved ?? { ...announcement, translations };
+}
 
 function getTimeZoneOffsetMs(date: Date, timeZone: string): number {
   // 通过 Intl 将指定时区的“当地时间”格式化后反推为 UTC 时间戳，
@@ -88,7 +114,7 @@ function parseDateTimeLocal(value: string): Date | null {
 export async function getActiveAnnouncements() {
   const now = new Date();
 
-  return db.query.announcements.findMany({
+  const items = await db.query.announcements.findMany({
     where: and(
       eq(announcements.isActive, true),
       or(isNull(announcements.startAt), lte(announcements.startAt, now))!,
@@ -96,6 +122,15 @@ export async function getActiveAnnouncements() {
     ),
     orderBy: [asc(announcements.sortOrder), desc(announcements.createdAt)],
   });
+  return Promise.all(items.map(async (announcement) => {
+    if (announcement.translations) return announcement;
+    try {
+      return await generateAndSaveAnnouncementTranslations(announcement);
+    } catch (error) {
+      console.error(`[getActiveAnnouncements] 公告 ${announcement.id} 自动翻译失败:`, error);
+      return announcement;
+    }
+  }));
 }
 
 /**
@@ -179,10 +214,18 @@ export async function createAnnouncement(input: CreateAnnouncementInput) {
         endAt,
       })
       .returning();
+    let saved = created;
+    let translationWarning: string | undefined;
+    try {
+      saved = await generateAndSaveAnnouncementTranslations(created);
+    } catch (error) {
+      console.error("[createAnnouncement] 自动翻译失败:", error);
+      translationWarning = "公告已创建，但自动翻译暂时失败；首页访问时会自动重试";
+    }
 
     await revalidateAnnouncementCache();
 
-    return { success: true, data: created };
+    return { success: true, data: saved, message: translationWarning };
   } catch (error) {
     console.error("创建公告失败:", error);
     return { success: false, message: "创建公告失败" };
@@ -225,10 +268,18 @@ export async function updateAnnouncement(id: string, input: UpdateAnnouncementIn
     if (!updated) {
       return { success: false, message: "公告不存在" };
     }
+    let saved = updated;
+    let translationWarning: string | undefined;
+    try {
+      saved = await generateAndSaveAnnouncementTranslations(updated);
+    } catch (error) {
+      console.error("[updateAnnouncement] 自动翻译失败:", error);
+      translationWarning = "公告已保存，但自动翻译暂时失败；首页访问时会自动重试";
+    }
 
     await revalidateAnnouncementCache();
 
-    return { success: true, data: updated };
+    return { success: true, data: saved, message: translationWarning };
   } catch (error) {
     console.error("更新公告失败:", error);
     return { success: false, message: "更新公告失败" };

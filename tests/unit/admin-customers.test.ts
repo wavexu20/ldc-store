@@ -60,7 +60,7 @@ describe("getAdminCustomersPage", () => {
       (v): v is { type: string; values: unknown[] } =>
         typeof v === "object" && v !== null && (v as { type?: string }).type === "sql"
     );
-    expect(whereSql?.values).toEqual(["%tester%", "%tester%"]);
+    expect(whereSql?.values).toEqual(["%tester%", "%tester%", "%tester%", "%tester%"]);
 
     expect(result.total).toBe(1);
     expect(result.items).toEqual([
@@ -68,6 +68,11 @@ describe("getAdminCustomersPage", () => {
         userId: "u1",
         username: "tester",
         userImage: null,
+        memberNo: null,
+        email: null,
+        cashBalanceCents: 0,
+        bonusBalanceCents: 0,
+        pointsBalance: 0,
         orderCount: 3,
         totalSpent: "30",
         firstPaidAt: "2025-01-01T00:00:00.000Z",

@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { Megaphone, X, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useI18n } from "@/components/i18n-provider";
 import {
   Dialog,
   DialogContent,
@@ -18,13 +19,14 @@ export interface AnnouncementBannerItem {
   updatedAt?: string;
 }
 
-const DISMISS_KEY = "ldc-store:announcement-banner:dismissed-signature";
+const DISMISS_KEY = "game3dtech:announcement-banner:dismissed-signature";
 
 export function AnnouncementBanner({
   announcements,
 }: {
   announcements: AnnouncementBannerItem[];
 }) {
+  const { t } = useI18n();
   const [dismissedSignature, setDismissedSignature] = useState<string | null>(() => {
     try {
       return localStorage.getItem(DISMISS_KEY);
@@ -80,7 +82,7 @@ export function AnnouncementBanner({
               <Dialog>
                 <DialogTrigger asChild>
                   <Button variant="link" className="h-auto p-0 text-xs">
-                    查看详情
+                    {t("announcementDetails")}
                   </Button>
                 </DialogTrigger>
                 <DialogContent className="max-w-xl">
@@ -104,7 +106,7 @@ export function AnnouncementBanner({
                 size="icon"
                 className="h-7 w-7"
                 onClick={goPrev}
-                aria-label="上一条公告"
+                aria-label={t("previousAnnouncement")}
               >
                 <ChevronLeft className="h-4 w-4" />
               </Button>
@@ -117,7 +119,7 @@ export function AnnouncementBanner({
                     className={`h-1.5 w-1.5 rounded-full transition-colors ${
                       idx === safeIndex ? "bg-foreground" : "bg-muted-foreground/40"
                     }`}
-                    aria-label={`切换到第 ${idx + 1} 条公告`}
+                    aria-label={t("announcementGoTo", { index: idx + 1 })}
                   />
                 ))}
               </div>
@@ -127,7 +129,7 @@ export function AnnouncementBanner({
                 size="icon"
                 className="h-7 w-7"
                 onClick={goNext}
-                aria-label="下一条公告"
+                aria-label={t("nextAnnouncement")}
               >
                 <ChevronRight className="h-4 w-4" />
               </Button>
@@ -144,7 +146,7 @@ export function AnnouncementBanner({
           size="icon"
           className="h-7 w-7 shrink-0"
           onClick={handleDismiss}
-          aria-label="关闭公告"
+          aria-label={t("closeAnnouncement")}
         >
           <X className="h-4 w-4" />
         </Button>

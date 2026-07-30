@@ -71,9 +71,13 @@ vi.mock("@/lib/db", () => {
   const orders = { orderNo: {}, userId: {}, status: {} };
   const cards = { orderId: {} };
   const products = { id: {}, salesCount: {} };
+  const users = { id: {} };
 
   const db = {
     query: {
+      users: {
+        findFirst: vi.fn(async () => ({ twoFactorEnabledAt: null })),
+      },
       orders: {
         findFirst: vi.fn(async () => ({
           id: "o1",
@@ -106,7 +110,7 @@ vi.mock("@/lib/db", () => {
     }),
   };
 
-  return { db, orders, cards, products, getD1Binding: () => d1 };
+  return { db, orders, cards, products, users, getD1Binding: () => d1 };
 });
 
 import { getOrderByNo } from "@/lib/actions/orders";

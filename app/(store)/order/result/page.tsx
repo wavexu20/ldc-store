@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import {
   CheckCircle2,
   Clock,
+  Gift,
   Loader2,
   Home,
   Copy,
@@ -19,13 +20,19 @@ import {
   RefreshCw,
   XCircle,
   ShoppingBag,
+  ShieldCheck,
 } from "lucide-react";
 import { formatLocalTime } from "@/lib/time";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/components/i18n-provider";
+import { getLocalizedFulfillmentLabel, type FulfillmentMode } from "@/lib/fulfillment";
+import { Money } from "@/components/store/money";
+import { PendingOrderActions } from "@/components/store/pending-order-actions";
+import { guestOrderStorageKey } from "@/lib/order-access";
 
 interface OrderResultPageProps {
   // Next.js 期望 searchParams 为 Promise 类型；运行时保留 isThenable 检查以兼容测试传入对象。
-  searchParams?: Promise<{ out_trade_no?: string }>;
+  searchParams?: Promise<{ out_trade_no?: string; access_token?: string; cancelled?: string }> | { out_trade_no?: string; access_token?: string; cancelled?: string };
 }
 
 interface OrderData {
@@ -37,6 +44,11 @@ interface OrderData {
   createdAt: Date;
   paidAt: Date | null;
   cards: string[];
+  deliveryLocked?: boolean;
+  fulfillmentMode: FulfillmentMode;
+  deliveryDueAt: Date | null;
+  fulfilledAt: Date | null;
+  expiredAt: Date | null;
 }
 
 // 轮询配置
@@ -105,12 +117,15 @@ function InfoItem({
 }
 
 export default function OrderResultPage({ searchParams }: OrderResultPageProps) {
+  const { t, locale } = useI18n();
   // 兼容 undefined、Promise、纯对象（测试环境）三种情况
   const resolvedParams = searchParams
-    ? (isThenable<{ out_trade_no?: string }>(searchParams) ? use(searchParams) : searchParams)
+    ? (isThenable<{ out_trade_no?: string; access_token?: string; cancelled?: string }>(searchParams) ? use(searchParams) : searchParams)
     : {};
   const { data: session, status: sessionStatus } = useSession();
   const [orderNo, setOrderNo] = useState(resolvedParams.out_trade_no || "");
+  const [guestAccessToken, setGuestAccessToken] = useState(resolvedParams.access_token || "");
+  const [guestTokenReady, setGuestTokenReady] = useState(Boolean(resolvedParams.access_token));
 
   const [order, setOrder] = useState<OrderData | null>(null);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
@@ -127,17 +142,45 @@ export default function OrderResultPage({ searchParams }: OrderResultPageProps) 
   // 检查是否是 Linux DO 登录用户
   const user = session?.user as { id?: string } | undefined;
   const isLoggedIn = Boolean(user?.id);
+  const orderAccessState = isLoggedIn
+    ? "account"
+    : !guestTokenReady
+      ? "loading"
+      : guestAccessToken
+        ? `guest:${guestAccessToken}`
+        : "missing";
 
   // 如果 URL 没有订单号参数，尝试从 localStorage 读取
   useEffect(() => {
     if (!resolvedParams.out_trade_no) {
-      const savedOrderNo = localStorage.getItem("ldc_last_order_no");
+      const savedOrderNo = localStorage.getItem("g3d_last_order_no") || localStorage.getItem("ldc_last_order_no");
       if (savedOrderNo) {
         setOrderNo(savedOrderNo);
+        localStorage.removeItem("g3d_last_order_no");
         localStorage.removeItem("ldc_last_order_no");
       }
     }
   }, [resolvedParams.out_trade_no]);
+
+  useEffect(() => {
+    if (!orderNo) {
+      setGuestTokenReady(true);
+      return;
+    }
+
+    const token = resolvedParams.access_token || localStorage.getItem(guestOrderStorageKey(orderNo)) || "";
+    if (token) {
+      localStorage.setItem(guestOrderStorageKey(orderNo), token);
+      setGuestAccessToken(token);
+    }
+    setGuestTokenReady(true);
+
+    if (resolvedParams.access_token) {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("access_token");
+      window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+    }
+  }, [orderNo, resolvedParams.access_token]);
 
   // 清理轮询定时器
   useEffect(() => {
@@ -155,7 +198,10 @@ export default function OrderResultPage({ searchParams }: OrderResultPageProps) 
     }
 
     try {
-      const result = await getOrderByNo(orderNo);
+      setError("");
+      const result = guestAccessToken
+        ? await getOrderByNo(orderNo, guestAccessToken)
+        : await getOrderByNo(orderNo);
       if (result.success && result.data) {
         const orderData = result.data as OrderData;
         setOrder(orderData);
@@ -171,20 +217,20 @@ export default function OrderResultPage({ searchParams }: OrderResultPageProps) 
           setIsPolling(false);
           // 如果订单状态已更新，显示提示
           if (isPollingRequest && (orderData.status === "paid" || orderData.status === "completed")) {
-            toast.success("支付成功！");
+            toast.success(t("paymentSuccess"));
           }
         }
       } else {
-        setError(result.message || "获取订单失败");
+        setError(result.message || t("orderUnavailable"));
         setIsPolling(false);
       }
     } catch {
-      setError("获取订单失败");
+      setError(t("orderUnavailable"));
       setIsPolling(false);
     } finally {
       setIsLoading(false);
     }
-  }, [orderNo]);
+  }, [guestAccessToken, orderNo, t]);
 
   // 加载订单数据
   useEffect(() => {
@@ -195,8 +241,10 @@ export default function OrderResultPage({ searchParams }: OrderResultPageProps) 
       return;
     }
 
-    if (!isLoggedIn) {
-      setError("请先登录查看订单");
+    if (orderAccessState === "loading") return;
+
+    if (orderAccessState === "missing") {
+      setError(t("loginRequired"));
       setIsLoading(false);
       return;
     }
@@ -204,16 +252,16 @@ export default function OrderResultPage({ searchParams }: OrderResultPageProps) 
     // 重置轮询计数器
     pollCountRef.current = 0;
     loadOrder();
-  }, [sessionStatus, orderNo, isLoggedIn, loadOrder]);
+  }, [sessionStatus, orderNo, orderAccessState, loadOrder, t]);
 
   const copyToClipboard = async (text: string, index: number) => {
     try {
       await navigator.clipboard.writeText(text);
       setCopiedIndex(index);
-      toast.success("已复制");
+      toast.success(t("copied"));
       setTimeout(() => setCopiedIndex(null), 2000);
     } catch {
-      toast.error("复制失败");
+      toast.error(t("copyFailed"));
     }
   };
 
@@ -222,22 +270,22 @@ export default function OrderResultPage({ searchParams }: OrderResultPageProps) 
     return (
       <CenteredStateCard
         icon={<Loader2 className="h-6 w-6 animate-spin" />}
-        title="加载中..."
-        description="正在获取订单信息"
+        title={t("loading")}
+        description={t("fetchingOrder")}
       />
     );
   }
 
   // 未登录
-  if (!isLoggedIn) {
+  if (!isLoggedIn && !guestAccessToken) {
     return (
       <CenteredStateCard
         icon={<XCircle className="h-6 w-6" />}
-        title="请先登录"
-        description="登录后才能查看订单与卡密信息"
+        title={t("loginRequired")}
+        description={t("signInToViewOrder")}
         actions={
           <Button asChild>
-            <Link href="/">返回首页</Link>
+            <Link href="/">{t("backHomePage")}</Link>
           </Button>
         }
       />
@@ -249,15 +297,15 @@ export default function OrderResultPage({ searchParams }: OrderResultPageProps) 
     return (
       <CenteredStateCard
         icon={<XCircle className="h-6 w-6" />}
-        title="订单号无效"
-        description="请从支付页面返回，或在“我的订单”中查看历史订单"
+        title={t("invalidOrderNo")}
+        description={t("invalidOrderHint")}
         actions={
           <div className="flex justify-center gap-3">
             <Button asChild variant="outline">
-              <Link href="/order/my">我的订单</Link>
+              <Link href="/order/my">{t("myOrders")}</Link>
             </Button>
             <Button asChild>
-              <Link href="/">返回首页</Link>
+              <Link href="/">{t("backHomePage")}</Link>
             </Button>
           </div>
         }
@@ -270,18 +318,20 @@ export default function OrderResultPage({ searchParams }: OrderResultPageProps) 
     return (
       <CenteredStateCard
         icon={<XCircle className="h-6 w-6" />}
-        title="无法获取订单"
+        title={t("orderUnavailable")}
         description={error}
         actions={
           <div className="flex justify-center gap-3">
-            <Button asChild variant="outline">
-              <Link href="/order/my">
-                <ShoppingBag className="mr-2 h-4 w-4" />
-                我的订单
-              </Link>
-            </Button>
+            {isLoggedIn ? (
+              <Button asChild variant="outline">
+                <Link href="/order/my">
+                  <ShoppingBag className="mr-2 h-4 w-4" />
+                  {t("myOrders")}
+                </Link>
+              </Button>
+            ) : null}
             <Button asChild>
-              <Link href="/">返回首页</Link>
+              <Link href="/">{t("backHomePage")}</Link>
             </Button>
           </div>
         }
@@ -294,82 +344,91 @@ export default function OrderResultPage({ searchParams }: OrderResultPageProps) 
     return (
       <CenteredStateCard
         icon={<Loader2 className="h-6 w-6 animate-spin" />}
-        title="加载订单中..."
+        title={t("loadingOrder")}
       />
     );
   }
 
   // 已查询 - 显示订单详情
   const isPaid = order.status === "paid" || order.status === "completed";
-  const canShowReceipt = isPaid;
+  const canShowReceipt = isPaid && isLoggedIn;
   const hasCards = Boolean(order.cards && order.cards.length > 0);
 
   const statusMeta = (() => {
     if (isPaid) {
       return {
-        label: order.status === "completed" ? "已完成" : "已支付",
-        title: "支付成功",
-        description: hasCards ? "卡密已发放，请及时保存" : "订单已支付，卡密发放中…",
+        label: t(order.status === "completed" ? "completed" : "paid"),
+        title: t("paymentSuccess"),
+        description: t(hasCards ? "deliveryReady" : "deliveryPreparing"),
         icon: <CheckCircle2 className="h-5 w-5" />,
         iconClassName:
-          "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+          "bg-success/10 text-success",
         badgeClassName:
-          "bg-emerald-600 text-white hover:bg-emerald-600/90",
+          "bg-success text-success-foreground hover:bg-success/90",
       };
     }
 
     switch (order.status) {
       case "pending":
         return {
-          label: "待支付",
-          title: isPolling ? "正在确认支付状态" : "等待支付完成",
+          label: t("pending"),
+          title: t(isPolling ? "confirmingPayment" : "awaitingPayment"),
           description: isPolling
-            ? "通常会在 30 秒内自动更新，请稍候…"
-            : "如果你已完成支付，可点击刷新或稍后查看“我的订单”。",
+            ? t("autoUpdateHint")
+            : t("manualRefreshHint"),
           icon: isPolling ? (
             <Loader2 className="h-5 w-5 animate-spin" />
           ) : (
             <Clock className="h-5 w-5" />
           ),
           iconClassName:
-            "bg-amber-500/10 text-amber-700 dark:text-amber-300",
+            "bg-warning/10 text-warning-foreground dark:text-warning",
           badgeClassName:
-            "bg-amber-500 text-white hover:bg-amber-500/90",
+            "bg-warning text-warning-foreground hover:bg-warning/90",
         };
       case "expired":
         return {
-          label: "已过期",
-          title: "订单已过期",
-          description: "该订单未在有效期内完成支付。",
+          label: t("expired"),
+          title: t("orderExpired"),
+          description: t("orderExpiredHint"),
+          icon: <XCircle className="h-5 w-5" />,
+          iconClassName: "bg-muted text-muted-foreground",
+          badgeClassName: "bg-muted text-muted-foreground hover:bg-muted",
+        };
+      case "cancelled":
+        return {
+          label: t("cancelled"),
+          title: t("orderCancelled"),
+          description: t("orderCancelledHint"),
           icon: <XCircle className="h-5 w-5" />,
           iconClassName: "bg-muted text-muted-foreground",
           badgeClassName: "bg-muted text-muted-foreground hover:bg-muted",
         };
       case "refund_pending":
         return {
-          label: "退款审核中",
-          title: "退款处理中",
-          description: "你的退款申请已提交，正在等待审核。",
+          label: t("refundPending"),
+          title: t("refundProcessing"),
+          description: t("refundSubmitted"),
           icon: <Clock className="h-5 w-5" />,
           iconClassName:
-            "bg-amber-500/10 text-amber-700 dark:text-amber-300",
+            "bg-warning/10 text-warning-foreground dark:text-warning",
           badgeClassName:
-            "bg-amber-500 text-white hover:bg-amber-500/90",
+            "bg-warning text-warning-foreground hover:bg-warning/90",
         };
       case "refund_rejected":
         return {
-          label: "退款已拒绝",
-          title: "退款已拒绝",
-          description: "如有疑问，请联系管理员或查看订单备注。",
+          label: t("refundRejected"),
+          title: t("refundRejected"),
+          description: t("refundRejectedHint"),
           icon: <XCircle className="h-5 w-5" />,
           iconClassName: "bg-muted text-muted-foreground",
           badgeClassName: "bg-muted text-muted-foreground hover:bg-muted",
         };
       case "refunded":
         return {
-          label: "已退款",
-          title: "订单已退款",
-          description: "该订单已完成退款。",
+          label: t("refunded"),
+          title: t("orderRefunded"),
+          description: t("orderRefundedHint"),
           icon: <XCircle className="h-5 w-5" />,
           iconClassName: "bg-muted text-muted-foreground",
           badgeClassName: "bg-muted text-muted-foreground hover:bg-muted",
@@ -377,8 +436,8 @@ export default function OrderResultPage({ searchParams }: OrderResultPageProps) 
       default:
         return {
           label: order.status,
-          title: "订单状态更新中",
-          description: "请稍后刷新或前往“我的订单”查看最新状态。",
+          title: t("statusUpdating"),
+          description: t("statusUpdatingHint"),
           icon: <Clock className="h-5 w-5" />,
           iconClassName: "bg-muted text-muted-foreground",
           badgeClassName: "bg-muted text-muted-foreground hover:bg-muted",
@@ -390,10 +449,10 @@ export default function OrderResultPage({ searchParams }: OrderResultPageProps) 
     try {
       await navigator.clipboard.writeText(order.orderNo);
       setIsOrderNoCopied(true);
-      toast.success("已复制订单号");
+      toast.success(t("copied"));
       setTimeout(() => setIsOrderNoCopied(false), 1500);
     } catch {
-      toast.error("复制失败");
+      toast.error(t("copyFailed"));
     }
   };
 
@@ -401,9 +460,9 @@ export default function OrderResultPage({ searchParams }: OrderResultPageProps) 
     if (!hasCards) return;
     try {
       await navigator.clipboard.writeText(order.cards.join("\n"));
-      toast.success(`已复制 ${order.cards.length} 个卡密`);
+      toast.success(`${t("copied")} ${order.cards.length}`);
     } catch {
-      toast.error("复制失败");
+      toast.error(t("copyFailed"));
     }
   };
 
@@ -461,8 +520,8 @@ export default function OrderResultPage({ searchParams }: OrderResultPageProps) 
               className="h-9 w-9 shrink-0"
               onClick={refreshOrder}
               disabled={isRefreshing}
-              aria-label="刷新订单状态"
-              title="刷新订单状态"
+              aria-label={t("refreshStatus")}
+              title={t("refreshStatus")}
             >
               <RefreshCw className={cn("h-4 w-4", isRefreshing ? "animate-spin" : "")} />
             </Button>
@@ -471,15 +530,15 @@ export default function OrderResultPage({ searchParams }: OrderResultPageProps) 
           {/* Order Info */}
           <div className="rounded-2xl border bg-muted/20 p-4 space-y-3">
             <div className="flex items-center justify-between gap-3">
-              <div className="text-sm font-medium">订单信息</div>
+              <div className="text-sm font-medium">{t("orderInfo")}</div>
               <div className="text-[11px] text-muted-foreground">
-                请妥善保存订单号以便查询
+                {t("savingOrderNo")}
               </div>
             </div>
 
             <div className="space-y-2">
               <InfoItem
-                label="订单号"
+                label={t("orderNo")}
                 value={<code className="font-mono text-xs">{order.orderNo}</code>}
                 valueClassName="max-w-[220px]"
                 action={
@@ -488,8 +547,8 @@ export default function OrderResultPage({ searchParams }: OrderResultPageProps) 
                     size="icon"
                     className="h-8 w-8 shrink-0"
                     onClick={copyOrderNo}
-                    aria-label="复制订单号"
-                    title="复制订单号"
+                    aria-label={`${t("copy")} ${t("orderNo")}`}
+                    title={`${t("copy")} ${t("orderNo")}`}
                   >
                     {isOrderNoCopied ? (
                       <CheckCircle2 className="h-4 w-4 text-emerald-600" />
@@ -500,17 +559,15 @@ export default function OrderResultPage({ searchParams }: OrderResultPageProps) 
                 }
               />
               <InfoItem
-                label="金额"
+                label={t("amount")}
                 value={
-                  <span className="font-semibold tabular-nums">
-                    ¥{order.totalAmount}
-                  </span>
+                  <Money amount={order.totalAmount} className="font-semibold tabular-nums" />
                 }
               />
-              <InfoItem label="数量" value={`${order.quantity} 件`} />
-              <InfoItem label="下单时间" value={formatLocalTime(order.createdAt)} />
+              <InfoItem label={t("quantity")} value={String(order.quantity)} />
+              <InfoItem label={t("placedAt")} value={formatLocalTime(order.createdAt)} />
               {order.paidAt ? (
-                <InfoItem label="支付时间" value={formatLocalTime(order.paidAt)} />
+                <InfoItem label={t("paidAt")} value={formatLocalTime(order.paidAt)} />
               ) : null}
             </div>
           </div>
@@ -518,11 +575,11 @@ export default function OrderResultPage({ searchParams }: OrderResultPageProps) 
           {/* Cards / Secure Notice */}
           {isPaid ? (
             hasCards ? (
-              <div className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-4 dark:border-emerald-900/60 dark:bg-emerald-950/30">
+              <div className="rounded-2xl border border-success/25 bg-success/10 p-4">
                 <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2 text-sm font-medium text-emerald-800 dark:text-emerald-200">
+                  <div className="flex items-center gap-2 text-sm font-medium text-success">
                     <Package className="h-4 w-4" />
-                    卡密信息
+                    {t("deliveryInfo")}
                     <Badge variant="secondary" className="ml-1">
                       {order.cards.length}
                     </Badge>
@@ -535,12 +592,12 @@ export default function OrderResultPage({ searchParams }: OrderResultPageProps) 
                     disabled={!hasCards}
                   >
                     <Copy className="mr-2 h-3 w-3" />
-                    复制全部
+                    {t("copyAll")}
                   </Button>
                 </div>
 
                 <div className="mt-2 text-xs text-muted-foreground">
-                  卡密属于敏感信息，复制/截图后请注意粘贴范围与聊天记录留存。
+                  {t("sensitiveDeliveryHint")}
                 </div>
 
                 <div className="mt-3 space-y-2">
@@ -557,8 +614,8 @@ export default function OrderResultPage({ searchParams }: OrderResultPageProps) 
                         size="icon"
                         className="h-8 w-8 shrink-0"
                         onClick={() => copyToClipboard(card, index)}
-                        aria-label="复制卡密"
-                        title="复制卡密"
+                        aria-label={`${t("copy")} ${t("deliveryInfo")}`}
+                        title={`${t("copy")} ${t("deliveryInfo")}`}
                       >
                         {copiedIndex === index ? (
                           <CheckCircle2 className="h-4 w-4 text-emerald-600" />
@@ -572,18 +629,56 @@ export default function OrderResultPage({ searchParams }: OrderResultPageProps) 
               </div>
             ) : (
               <div className="rounded-2xl border bg-muted/30 p-4 text-sm text-muted-foreground">
-                卡密发放中，请稍后点击右上角刷新，或前往“我的订单”查看。
+                <div>{t("preparingDeliveryHint")}</div>
+                {order.fulfillmentMode !== "auto" ? (
+                  <div className="mt-2 font-medium text-foreground">
+                    {getLocalizedFulfillmentLabel(order.fulfillmentMode, locale)}
+                    {order.deliveryDueAt ? ` · ${formatLocalTime(order.deliveryDueAt)}` : ""}
+                  </div>
+                ) : null}
               </div>
             )
           ) : null}
 
+          {order.deliveryLocked ? (
+            <div className="flex flex-col gap-3 rounded-2xl border border-warning/30 bg-warning/10 p-4 text-sm sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-2 font-medium text-warning-foreground dark:text-warning"><ShieldCheck className="size-4 shrink-0" />{t("deliveryProtected")}</div>
+              <Button asChild size="sm"><Link href={`/account/verify-2fa?callbackUrl=${encodeURIComponent(`/order/result?out_trade_no=${order.orderNo}`)}`}>{t("verifyToView")}</Link></Button>
+            </div>
+          ) : null}
+
+          {!isLoggedIn ? (
+            <div className="flex flex-col gap-3 rounded-2xl border border-success/20 bg-success/5 p-4 sm:flex-row sm:items-center">
+              <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-success/10 text-success">
+                <Gift className="size-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium">{t("memberRechargeBenefitTitle")}</p>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">{t("memberRechargeBenefit")}</p>
+              </div>
+              <Button asChild size="sm" variant="outline" className="shrink-0 bg-background">
+                <Link href={`/login?mode=register&callbackUrl=${encodeURIComponent(`/order/result?out_trade_no=${order.orderNo}`)}`}>
+                  {t("joinMembership")}
+                </Link>
+              </Button>
+            </div>
+          ) : null}
+
           {/* Actions */}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            {order.status === "pending" ? (
+              <PendingOrderActions
+                orderNo={order.orderNo}
+                accessToken={guestAccessToken || undefined}
+                className="sm:col-span-3"
+                onChanged={refreshOrder}
+              />
+            ) : null}
             {canShowReceipt ? (
               <Button asChild className="justify-center">
                 <Link href={`/order/receipt/${order.orderNo}`}>
                   <ReceiptText className="mr-2 h-4 w-4" />
-                  支付成功凭证
+                  {t("paymentReceipt")}
                 </Link>
               </Button>
             ) : (
@@ -594,19 +689,21 @@ export default function OrderResultPage({ searchParams }: OrderResultPageProps) 
                 className="justify-center"
               >
                 <RefreshCw className={cn("mr-2 h-4 w-4", isRefreshing ? "animate-spin" : "")} />
-                刷新状态
+                {t("refreshStatus")}
               </Button>
             )}
-            <Button asChild variant="outline" className="justify-center">
-              <Link href="/order/my">
-                <ShoppingBag className="mr-2 h-4 w-4" />
-                我的订单
-              </Link>
-            </Button>
+            {isLoggedIn ? (
+              <Button asChild variant="outline" className="justify-center">
+                <Link href="/order/my">
+                  <ShoppingBag className="mr-2 h-4 w-4" />
+                  {t("myOrders")}
+                </Link>
+              </Button>
+            ) : null}
             <Button asChild variant="ghost" className="justify-center">
               <Link href="/">
                 <Home className="mr-2 h-4 w-4" />
-                返回首页
+                {t("backHomePage")}
               </Link>
             </Button>
           </div>

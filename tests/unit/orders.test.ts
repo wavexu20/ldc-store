@@ -31,7 +31,7 @@ vi.mock("@/lib/logger", () => ({
 import { createOrder } from "@/lib/actions/orders";
 
 describe("createOrder", () => {
-  it("should reject when user is not logged in", async () => {
+  it("should require guest contact and Turnstile when user is not logged in", async () => {
     authMock.mockResolvedValueOnce(null);
 
     const result = await createOrder({
@@ -41,7 +41,8 @@ describe("createOrder", () => {
     });
 
     expect(result.success).toBe(false);
-    expect(result.message).toContain("请先登录");
+    expect(result.message).toContain("邮箱");
+    expect(result.message).toContain("人机验证");
   });
 
   it("should validate input before touching database", async () => {

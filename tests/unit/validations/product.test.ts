@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { createProductSchema, productSchema, updateProductSchema } from "@/lib/validations/product";
+import { createProductSchema, productPreviewSchema, productSchema, updateProductSchema } from "@/lib/validations/product";
 
 function makeValidProductInput() {
   return {
@@ -77,6 +77,26 @@ describe("validations/product", () => {
     ).toBe(false);
   });
 
+  it("应允许 Cloudflare R2 站内商品图片地址", () => {
+    const storedImage = "/api/product-images/products/0195eb17-2db8-7f93-b950-7259b29c5a10.webp";
+    expect(productSchema.safeParse({
+      ...makeValidProductInput(),
+      coverImage: storedImage,
+      images: [storedImage],
+    }).success).toBe(true);
+    expect(productPreviewSchema.safeParse({
+      name: "Preview",
+      coverImage: storedImage,
+      images: [storedImage],
+    }).success).toBe(true);
+  });
+
+  it("应拒绝非商品存储路径和非 HTTP 外部图片", () => {
+    for (const image of ["/api/avatars/test.png", "/api/product-images/products/not-a-uuid.png", "javascript:alert(1)"]) {
+      expect(productSchema.safeParse({ ...makeValidProductInput(), coverImage: image }).success).toBe(false);
+    }
+  });
+
   it("updateProductSchema 应允许 partial update", () => {
     const result = updateProductSchema.safeParse({
       name: "Only Name Updated",
@@ -89,4 +109,3 @@ describe("validations/product", () => {
     expect(createProductSchema.safeParse(input).success).toBe(true);
   });
 });
-

@@ -10,8 +10,8 @@
  * - 前端显示时浏览器自动转换为用户本地时区
  */
 
-import { db, getD1Binding, orders, cards, products } from "@/lib/db";
-import { eq, and, desc, inArray, lt } from "drizzle-orm";
+import { db, getD1Binding, orders, cards, products, productVariants, users, vouchers } from "@/lib/db";
+import { eq, and, desc, inArray, isNull, lt } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { headers } from "next/headers";
 import { after } from "next/server";
@@ -27,7 +27,7 @@ import {
   type ClientRefundParams,
 } from "@/lib/payment/ldc";
 import type { PaymentLaunchData } from "@/lib/payment/types";
-import { createGatewayPayment, queryGatewayPayment } from "@/lib/payment/gateway";
+import { cancelGatewayPayment, createGatewayPayment, queryGatewayPayment } from "@/lib/payment/gateway";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { requireAdmin } from "@/lib/auth-utils";
@@ -35,6 +35,15 @@ import { getExpireTime } from "@/lib/time";
 import { getSystemSettings, getTelegramConfigWithToggles } from "@/lib/actions/system-settings";
 import { logger, getRequestIdFromHeaders } from "@/lib/logger";
 import { parseWalletAmount } from "@/lib/money";
+import { calculatePointsEarned, calculatePointsRedemption, splitBalancePayment } from "@/lib/membership";
+import { awardOrderPoints, reverseExternalOrderPoints } from "@/lib/member-service";
+import { getFulfillmentDueAt, isManualFulfillment } from "@/lib/fulfillment";
+import { getGatewayLanguage } from "@/lib/payment/language";
+import { isSecondFactorVerificationRequired, SECOND_FACTOR_REQUIRED_MESSAGE, requireSecondFactor } from "@/lib/security/two-factor-session";
+import { verifyTurnstileToken } from "@/lib/security/turnstile";
+import { normalizeEmail } from "@/lib/email-address";
+import { createGuestOrderAccessToken, hashGuestOrderAccessToken, verifyGuestOrderAccessToken } from "@/lib/order-access";
+import { sendGuestOrderCreatedEmail, sendGuestOrderDeliveryEmail } from "@/lib/email/cloudflare";
 import {
   sendNewOrderNotification,
   sendPaymentSuccessNotification,
@@ -58,6 +67,11 @@ async function getSiteUrl(): Promise<string> {
   return `${protocol}://${host}`;
 }
 
+async function getPaymentLanguage() {
+  const requestHeaders = await headers();
+  return getGatewayLanguage(requestHeaders.get("cookie"), requestHeaders.get("accept-language"));
+}
+
 // 生成订单号: 时间戳 + 随机字符
 function generateOrderNo(): string {
   const timestamp = Date.now().toString(36).toUpperCase();
@@ -70,34 +84,25 @@ export interface CreateOrderResult {
   message: string;
   orderNo?: string;
   paymentForm?: PaymentLaunchData;
+  requiresSecondFactor?: boolean;
+  guestAccessToken?: string;
 }
 
 /**
  * 创建订单
- * 1. 验证登录状态
+ * 1. 验证账号或游客联系方式
  * 2. 验证输入
  * 3. 检查库存
  * 4. 创建订单并锁定卡密（使用事务）
  * 5. 调用支付接口获取支付链接
- * 
- * 仅登录用户可下单
  */
 export async function createOrder(input: CreateOrderInput): Promise<CreateOrderResult> {
   const requestId = await getRequestIdFromHeaders();
   const log = logger.child({ requestId, action: "createOrder" });
 
-  // 1. 验证登录状态
+  // 1. 识别登录用户或游客。游客只能使用在线支付，并需通过邮箱与 Turnstile 验证。
   const session = await auth();
   const user = session?.user as { id?: string; username?: string; image?: string; provider?: string } | undefined;
-
-  if (!user?.id || user.id === "admin") {
-    log.warn("未登录用户尝试创建订单");
-    return {
-      success: false,
-      message: "请先登录后再下单",
-    };
-  }
-  const userId = user.id;
 
   // 2. 验证输入
   const validationResult = createOrderSchema.safeParse(input);
@@ -109,10 +114,47 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     };
   }
 
-  const { productId, quantity, paymentMethod } = validationResult.data;
+  if (user?.id === "admin") {
+    return { success: false, message: "管理员账号不能创建前台订单" };
+  }
+
+  const isGuest = !user?.id;
+  const userId = user?.id ?? null;
+  const guestEmail = isGuest && validationResult.data.email
+    ? normalizeEmail(validationResult.data.email)
+    : null;
+
+  if (isGuest) {
+    if (!guestEmail || !validationResult.data.turnstileToken) {
+      return { success: false, message: "填写接收订单通知的邮箱并完成人机验证后即可购买" };
+    }
+    if (validationResult.data.paymentMethod !== "gateway") {
+      return { success: false, message: "游客订单仅支持在线支付，登录后可使用余额、积分和优惠券" };
+    }
+    if (validationResult.data.usePoints || validationResult.data.voucherId) {
+      return { success: false, message: "积分和优惠券仅限登录账号使用" };
+    }
+    const requestHeaders = await headers();
+    const turnstile = await verifyTurnstileToken({
+      token: validationResult.data.turnstileToken,
+      remoteIp: requestHeaders.get("cf-connecting-ip") || undefined,
+      expectedAction: "guest_checkout",
+    });
+    if (!turnstile.success) return { success: false, message: turnstile.message };
+  }
+
+  if (userId) {
+    try {
+      await requireSecondFactor(userId);
+    } catch (error) {
+      return { success: false, message: error instanceof Error ? error.message : SECOND_FACTOR_REQUIRED_MESSAGE, requiresSecondFactor: true };
+    }
+  }
+
+  const { productId, variantId, quantity, paymentMethod, usePoints, voucherId } = validationResult.data;
 
   try {
-    log.info({ userId: user.id, productId, quantity, paymentMethod }, "开始创建订单");
+    log.info({ userId, guestEmail, productId, quantity, paymentMethod }, "开始创建订单");
 
     // 2.1 释放过期订单，确保库存准确（懒加载策略）
     await releaseExpiredOrders();
@@ -126,6 +168,17 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
       return { success: false, message: "商品不存在或已下架" };
     }
 
+    const activeVariants = await db.query.productVariants.findMany({
+      where: and(eq(productVariants.productId, productId), eq(productVariants.isActive, true)),
+      orderBy: [productVariants.sortOrder],
+    });
+    const selectedVariant = variantId ? activeVariants.find((variant) => variant.id === variantId) : null;
+    if (activeVariants.length > 0 && !selectedVariant) return { success: false, message: "请选择有效的商品规格" };
+    if (activeVariants.length === 0 && variantId) return { success: false, message: "该商品当前不支持规格选择" };
+    const cardVariantCondition = selectedVariant ? eq(cards.variantId, selectedVariant.id) : isNull(cards.variantId);
+    const unitPrice = selectedVariant?.price ?? product.price;
+    const variantLabel = selectedVariant ? ` · ${selectedVariant.name}` : "";
+
     // 验证购买数量限制
     if (quantity < product.minQuantity || quantity > product.maxQuantity) {
       return {
@@ -136,12 +189,15 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
 
     const { orderExpireMinutes } = await getSystemSettings();
 
-    const availableCards = await db
-      .select({ id: cards.id })
-      .from(cards)
-      .where(and(eq(cards.productId, productId), eq(cards.status, "available")))
-      .limit(quantity);
-    if (availableCards.length < quantity) {
+    const manualFulfillment = isManualFulfillment(product.fulfillmentMode);
+    const availableCards = manualFulfillment
+      ? []
+      : await db
+          .select({ id: cards.id })
+          .from(cards)
+          .where(and(eq(cards.productId, productId), cardVariantCondition, eq(cards.status, "available")))
+          .limit(quantity);
+    if (!manualFulfillment && availableCards.length < quantity) {
       throw new Error(`库存不足，当前仅剩 ${availableCards.length} 件`);
     }
 
@@ -149,57 +205,123 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     const orderId = crypto.randomUUID();
     const walletTransactionId = crypto.randomUUID();
     const orderNo = generateOrderNo();
-    const totalAmount = parseFloat(product.price) * quantity;
+    const guestAccessToken = isGuest ? createGuestOrderAccessToken() : undefined;
+    const guestAccessHash = guestAccessToken
+      ? await hashGuestOrderAccessToken(orderNo, guestAccessToken)
+      : null;
+    const totalAmount = parseFloat(unitPrice) * quantity;
     const totalCents = Math.round(totalAmount * 100);
     const createdAt = new Date();
     const expiredAt = getExpireTime(orderExpireMinutes);
     const createdEpoch = Math.floor(createdAt.getTime() / 1000);
     const expiredEpoch = Math.floor(expiredAt.getTime() / 1000);
-    const placeholders = cardIds.map(() => "?").join(", ");
-    const isBalance = paymentMethod === "balance";
+    const placeholders = cardIds.length > 0 ? cardIds.map(() => "?").join(", ") : "NULL";
+    const selectedVoucher = userId && voucherId
+      ? await db.query.vouchers.findFirst({ where: eq(vouchers.id, voucherId) })
+      : null;
+    if (voucherId) {
+      if (!selectedVoucher || selectedVoucher.type !== "discount" || selectedVoucher.status !== "claimed" || selectedVoucher.ownerUserId !== userId) {
+        throw new Error("所选满减券不可用，请重新选择");
+      }
+      if (selectedVoucher.expiresAt && selectedVoucher.expiresAt <= new Date()) {
+        throw new Error("所选满减券已过期");
+      }
+      if (totalCents < selectedVoucher.minOrderCents) {
+        throw new Error(`该满减券需满 ¥${(selectedVoucher.minOrderCents / 100).toFixed(2)} 才可使用`);
+      }
+    }
+    const voucherDiscountCents = selectedVoucher ? Math.min(totalCents, selectedVoucher.discountAmountCents) : 0;
+    const afterVoucherCents = totalCents - voucherDiscountCents;
+    const isVoucherOnly = Boolean(selectedVoucher && afterVoucherCents === 0);
+    const effectivePaymentMethod = isVoucherOnly ? "voucher" : paymentMethod;
+    if (paymentMethod === "voucher" && !isVoucherOnly) throw new Error("卡券支付方式不可用");
+    const isBalance = effectivePaymentMethod === "balance";
+    const isImmediatePayment = isBalance || effectivePaymentMethod === "voucher";
+    const member = isBalance ? await db.query.users.findFirst({
+      where: eq(users.id, userId!),
+      columns: { balanceCents: true, bonusBalanceCents: true, pointsBalance: true },
+    }) : null;
+    if (isBalance && !member) throw new Error("账号不存在");
+    const redemption = isBalance && usePoints
+      ? calculatePointsRedemption(afterVoucherCents, member?.pointsBalance || 0)
+      : { points: 0, discountCents: 0 };
+    const payableCents = afterVoucherCents - redemption.discountCents;
+    const split = isBalance ? splitBalancePayment(payableCents, member?.balanceCents || 0, member?.bonusBalanceCents || 0) : null;
+    if (isBalance && !split) throw new Error("账户余额不足，请先充值");
+    const cashSpentCents = split?.cashSpentCents || 0;
+    const bonusSpentCents = split?.bonusSpentCents || 0;
+    const pointsEarned = calculatePointsEarned(payableCents);
+    const initialStatus = isImmediatePayment
+      ? manualFulfillment ? "paid" : "completed"
+      : "pending";
+    const initialDueAt = isImmediatePayment
+      ? getFulfillmentDueAt(product.fulfillmentMode, createdAt)
+      : null;
+    const initialDueEpoch = initialDueAt ? Math.floor(initialDueAt.getTime() / 1000) : null;
+    const initialFulfilledEpoch = isImmediatePayment && !manualFulfillment ? createdEpoch : null;
+    const stockGuardSql = manualFulfillment
+      ? "1 = 1"
+      : `(SELECT COUNT(*) FROM cards
+          WHERE product_id = ? AND ${selectedVariant ? "variant_id = ?" : "variant_id IS NULL"} AND status = 'available' AND id IN (${placeholders})
+        ) = ?`;
+    const stockGuardBinds = manualFulfillment
+      ? []
+      : [productId, ...(selectedVariant ? [selectedVariant.id] : []), ...cardIds, quantity];
     const d1 = getD1Binding();
 
     const statements = [
       d1.prepare(`
         INSERT INTO orders (
-          id, order_no, product_id, product_name, product_price, quantity,
-          total_amount, payment_method, status, trade_no, user_id, username,
-          user_image, paid_at, expired_at, created_at, updated_at
+          id, order_no, product_id, product_variant_id, product_variant_name, product_name, product_price, quantity,
+          total_amount, original_amount, cash_spent_cents, bonus_spent_cents, points_redeemed, points_earned,
+          payment_method, status, fulfillment_mode, trade_no, user_id, username,
+          user_image, email, query_password, paid_at, delivery_due_at, fulfilled_at, expired_at, created_at, updated_at
         )
-        SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-        WHERE (
-          SELECT COUNT(*) FROM cards
-          WHERE product_id = ? AND status = 'available' AND id IN (${placeholders})
-        ) = ?
+        SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+        WHERE ${stockGuardSql}
         AND (? <> 'balance' OR EXISTS (
-          SELECT 1 FROM users WHERE id = ? AND balance_cents >= ?
+          SELECT 1 FROM users WHERE id = ? AND balance_cents >= ? AND bonus_balance_cents >= ? AND points_balance >= ?
+        ))
+        AND (? IS NULL OR EXISTS (
+          SELECT 1 FROM vouchers WHERE id = ? AND type = 'discount' AND status = 'claimed' AND owner_user_id = ?
         ))
         RETURNING id, order_no
       `).bind(
-        orderId, orderNo, productId, product.name, product.price, quantity,
-        totalAmount.toFixed(2), paymentMethod,
-        isBalance ? "completed" : "pending",
-        isBalance ? `BALANCE-${orderNo}` : null,
-        userId, user.username ?? null, user.image ?? null,
-        isBalance ? createdEpoch : null, expiredEpoch, createdEpoch, createdEpoch,
-        productId, ...cardIds, quantity, paymentMethod, userId, totalCents
+        orderId, orderNo, productId, selectedVariant?.id ?? null, selectedVariant?.name ?? null, product.name, unitPrice, quantity,
+        (payableCents / 100).toFixed(2), totalAmount.toFixed(2), cashSpentCents, bonusSpentCents, redemption.points, pointsEarned,
+        effectivePaymentMethod,
+        initialStatus, product.fulfillmentMode,
+        isImmediatePayment ? `${effectivePaymentMethod.toUpperCase()}-${orderNo}` : null,
+        userId, user?.username ?? null, user?.image ?? null, guestEmail, guestAccessHash,
+        isImmediatePayment ? createdEpoch : null, initialDueEpoch, initialFulfilledEpoch, expiredEpoch, createdEpoch, createdEpoch,
+        ...stockGuardBinds, effectivePaymentMethod, userId, cashSpentCents, bonusSpentCents, redemption.points,
+        voucherId ?? null, voucherId ?? "", userId
       ),
       d1.prepare(`
         UPDATE cards SET status = ?, order_id = ?, locked_at = ?, sold_at = ?
-        WHERE product_id = ? AND status = 'available'
+        WHERE ? = 'auto' AND product_id = ? AND ${selectedVariant ? "variant_id = ?" : "variant_id IS NULL"} AND status = 'available'
           AND id IN (${placeholders})
           AND EXISTS (SELECT 1 FROM orders WHERE id = ?)
       `).bind(
-        isBalance ? "sold" : "locked", orderId,
-        isBalance ? null : createdEpoch, isBalance ? createdEpoch : null,
-        productId, ...cardIds, orderId
+        isImmediatePayment ? "sold" : "locked", orderId,
+        isImmediatePayment ? null : createdEpoch, isImmediatePayment ? createdEpoch : null,
+        product.fulfillmentMode,
+        productId, ...(selectedVariant ? [selectedVariant.id] : []), ...cardIds, orderId
       ),
       d1.prepare(`
+        UPDATE vouchers
+        SET status = CASE WHEN ? = 1 THEN 'redeemed' ELSE 'reserved' END,
+            owner_user_id = ?, order_id = ?, redeemed_at = CASE WHEN ? = 1 THEN ? ELSE NULL END
+        WHERE id = ? AND type = 'discount' AND status = 'claimed' AND owner_user_id = ?
+          AND EXISTS (SELECT 1 FROM orders WHERE id = ?)
+      `).bind(isImmediatePayment ? 1 : 0, userId, orderId, isImmediatePayment ? 1 : 0, isImmediatePayment ? createdEpoch : null, voucherId ?? "", userId, orderId),
+      d1.prepare(`
         UPDATE users
-        SET balance_cents = balance_cents - ?, updated_at = ?
+        SET balance_cents = balance_cents - ?, bonus_balance_cents = bonus_balance_cents - ?,
+            points_balance = points_balance - ?, updated_at = ?
         WHERE id = ? AND ? = 'balance'
           AND EXISTS (SELECT 1 FROM orders WHERE id = ?)
-      `).bind(totalCents, createdEpoch, userId, paymentMethod, orderId),
+      `).bind(cashSpentCents, bonusSpentCents, redemption.points, createdEpoch, userId, effectivePaymentMethod, orderId),
       d1.prepare(`
         INSERT INTO wallet_transactions (
           id, user_id, type, amount_cents, balance_after_cents,
@@ -210,15 +332,27 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
         WHERE id = ? AND ? = 'balance'
           AND EXISTS (SELECT 1 FROM orders WHERE id = ?)
         ON CONFLICT(idempotency_key) DO NOTHING
-      `).bind(
-        walletTransactionId, -totalCents, orderId, `purchase:${orderId}`,
-        `购买 ${product.name}`, createdEpoch, userId, paymentMethod, orderId
+        `).bind(
+        walletTransactionId, -cashSpentCents, orderId, `purchase:${orderId}`,
+        `购买 ${product.name}${variantLabel}`, createdEpoch, userId, effectivePaymentMethod, orderId
       ),
       d1.prepare(`
+        INSERT INTO member_transactions (id,user_id,asset,type,amount,balance_after,reference_type,reference_id,idempotency_key,description,created_at)
+        SELECT ?,id,'bonus','purchase',?,bonus_balance_cents,'order',?,?,?,? FROM users
+        WHERE id = ? AND ? = 'balance' AND ? > 0 AND EXISTS (SELECT 1 FROM orders WHERE id = ?)
+        ON CONFLICT(idempotency_key) DO NOTHING
+      `).bind(crypto.randomUUID(), -bonusSpentCents, orderId, `bonus:purchase:${orderId}`, `购买 ${product.name}${variantLabel}`, createdEpoch, userId, effectivePaymentMethod, bonusSpentCents, orderId),
+      d1.prepare(`
+        INSERT INTO member_transactions (id,user_id,asset,type,amount,balance_after,reference_type,reference_id,idempotency_key,description,created_at)
+        SELECT ?,id,'points','purchase',?,points_balance,'order',?,?,?,? FROM users
+        WHERE id = ? AND ? = 'balance' AND ? > 0 AND EXISTS (SELECT 1 FROM orders WHERE id = ?)
+        ON CONFLICT(idempotency_key) DO NOTHING
+      `).bind(crypto.randomUUID(), -redemption.points, orderId, `points:purchase:${orderId}`, `订单 ${orderNo} 积分抵扣`, createdEpoch, userId, effectivePaymentMethod, redemption.points, orderId),
+      d1.prepare(`
         UPDATE products SET sales_count = sales_count + ?, updated_at = ?
-        WHERE id = ? AND ? = 'balance'
+        WHERE id = ? AND ? = 1
           AND EXISTS (SELECT 1 FROM orders WHERE id = ?)
-      `).bind(quantity, createdEpoch, productId, paymentMethod, orderId),
+      `).bind(quantity, createdEpoch, productId, isImmediatePayment ? 1 : 0, orderId),
     ];
     const [insertResult] = await d1.batch<{ id: string; order_no: string }>(statements);
     if (!insertResult.results[0]) {
@@ -226,8 +360,9 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     }
     const result = {
       order: { orderNo, createdAt, expiredAt },
-      totalAmount,
+      totalAmount: payableCents / 100,
     };
+    if (isImmediatePayment) await awardOrderPoints(orderId);
 
     // 4. 刷新页面缓存，确保库存显示准确
     revalidatePath("/");
@@ -235,24 +370,25 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
 
     // 5. 为外部支付创建托管收银台链接。
     let paymentForm: PaymentLaunchData | undefined;
-    if (paymentMethod === "gateway" || paymentMethod === "ldc") {
+    const siteUrl = await getSiteUrl();
+    if (effectivePaymentMethod === "gateway" || effectivePaymentMethod === "ldc") {
       try {
-        const siteUrl = await getSiteUrl();
-        paymentForm = paymentMethod === "gateway"
+        paymentForm = effectivePaymentMethod === "gateway"
           ? await createGatewayPayment({
               orderId: result.order.orderNo,
               amount: result.totalAmount,
-              productName: product.name,
+              productName: `${product.name}${variantLabel}`,
               productDescription: product.description || undefined,
               siteUrl,
-              successPath: `/order/result?out_trade_no=${encodeURIComponent(result.order.orderNo)}`,
-              cancelPath: `/order/result?out_trade_no=${encodeURIComponent(result.order.orderNo)}&cancelled=1`,
+              successPath: `/order/result?out_trade_no=${encodeURIComponent(result.order.orderNo)}${guestAccessToken ? `&access_token=${encodeURIComponent(guestAccessToken)}` : ""}`,
+              cancelPath: `/order/result?out_trade_no=${encodeURIComponent(result.order.orderNo)}&cancelled=1${guestAccessToken ? `&access_token=${encodeURIComponent(guestAccessToken)}` : ""}`,
+              language: await getPaymentLanguage(),
             })
-          : createPayment(result.order.orderNo, result.totalAmount, product.name, siteUrl);
+          : createPayment(result.order.orderNo, result.totalAmount, `${product.name}${variantLabel}`, siteUrl);
       } catch (error) {
         // 支付接口调用失败，但订单已创建
         log.error(
-          { err: error, orderNo: result.order.orderNo, userId: user.id },
+          { err: error, orderNo: result.order.orderNo, userId, guestEmail },
           "创建支付链接失败（订单已创建）"
         );
         return {
@@ -266,11 +402,12 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
     log.info(
       {
         orderNo: result.order.orderNo,
-        userId: user.id,
-        productId,
+        userId,
+        guestEmail,
+        productId, variantId: selectedVariant?.id,
         quantity,
         totalAmount: result.totalAmount,
-        paymentMethod,
+        paymentMethod: effectivePaymentMethod,
       },
       "订单创建成功"
     );
@@ -281,11 +418,11 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
         const config = await getTelegramConfigWithToggles();
         const payload: NewOrderNotificationPayload = {
           orderNo: result.order.orderNo,
-          productName: product.name,
+          productName: `${product.name}${variantLabel}`,
           quantity,
           totalAmount: result.totalAmount.toFixed(2),
-          paymentMethod,
-          username: user.username || null,
+          paymentMethod: effectivePaymentMethod,
+          username: user?.username || guestEmail,
           createdAt: result.order.createdAt,
           expiredAt: result.order.expiredAt!,
         };
@@ -295,15 +432,35 @@ export async function createOrder(input: CreateOrderInput): Promise<CreateOrderR
       }
     });
 
+    if (guestEmail && guestAccessToken) {
+      after(async () => {
+        try {
+          const accessUrl = new URL("/order/result", siteUrl);
+          accessUrl.searchParams.set("out_trade_no", result.order.orderNo);
+          accessUrl.searchParams.set("access_token", guestAccessToken);
+          await sendGuestOrderCreatedEmail({
+            to: guestEmail,
+            orderNo: result.order.orderNo,
+            productName: `${product.name}${variantLabel}`,
+            amount: result.totalAmount.toFixed(2),
+            accessUrl: accessUrl.toString(),
+          });
+        } catch (error) {
+          log.error({ err: error, orderNo: result.order.orderNo }, "游客订单邮件发送失败");
+        }
+      });
+    }
+
     return {
       success: true,
       message: "订单创建成功",
       orderNo: result.order.orderNo,
       paymentForm,
+      guestAccessToken,
     };
   } catch (error) {
     log.error(
-      { err: error, userId: user.id, productId, quantity, paymentMethod },
+      { err: error, userId, guestEmail, productId, quantity, paymentMethod },
       "创建订单失败"
     );
     return {
@@ -332,27 +489,51 @@ export async function handlePaymentSuccess(
     });
     if (!pendingOrder) throw new Error("订单不存在或已处理");
     const nowEpoch = Math.floor(Date.now() / 1000);
+    const paidAt = new Date();
+    const manualFulfillment = isManualFulfillment(pendingOrder.fulfillmentMode);
+    const deliveryDueAt = getFulfillmentDueAt(pendingOrder.fulfillmentMode, paidAt);
+    const deliveryDueEpoch = deliveryDueAt ? Math.floor(deliveryDueAt.getTime() / 1000) : null;
     const d1 = getD1Binding();
     const statements = [
       d1.prepare(`
         UPDATE cards SET status = 'sold', sold_at = ?
-        WHERE order_id = ?
+        WHERE ? = 'auto' AND order_id = ?
           AND EXISTS (SELECT 1 FROM orders WHERE id = ? AND status = 'pending')
-      `).bind(nowEpoch, pendingOrder.id, pendingOrder.id),
+      `).bind(nowEpoch, pendingOrder.fulfillmentMode, pendingOrder.id, pendingOrder.id),
       d1.prepare(`
         UPDATE products SET sales_count = sales_count + ?, updated_at = ?
         WHERE id = ?
           AND EXISTS (SELECT 1 FROM orders WHERE id = ? AND status = 'pending')
       `).bind(pendingOrder.quantity, nowEpoch, pendingOrder.productId, pendingOrder.id),
       d1.prepare(`
-        UPDATE orders SET status = 'completed', trade_no = ?, paid_at = ?, updated_at = ?
+        UPDATE vouchers SET status = 'redeemed', redeemed_at = ?
+        WHERE order_id = ? AND status = 'reserved'
+          AND EXISTS (SELECT 1 FROM orders WHERE id = ? AND status = 'pending')
+      `).bind(nowEpoch, pendingOrder.id, pendingOrder.id),
+      d1.prepare(`
+        UPDATE orders
+        SET status = ?, trade_no = ?, paid_at = ?, delivery_due_at = ?, fulfilled_at = ?, updated_at = ?
         WHERE id = ? AND status = 'pending'
         RETURNING id
-      `).bind(tradeNo, nowEpoch, nowEpoch, pendingOrder.id),
+      `).bind(
+        manualFulfillment ? "paid" : "completed",
+        tradeNo,
+        nowEpoch,
+        deliveryDueEpoch,
+        manualFulfillment ? null : nowEpoch,
+        nowEpoch,
+        pendingOrder.id
+      ),
     ];
     const batchResult = await d1.batch<{ id: string }>(statements);
-    if (!batchResult[2]?.results[0]) throw new Error("订单不存在或已处理");
-    const result = { ...pendingOrder, status: "completed" as const, tradeNo, paidAt: new Date() };
+    if (!batchResult[3]?.results[0]) throw new Error("订单不存在或已处理");
+    await awardOrderPoints(pendingOrder.id);
+    const result = {
+      ...pendingOrder,
+      status: manualFulfillment ? "paid" as const : "completed" as const,
+      tradeNo,
+      paidAt,
+    };
     if (pendingOrder.productId) {
       const product = await db.query.products.findFirst({
         where: eq(products.id, pendingOrder.productId),
@@ -386,6 +567,28 @@ export async function handlePaymentSuccess(
         console.error("[Telegram] 支付成功通知发送失败:", e);
       }
     });
+
+    if (result.email && !manualFulfillment) {
+      after(async () => {
+        try {
+          const deliveredCards = await db.query.cards.findMany({
+            where: and(eq(cards.orderId, result.id), eq(cards.status, "sold")),
+            columns: { content: true },
+          });
+          if (deliveredCards.length > 0) {
+            await sendGuestOrderDeliveryEmail({
+              to: result.email!,
+              orderNo: result.orderNo,
+              productName: result.productVariantName ? `${result.productName} · ${result.productVariantName}` : result.productName,
+              cards: deliveredCards.map((card) => card.content),
+              orderUrl: `https://game3dtech.com/order/result?out_trade_no=${encodeURIComponent(result.orderNo)}`,
+            });
+          }
+        } catch (error) {
+          log.error({ err: error }, "游客自动发货邮件发送失败");
+        }
+      });
+    }
 
     log.info("支付成功回调处理完成");
     return true;
@@ -425,9 +628,13 @@ export async function releaseExpiredOrders(): Promise<number> {
             and(
               eq(orders.status, "pending"),
               inArray(orders.id, orderIds),
-              lt(orders.expiredAt, new Date())
-            )
-          ),
+            lt(orders.expiredAt, new Date())
+          )
+        ),
+        db
+          .update(vouchers)
+          .set({ status: "claimed", orderId: null })
+          .where(and(eq(vouchers.status, "reserved"), inArray(vouchers.orderId, orderIds))),
       ]);
     }
 
@@ -477,11 +684,17 @@ export async function adminCompleteOrder(
         )
       `).bind(order.quantity, nowEpoch, order.productId, orderId),
       d1.prepare(`
+        UPDATE vouchers SET status = 'redeemed', redeemed_at = ?
+        WHERE order_id = ? AND status = 'reserved'
+          AND EXISTS (SELECT 1 FROM orders WHERE id = ? AND status IN ('pending', 'paid'))
+      `).bind(nowEpoch, orderId, orderId),
+      d1.prepare(`
         UPDATE orders SET status = 'completed', paid_at = ?, admin_remark = ?, updated_at = ?
-        WHERE id = ? AND status IN ('pending', 'paid') RETURNING id
+        WHERE id = ? AND status IN ('pending', 'paid') AND fulfillment_mode = 'auto' RETURNING id
       `).bind(nowEpoch, adminRemark ?? null, nowEpoch, orderId),
     ]);
-    if (!results[2]?.results[0]) throw new Error("订单状态不允许手动完成");
+    if (!results[3]?.results[0]) throw new Error("订单状态不允许手动完成");
+    await awardOrderPoints(orderId);
     if (order.productId) {
       const product = await db.query.products.findFirst({
         where: eq(products.id, order.productId),
@@ -508,6 +721,228 @@ export async function adminCompleteOrder(
 }
 
 /**
+ * 人工发货：每个非空行作为一条卡密交付记录，并一次性完成订单。
+ */
+export async function adminFulfillManualOrder(
+  orderId: string,
+  deliveryContent: string,
+  adminRemark?: string
+): Promise<{ success: boolean; message: string }> {
+  try {
+    await requireAdmin();
+  } catch {
+    return { success: false, message: "需要管理员权限" };
+  }
+
+  const normalizedOrderId = orderId.trim();
+  const deliveryItems = deliveryContent
+    .split(/\r?\n/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  if (!normalizedOrderId) return { success: false, message: "订单 ID 无效" };
+  if (deliveryItems.length === 0) return { success: false, message: "请填写发货内容" };
+  if (deliveryItems.some((item) => item.length > 1000)) {
+    return { success: false, message: "单条发货内容不能超过 1000 个字符" };
+  }
+  if (deliveryContent.length > 20_000) {
+    return { success: false, message: "发货内容过长" };
+  }
+
+  try {
+    const order = await db.query.orders.findFirst({
+      where: eq(orders.id, normalizedOrderId),
+      columns: {
+        id: true,
+        orderNo: true,
+        productId: true,
+        productVariantId: true,
+        productName: true,
+        quantity: true,
+        status: true,
+        fulfillmentMode: true,
+        email: true,
+      },
+    });
+    if (!order) throw new Error("订单不存在");
+    if (order.status !== "paid" || !isManualFulfillment(order.fulfillmentMode)) {
+      throw new Error("仅已支付的人工发货订单可以执行此操作");
+    }
+    if (!order.productId) throw new Error("商品已删除，无法写入发货记录");
+    if (deliveryItems.length !== order.quantity) {
+      throw new Error(`该订单购买 ${order.quantity} 件，请填写 ${order.quantity} 行发货内容`);
+    }
+
+    const nowEpoch = Math.floor(Date.now() / 1000);
+    const d1 = getD1Binding();
+    const statements = deliveryItems.map((content) =>
+      d1.prepare(`
+        INSERT INTO cards (id, product_id, variant_id, content, status, order_id, sold_at, created_at)
+        SELECT ?, ?, ?, ?, 'sold', ?, ?, ?
+        WHERE EXISTS (
+          SELECT 1 FROM orders WHERE id = ? AND status = 'paid' AND fulfillment_mode <> 'auto'
+        )
+      `).bind(
+        crypto.randomUUID(),
+        order.productId,
+        order.productVariantId,
+        content,
+        order.id,
+        nowEpoch,
+        nowEpoch,
+        order.id
+      )
+    );
+    statements.push(
+      d1.prepare(`
+        UPDATE orders
+        SET status = 'completed', fulfilled_at = ?, admin_remark = ?, updated_at = ?
+        WHERE id = ? AND status = 'paid' AND fulfillment_mode <> 'auto'
+        RETURNING id
+      `).bind(nowEpoch, adminRemark?.trim() || null, nowEpoch, order.id)
+    );
+    const results = await d1.batch<{ id: string }>(statements);
+    if (!results.at(-1)?.results[0]) throw new Error("订单已被处理，请刷新后重试");
+
+    revalidatePath("/admin/orders");
+    revalidatePath(`/admin/orders/${order.id}`);
+    revalidatePath("/order/my");
+    if (order.email) {
+      after(async () => {
+        try {
+          await sendGuestOrderDeliveryEmail({
+            to: order.email!,
+            orderNo: order.orderNo,
+            productName: order.productName,
+            cards: deliveryItems,
+            orderUrl: `https://game3dtech.com/order/result?out_trade_no=${encodeURIComponent(order.orderNo)}`,
+          });
+        } catch (error) {
+          logger.error({ err: error, action: "adminFulfillManualOrder", orderNo: order.orderNo }, "游客人工发货邮件发送失败");
+        }
+      });
+    }
+    return { success: true, message: "发货成功，用户已可查看卡密" };
+  } catch (error) {
+    console.error("人工发货失败:", error);
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : "发货失败，请稍后重试",
+    };
+  }
+}
+
+async function authorizeOrderAccess(
+  order: { orderNo: string; userId: string | null; queryPassword: string | null },
+  accessToken?: string | null
+): Promise<{ authorized: boolean; userId: string | null }> {
+  const session = await auth();
+  const sessionUser = session?.user as { id?: string } | undefined;
+  const userId = sessionUser?.id && sessionUser.id !== "admin" ? sessionUser.id : null;
+  if (userId && order.userId === userId) return { authorized: true, userId };
+  if (!order.userId && await verifyGuestOrderAccessToken({
+    orderNo: order.orderNo,
+    token: accessToken,
+    expectedHash: order.queryPassword,
+  })) {
+    return { authorized: true, userId: null };
+  }
+  return { authorized: false, userId };
+}
+
+export async function resumePendingOrderPayment(
+  orderNo: string,
+  accessToken?: string
+): Promise<{ success: boolean; message: string; paymentForm?: PaymentLaunchData }> {
+  const normalizedOrderNo = orderNo.trim();
+  if (!normalizedOrderNo) return { success: false, message: "订单号无效" };
+
+  try {
+    const order = await db.query.orders.findFirst({ where: eq(orders.orderNo, normalizedOrderNo) });
+    if (!order) return { success: false, message: "订单不存在" };
+    const access = await authorizeOrderAccess(order, accessToken);
+    if (!access.authorized) return { success: false, message: "订单访问凭证无效" };
+    if (order.status !== "pending") return { success: false, message: "该订单当前不需要支付" };
+    if (order.expiredAt && order.expiredAt <= new Date()) {
+      await releaseExpiredOrders();
+      return { success: false, message: "订单已过期，库存已经释放，请重新下单" };
+    }
+
+    const siteUrl = await getSiteUrl();
+    const amount = Number(order.totalAmount);
+    if (!Number.isFinite(amount) || amount <= 0) return { success: false, message: "订单金额无效" };
+    const paymentForm = order.paymentMethod === "gateway"
+      ? await createGatewayPayment({
+          orderId: order.orderNo,
+          amount,
+          productName: order.productVariantName ? `${order.productName} · ${order.productVariantName}` : order.productName,
+          siteUrl,
+          successPath: `/order/result?out_trade_no=${encodeURIComponent(order.orderNo)}${accessToken ? `&access_token=${encodeURIComponent(accessToken)}` : ""}`,
+          cancelPath: `/order/result?out_trade_no=${encodeURIComponent(order.orderNo)}&cancelled=1${accessToken ? `&access_token=${encodeURIComponent(accessToken)}` : ""}`,
+          language: await getPaymentLanguage(),
+        })
+      : order.paymentMethod === "ldc"
+        ? createPayment(order.orderNo, amount, order.productName, siteUrl)
+        : undefined;
+    if (!paymentForm) return { success: false, message: "该支付方式不支持重新发起付款" };
+    return { success: true, message: "正在打开支付页面", paymentForm };
+  } catch (error) {
+    logger.error({ err: error, action: "resumePendingOrderPayment", orderNo: normalizedOrderNo }, "重新发起订单支付失败");
+    return { success: false, message: error instanceof Error ? error.message : "重新支付失败，请稍后重试" };
+  }
+}
+
+export async function cancelPendingOrder(
+  orderNo: string,
+  accessToken?: string
+): Promise<{ success: boolean; message: string }> {
+  const normalizedOrderNo = orderNo.trim();
+  if (!normalizedOrderNo) return { success: false, message: "订单号无效" };
+
+  try {
+    const order = await db.query.orders.findFirst({ where: eq(orders.orderNo, normalizedOrderNo) });
+    if (!order) return { success: false, message: "订单不存在" };
+    const access = await authorizeOrderAccess(order, accessToken);
+    if (!access.authorized) return { success: false, message: "订单访问凭证无效" };
+    if (order.status !== "pending") return { success: false, message: "只有待支付订单可以取消" };
+
+    if (order.paymentMethod === "gateway") {
+      await cancelGatewayPayment(order.orderNo);
+    } else if (order.paymentMethod === "ldc") {
+      return { success: false, message: "该历史支付方式无法安全取消，请等待订单自动过期" };
+    }
+
+    const nowEpoch = Math.floor(Date.now() / 1000);
+    const d1 = getD1Binding();
+    const results = await d1.batch<{ id: string }>([
+      d1.prepare(`
+        UPDATE cards SET status = 'available', order_id = NULL, locked_at = NULL
+        WHERE order_id = ? AND status = 'locked'
+          AND EXISTS (SELECT 1 FROM orders WHERE id = ? AND status = 'pending')
+      `).bind(order.id, order.id),
+      d1.prepare(`
+        UPDATE vouchers SET status = 'claimed', order_id = NULL
+        WHERE order_id = ? AND status = 'reserved'
+          AND EXISTS (SELECT 1 FROM orders WHERE id = ? AND status = 'pending')
+      `).bind(order.id, order.id),
+      d1.prepare(`
+        UPDATE orders SET status = 'cancelled', updated_at = ?
+        WHERE id = ? AND status = 'pending' RETURNING id
+      `).bind(nowEpoch, order.id),
+    ]);
+    if (!results[2]?.results[0]) return { success: false, message: "订单已被处理，请刷新后重试" };
+    revalidatePath("/");
+    revalidatePath("/order/my");
+    revalidatePath(`/order/result?out_trade_no=${encodeURIComponent(order.orderNo)}`);
+    revalidatePath("/admin/orders");
+    return { success: true, message: "订单已取消，锁定库存已经释放" };
+  } catch (error) {
+    logger.error({ err: error, action: "cancelPendingOrder", orderNo: normalizedOrderNo }, "取消待支付订单失败");
+    return { success: false, message: error instanceof Error ? error.message : "取消订单失败，请稍后重试" };
+  }
+}
+
+/**
  * 获取当前登录用户的历史订单
  */
 export async function getUserOrders() {
@@ -518,6 +953,8 @@ export async function getUserOrders() {
     if (!user?.id || user.id === "admin") {
       return { success: false, message: "请先登录", data: [] };
     }
+
+    const deliveryLocked = await isSecondFactorVerificationRequired(user.id);
 
     const userOrders = await db.query.orders.findMany({
       where: eq(orders.userId, user.id),
@@ -549,7 +986,12 @@ export async function getUserOrders() {
         paymentMethod: order.paymentMethod,
         createdAt: order.createdAt,
         paidAt: order.paidAt,
-        cards: cardsToShow.map((c) => c.content),
+        fulfillmentMode: order.fulfillmentMode,
+        deliveryDueAt: order.deliveryDueAt,
+        fulfilledAt: order.fulfilledAt,
+        expiredAt: order.expiredAt,
+        cards: deliveryLocked ? [] : cardsToShow.map((c) => c.content),
+        deliveryLocked: deliveryLocked && cardsToShow.length > 0,
       };
     });
 
@@ -570,19 +1012,10 @@ export async function getUserOrders() {
 /**
  * 根据订单号获取订单详情（需验证用户身份）
  */
-export async function getOrderByNo(orderNo: string) {
+export async function getOrderByNo(orderNo: string, accessToken?: string) {
   try {
     const requestId = await getRequestIdFromHeaders();
     const log = logger.child({ requestId, action: "getOrderByNo", orderNo });
-
-    const session = await auth();
-    const user = session?.user as { id?: string; provider?: string } | undefined;
-
-    if (!user?.id || user.id === "admin") {
-      return { success: false, message: "请先登录" };
-    }
-
-    const userId = user.id;
 
     function toCents(value: string): number | null {
       const amount = parseWalletAmount(value);
@@ -592,7 +1025,7 @@ export async function getOrderByNo(orderNo: string) {
 
     const fetchOrder = () =>
       db.query.orders.findFirst({
-        where: and(eq(orders.orderNo, orderNo), eq(orders.userId, userId)),
+        where: eq(orders.orderNo, orderNo),
         with: {
           cards: {
             columns: {
@@ -607,8 +1040,13 @@ export async function getOrderByNo(orderNo: string) {
     let order = await fetchOrder();
 
     if (!order) {
-      return { success: false, message: "订单不存在或无权访问" };
+      return { success: false, message: "订单不存在" };
     }
+    const access = await authorizeOrderAccess(order, accessToken);
+    if (!access.authorized) return { success: false, message: "订单不存在或访问凭证无效" };
+    const deliveryLocked = access.userId
+      ? await isSecondFactorVerificationRequired(access.userId)
+      : false;
 
     // notify 可能因为网络/平台重试失败而迟迟未到；这里做一次“按需补偿查询”。
     // 回调延迟时主动查单补偿，仍会校验订单号与金额后才允许发货。
@@ -683,7 +1121,12 @@ export async function getOrderByNo(orderNo: string) {
         paymentMethod: order.paymentMethod,
         createdAt: order.createdAt,
         paidAt: order.paidAt,
-        cards: cardsToShow.map((c) => c.content),
+        fulfillmentMode: order.fulfillmentMode,
+        deliveryDueAt: order.deliveryDueAt,
+        fulfilledAt: order.fulfilledAt,
+        expiredAt: order.expiredAt,
+        cards: deliveryLocked ? [] : cardsToShow.map((c) => c.content),
+        deliveryLocked: deliveryLocked && cardsToShow.length > 0,
       },
     };
   } catch (error) {
@@ -779,7 +1222,7 @@ export async function getOrderReceiptByNo(
 export async function requestRefund(
   orderNo: string,
   reason: string
-): Promise<{ success: boolean; message: string }> {
+): Promise<{ success: boolean; message: string; requiresSecondFactor?: boolean }> {
   const requestId = await getRequestIdFromHeaders();
   const log = logger.child({ requestId, action: "requestRefund", orderNo });
 
@@ -795,6 +1238,12 @@ export async function requestRefund(
     if (!user?.id || user.id === "admin") {
       log.warn("未登录用户尝试申请退款");
       return { success: false, message: "请先登录" };
+    }
+
+    try {
+      await requireSecondFactor(user.id);
+    } catch (error) {
+      return { success: false, message: error instanceof Error ? error.message : SECOND_FACTOR_REQUIRED_MESSAGE, requiresSecondFactor: true };
     }
 
     if (!reason || reason.trim().length < 5) {
@@ -902,7 +1351,11 @@ export async function approveRefund(
 
     if (order.paymentMethod === "balance") {
       if (!order.userId) return { success: false, message: "余额订单缺少用户信息" };
-      const refundCents = Math.round(parseFloat(order.totalAmount) * 100);
+      const cashRefundCents = order.originalAmount === null
+        ? Math.round(parseFloat(order.totalAmount) * 100)
+        : order.cashSpentCents;
+      const bonusRefundCents = order.bonusSpentCents;
+      const pointsDelta = order.pointsRedeemed - order.pointsEarned;
       const nowEpoch = Math.floor(Date.now() / 1000);
       const idempotencyKey = `refund:${order.id}`;
       const d1 = getD1Binding();
@@ -924,7 +1377,12 @@ export async function approveRefund(
             AND NOT EXISTS (
               SELECT 1 FROM wallet_transactions WHERE idempotency_key = ?
             )
-        `).bind(refundCents, nowEpoch, order.userId, order.id, idempotencyKey),
+        `).bind(cashRefundCents, nowEpoch, order.userId, order.id, idempotencyKey),
+        d1.prepare(`
+          UPDATE users SET bonus_balance_cents = bonus_balance_cents + ?, points_balance = points_balance + ?, updated_at = ?
+          WHERE id = ? AND EXISTS (SELECT 1 FROM orders WHERE id = ? AND status = 'refunded')
+            AND NOT EXISTS (SELECT 1 FROM member_transactions WHERE idempotency_key = ?)
+        `).bind(bonusRefundCents, pointsDelta, nowEpoch, order.userId, order.id, `benefits:refund:${order.id}`),
         d1.prepare(`
           INSERT INTO wallet_transactions (
             id, user_id, type, amount_cents, balance_after_cents,
@@ -935,9 +1393,19 @@ export async function approveRefund(
             AND EXISTS (SELECT 1 FROM orders WHERE id = ? AND status = 'refunded')
           ON CONFLICT(idempotency_key) DO NOTHING
         `).bind(
-          crypto.randomUUID(), refundCents, order.id, idempotencyKey,
+          crypto.randomUUID(), cashRefundCents, order.id, idempotencyKey,
           `订单 ${order.orderNo} 退款`, nowEpoch, order.userId, order.id
         ),
+        d1.prepare(`
+          INSERT INTO member_transactions (id,user_id,asset,type,amount,balance_after,reference_type,reference_id,idempotency_key,description,created_at)
+          SELECT ?,id,'bonus','refund',?,bonus_balance_cents,'order',?,?,?,? FROM users WHERE id = ?
+          ON CONFLICT(idempotency_key) DO NOTHING
+        `).bind(crypto.randomUUID(), bonusRefundCents, order.id, `benefits:refund:${order.id}`, `订单 ${order.orderNo} 退回奖励金`, nowEpoch, order.userId),
+        d1.prepare(`
+          INSERT INTO member_transactions (id,user_id,asset,type,amount,balance_after,reference_type,reference_id,idempotency_key,description,created_at)
+          SELECT ?,id,'points','refund',?,points_balance,'order',?,?,?,? FROM users WHERE id = ? AND ? <> 0
+          ON CONFLICT(idempotency_key) DO NOTHING
+        `).bind(crypto.randomUUID(), pointsDelta, order.id, `points:refund:${order.id}`, `订单 ${order.orderNo} 退款积分冲正`, nowEpoch, order.userId, pointsDelta),
         d1.prepare(`
           UPDATE cards SET status = 'refunded'
           WHERE order_id = ? AND EXISTS (
@@ -996,6 +1464,7 @@ export async function approveRefund(
         updatedAt: new Date(),
       })
       .where(eq(orders.id, orderId));
+    await reverseExternalOrderPoints(orderId);
 
     // 退款后将卡密标记为 refunded（保留 orderId、soldAt 用于溯源）
     // 仅管理员可通过"重新上架"清空关联并改为 available
@@ -1080,7 +1549,6 @@ export async function rejectRefund(
         updatedAt: new Date(),
       })
       .where(eq(orders.id, orderId));
-
     revalidatePath("/admin/orders");
     revalidatePath("/order/my");
 
@@ -1258,6 +1726,7 @@ export async function markOrderRefunded(
         updatedAt: new Date(),
       })
       .where(eq(orders.id, orderId));
+    await reverseExternalOrderPoints(orderId);
 
     // 退款后将卡密标记为 refunded（保留 orderId、soldAt 用于溯源）
     // 仅管理员可通过"重新上架"清空关联并改为 available

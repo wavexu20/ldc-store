@@ -9,6 +9,10 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { getActiveCategories } from "@/lib/actions/categories";
 import { searchProducts } from "@/lib/actions/products";
+import { getTranslator } from "@/lib/i18n-server";
+import type { MessageKey } from "@/lib/i18n";
+import { localizeProducts } from "@/lib/product-i18n";
+import { localizeCategory } from "@/lib/category-i18n";
 
 // 强制动态渲染，避免构建时查询数据库
 export const dynamic = "force-dynamic";
@@ -17,12 +21,12 @@ const PAGE_SIZE = 12;
 
 type SortValue = "relevance" | "price_asc" | "price_desc" | "sales_desc" | "newest";
 
-const SORT_OPTIONS: Array<{ value: SortValue; label: string }> = [
-  { value: "relevance", label: "相关度" },
-  { value: "sales_desc", label: "销量" },
-  { value: "newest", label: "最新" },
-  { value: "price_asc", label: "价格↑" },
-  { value: "price_desc", label: "价格↓" },
+const SORT_OPTIONS: Array<{ value: SortValue; label: MessageKey }> = [
+  { value: "relevance", label: "relevance" },
+  { value: "sales_desc", label: "sales" },
+  { value: "newest", label: "newest" },
+  { value: "price_asc", label: "priceLow" },
+  { value: "price_desc", label: "priceHigh" },
 ];
 
 function normalizeSort(value?: string): SortValue {
@@ -56,13 +60,14 @@ interface SearchPageProps {
 }
 
 export default async function SearchPage({ searchParams }: SearchPageProps) {
+  const { locale, t } = await getTranslator();
   const params = await searchParams;
 
   const q = (params.q || "").trim();
   const currentSort = normalizeSort(params.sort);
   const currentPage = Math.max(1, Number.parseInt(params.page || "1", 10) || 1);
 
-  const categories = await getActiveCategories();
+  const categories = (await getActiveCategories()).map((category) => localizeCategory(category, locale));
   const selectedCategory = params.category
     ? categories.find((c) => c.slug === params.category)
     : undefined;
@@ -78,6 +83,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
         offset,
       })
     : { items: [], total: 0 };
+  const localizedItems = localizeProducts(result.items, locale);
 
   const totalPages = Math.max(1, Math.ceil(result.total / PAGE_SIZE));
   if (shouldQuery && result.total > 0 && currentPage > totalPages) {
@@ -97,10 +103,10 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
       {/* Header */}
       <div className="space-y-2">
         <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-50">
-          搜索商品
+          {t("searchTitle")}
         </h1>
         <p className="text-zinc-600 dark:text-zinc-400">
-          输入关键词搜索商品名称、描述或详情内容
+          {t("searchDescription")}
         </p>
       </div>
 
@@ -117,7 +123,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
             size="sm"
             className="shrink-0 rounded-full"
           >
-            全部分类
+            {t("allCategories")}
           </Button>
         </Link>
         {categories.map((category) => (
@@ -141,17 +147,17 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           {q ? (
             <>
-              <span>关键词</span>
+              <span>{t("keyword")}</span>
               <Badge variant="secondary">{q}</Badge>
               {selectedCategory ? (
                 <>
-                  <span>· 分类</span>
+                  <span>· {t("category")}</span>
                   <Badge variant="outline">{selectedCategory.name}</Badge>
                 </>
               ) : null}
             </>
           ) : (
-            <span>请输入关键词开始搜索</span>
+            <span>{t("enterKeyword")}</span>
           )}
         </div>
 
@@ -170,7 +176,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
                 variant={currentSort === opt.value ? "default" : "outline"}
                 className="rounded-full"
               >
-                {opt.label}
+                {t(opt.label)}
               </Button>
             </Link>
           ))}
@@ -182,31 +188,31 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
         <div className="rounded-xl border bg-muted/20 p-10 text-center">
           <Search className="mx-auto h-10 w-10 text-muted-foreground/60" />
           <p className="mt-3 text-sm text-muted-foreground">
-            在上方输入关键词，例如商品名称、标签或用途。
+            {t("searchHint")}
           </p>
         </div>
       ) : q.length < 2 ? (
         <div className="rounded-xl border bg-muted/20 p-10 text-center">
           <Search className="mx-auto h-10 w-10 text-muted-foreground/60" />
           <p className="mt-3 text-sm text-muted-foreground">
-            请输入至少 2 个字符以获得更准确的结果。
+            {t("searchMin")}
           </p>
         </div>
       ) : result.total === 0 ? (
         <div className="rounded-xl border bg-muted/20 p-10 text-center">
           <Package className="mx-auto h-10 w-10 text-muted-foreground/60" />
-          <p className="mt-3 text-sm text-muted-foreground">未找到相关商品</p>
+          <p className="mt-3 text-sm text-muted-foreground">{t("noSearchResults")}</p>
         </div>
       ) : (
         <>
           <div className="flex items-center justify-between text-sm text-muted-foreground">
             <span>
-              共 {result.total} 条结果 · 第 {safePage}/{totalPages} 页
+              {t("resultCount", { count: result.total, page: safePage, pages: totalPages })}
             </span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {result.items.map((product) => (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-[repeat(auto-fill,minmax(15rem,18rem))]">
+            {localizedItems.map((product) => (
               <ProductCard
                 key={product.id}
                 id={product.id}
@@ -217,6 +223,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
                 originalPrice={product.originalPrice}
                 coverImage={product.coverImage}
                 stock={product.stock}
+                fulfillmentMode={product.fulfillmentMode}
                 isFeatured={product.isFeatured}
                 salesCount={product.salesCount}
                 category={product.category}
@@ -231,7 +238,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
             {safePage <= 1 ? (
               <Button variant="outline" disabled className="gap-2">
                 <ArrowLeft className="h-4 w-4" />
-                上一页
+                {t("previous")}
               </Button>
             ) : (
               <Button asChild variant="outline" className="gap-2">
@@ -244,14 +251,14 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
                   })}
                 >
                   <ArrowLeft className="h-4 w-4" />
-                  上一页
+                  {t("previous")}
                 </Link>
               </Button>
             )}
 
             {safePage >= totalPages ? (
               <Button variant="outline" disabled className="gap-2">
-                下一页
+                {t("next")}
                 <ArrowRight className="h-4 w-4" />
               </Button>
             ) : (
@@ -264,7 +271,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
                     page: safePage + 1,
                   })}
                 >
-                  下一页
+                  {t("next")}
                   <ArrowRight className="h-4 w-4" />
                 </Link>
               </Button>

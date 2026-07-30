@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 
 import { isRefundEnabled, getRefundMode } from "@/lib/payment/ldc";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ShoppingCart, CheckCircle2, Clock, RotateCcw } from "lucide-react";
+import { ShoppingCart, CheckCircle2, Clock, RotateCcw, PackageCheck } from "lucide-react";
 
 import {
   getAdminOrdersPage,
@@ -108,7 +108,7 @@ export default async function OrdersPage({ searchParams }: OrdersPageProps) {
         </div>
 
         {/* Stats */}
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Card className="py-4">
             <CardContent className="px-4">
               <div className="flex items-center gap-3">
@@ -121,6 +121,23 @@ export default async function OrdersPage({ searchParams }: OrdersPageProps) {
                   </p>
                   <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
                     待支付
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="py-4">
+            <CardContent className="px-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-950/40">
+                  <PackageCheck className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xl font-semibold leading-none text-zinc-900 dark:text-zinc-50">
+                    {result.stats.awaitingFulfillment}
+                  </p>
+                  <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                    待人工发货
                   </p>
                 </div>
               </div>

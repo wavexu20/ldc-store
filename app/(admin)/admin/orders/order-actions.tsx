@@ -22,11 +22,12 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { MoreHorizontal, CheckCircle2, Eye, Copy, RotateCcw, XCircle, Loader2, Globe, Trash2 } from "lucide-react";
-import { adminCompleteOrder, approveRefund, rejectRefund } from "@/lib/actions/orders";
+import { adminCompleteOrder, adminFulfillManualOrder, approveRefund, rejectRefund } from "@/lib/actions/orders";
 import { deleteAdminOrders } from "@/lib/actions/admin-orders";
 import { toast } from "sonner";
 import type { RefundMode } from "@/lib/payment/ldc";
 import { shouldUseClientRefund } from "./order-meta";
+import type { FulfillmentMode } from "@/lib/fulfillment";
 
 interface OrderActionsProps {
   orderId: string;
@@ -36,17 +37,38 @@ interface OrderActionsProps {
   refundReason?: string | null;
   refundEnabled?: boolean;
   refundMode?: RefundMode;
+  fulfillmentMode: FulfillmentMode;
+  quantity: number;
 }
 
-export function OrderActions({ orderId, orderNo, status, paymentMethod, refundReason, refundEnabled = false, refundMode = 'disabled' }: OrderActionsProps) {
+export function OrderActions({ orderId, orderNo, status, paymentMethod, refundReason, refundEnabled = false, refundMode = 'disabled', fulfillmentMode, quantity }: OrderActionsProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [refundDialogOpen, setRefundDialogOpen] = useState(false);
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [fulfillmentDialogOpen, setFulfillmentDialogOpen] = useState(false);
+  const [deliveryContent, setDeliveryContent] = useState("");
+  const [fulfillmentRemark, setFulfillmentRemark] = useState("");
   const [rejectReason, setRejectReason] = useState("");
   const isBalanceRefund = paymentMethod === "balance";
   const usesClientRefund = shouldUseClientRefund(paymentMethod, refundMode);
+  const isManualFulfillment = fulfillmentMode !== "auto";
+
+  const handleManualFulfillment = () => {
+    startTransition(async () => {
+      const result = await adminFulfillManualOrder(orderId, deliveryContent, fulfillmentRemark);
+      if (!result.success) {
+        toast.error(result.message);
+        return;
+      }
+      toast.success(result.message);
+      setFulfillmentDialogOpen(false);
+      setDeliveryContent("");
+      setFulfillmentRemark("");
+      router.refresh();
+    });
+  };
 
   const handleComplete = () => {
     if (!confirm("确定要手动完成此订单吗？此操作将发放卡密。")) {
@@ -168,7 +190,16 @@ export function OrderActions({ orderId, orderNo, status, paymentMethod, refundRe
 	              查看详情
 	            </Link>
 	          </DropdownMenuItem>
-	          {(status === "pending" || status === "paid") && (
+	          {status === "paid" && isManualFulfillment && (
+	            <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => setFulfillmentDialogOpen(true)}>
+                    <CheckCircle2 className="mr-2 h-4 w-4" />
+                    填写卡密并发货
+                  </DropdownMenuItem>
+                </>
+              )}
+	          {(status === "pending" || status === "paid") && !isManualFulfillment && (
 	            <>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={handleComplete}>
@@ -215,6 +246,47 @@ export function OrderActions({ orderId, orderNo, status, paymentMethod, refundRe
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+
+      <Dialog open={fulfillmentDialogOpen} onOpenChange={setFulfillmentDialogOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>填写卡密并发货</DialogTitle>
+            <DialogDescription>
+              订单 {orderNo} 购买 {quantity} 件，每行填写一条交付内容。提交后用户立即可见。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor={`delivery-${orderId}`}>卡密 / 发货内容</Label>
+              <Textarea
+                id={`delivery-${orderId}`}
+                value={deliveryContent}
+                onChange={(event) => setDeliveryContent(event.target.value)}
+                placeholder={quantity > 1 ? `每行一条，共 ${quantity} 行` : "输入卡密或交付字符串"}
+                rows={Math.min(10, Math.max(4, quantity + 2))}
+                autoFocus
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor={`fulfillment-remark-${orderId}`}>管理员备注（可选）</Label>
+              <Textarea
+                id={`fulfillment-remark-${orderId}`}
+                value={fulfillmentRemark}
+                onChange={(event) => setFulfillmentRemark(event.target.value)}
+                placeholder="仅后台可见"
+                rows={2}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" disabled={isPending} onClick={() => setFulfillmentDialogOpen(false)}>取消</Button>
+            <Button type="button" disabled={isPending || !deliveryContent.trim()} onClick={handleManualFulfillment}>
+              {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+              确认发货
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* 通过退款确认对话框 */}
       <Dialog open={refundDialogOpen} onOpenChange={setRefundDialogOpen}>

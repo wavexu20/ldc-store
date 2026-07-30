@@ -158,7 +158,7 @@ async function sendTelegramMessage(
       signal: controller.signal,
     });
 
-    const data = await response.json();
+    const data = await response.json() as { ok?: boolean; description?: string };
 
     if (!response.ok || !data.ok) {
       const errorDesc = data.description || `HTTP ${response.status}`;
@@ -230,7 +230,7 @@ export async function testTelegramConnection(
 连接测试成功！
 时间: ${formatTimestamp(new Date())}
 
-此消息由 LDC Store 发送。`;
+此消息由 Game3DTech 发送。`;
 
   return sendTelegramMessage(botToken, chatId, testMessage);
 }

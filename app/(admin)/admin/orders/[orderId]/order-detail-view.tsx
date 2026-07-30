@@ -38,6 +38,8 @@ import { cn } from "@/lib/utils";
 import { orderStatusConfig, paymentMethodLabels } from "../order-meta";
 import { CopyIconButton } from "./copy-icon-button";
 import { CopyTextButton } from "./copy-text-button";
+import { ManualFulfillmentCard } from "./manual-fulfillment-card";
+import { fulfillmentModeMeta } from "@/lib/fulfillment";
 
 type OrderDetailData = NonNullable<AdminOrderDetailResult["data"]>;
 
@@ -348,6 +350,10 @@ function OrderInfoCard({ order }: { order: OrderDetailData }) {
             {orderStatusConfig[order.status].label}
           </Badge>
         </Field>
+        <Field label="发货方式">{fulfillmentModeMeta[order.fulfillmentMode].label}</Field>
+        <Field label="发货截止">
+          <LocalTime value={order.deliveryDueAt} />
+        </Field>
         <Field label="支付平台订单号">
           <div className="flex min-w-0 items-center gap-2">
             <code
@@ -621,6 +627,9 @@ function TimeInfoCard({ order }: { order: OrderDetailData }) {
         <Field label="更新时间">
           <LocalTime value={order.updatedAt} />
         </Field>
+        <Field label="完成发货时间">
+          <LocalTime value={order.fulfilledAt} />
+        </Field>
         <Field label="申请退款时间">
           <LocalTime value={order.refundRequestedAt} />
         </Field>
@@ -673,6 +682,13 @@ export function OrderDetailView({ result }: { result: AdminOrderDetailResult }) 
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
+          {order.status === "paid" && order.fulfillmentMode !== "auto" ? (
+            <ManualFulfillmentCard
+              orderId={order.id}
+              orderNo={order.orderNo}
+              quantity={order.quantity}
+            />
+          ) : null}
           <OrderInfoCard order={order} />
           <OrderNotesCard order={order} />
           <OrderCardsCard order={order} cardCounts={cardCounts} />

@@ -1,6 +1,6 @@
 "use server";
 
-import { db, products, cards, categories, orders } from "@/lib/db";
+import { db, products, productVariants, cards, categories, orders } from "@/lib/db";
 import { eq, and, desc, asc, sql, like, or, inArray, lt } from "drizzle-orm";
 import { z } from "zod";
 import {
@@ -18,6 +18,28 @@ import {
   getRestockSummaryForProducts,
   type RestockSummary,
 } from "@/lib/actions/restock-requests";
+import { generateProductTranslations } from "@/lib/ai/product-translation";
+import {
+  saleableCardInventoryCondition,
+  summarizeAvailableInventory,
+} from "@/lib/inventory";
+import { isManualFulfillment } from "@/lib/fulfillment";
+
+async function syncProductVariants(productId: string, variants: NonNullable<ProductInput["variants"]>) {
+  const now = new Date();
+  const existing = await db.query.productVariants.findMany({ where: eq(productVariants.productId, productId), columns: { id: true } });
+  const existingIds = new Set(existing.map((variant) => variant.id));
+  const retainedIds = new Set(variants.flatMap((variant) => variant.id && existingIds.has(variant.id) ? [variant.id] : []));
+  await Promise.all([
+    ...variants.map((variant, index) => {
+      const values = { name: variant.name, price: variant.price.toFixed(2), originalPrice: variant.originalPrice?.toFixed(2) ?? null, sortOrder: index, isActive: true, updatedAt: now };
+      return variant.id && existingIds.has(variant.id)
+        ? db.update(productVariants).set(values).where(eq(productVariants.id, variant.id))
+        : db.insert(productVariants).values({ productId, ...values, createdAt: now });
+    }),
+    ...existing.filter((variant) => !retainedIds.has(variant.id)).map((variant) => db.update(productVariants).set({ isActive: false, updatedAt: now }).where(eq(productVariants.id, variant.id))),
+  ]);
+}
 
 // 节流：最多每 60 秒检查一次过期订单
 let lastExpireCheck = 0;
@@ -71,8 +93,16 @@ export async function getActiveProducts(options?: {
   limit?: number;
   offset?: number;
   search?: string;
+  sort?: "default" | "sales_desc";
 }) {
-  const { categoryId, featured, limit = 20, offset = 0, search } = options || {};
+  const {
+    categoryId,
+    featured,
+    limit = 20,
+    offset = 0,
+    search,
+    sort = "default",
+  } = options || {};
 
   const conditions = [eq(products.isActive, true)];
 
@@ -106,11 +136,14 @@ export async function getActiveProducts(options?: {
         name: true,
         slug: true,
         description: true,
+        translations: true,
         price: true,
         originalPrice: true,
         coverImage: true,
         isFeatured: true,
         salesCount: true,
+        fulfillmentMode: true,
+        maxQuantity: true,
         sortOrder: true,
         createdAt: true,
       },
@@ -123,7 +156,10 @@ export async function getActiveProducts(options?: {
           },
         },
       },
-      orderBy: [desc(products.isFeatured), asc(products.sortOrder), desc(products.createdAt)],
+      orderBy:
+        sort === "sales_desc"
+          ? [desc(products.salesCount), desc(products.isFeatured), asc(products.sortOrder), desc(products.createdAt)]
+          : [desc(products.isFeatured), asc(products.sortOrder), desc(products.createdAt)],
       limit,
       offset,
     }),
@@ -146,7 +182,8 @@ export async function getActiveProducts(options?: {
       .where(
         and(
           inArray(cards.productId, productIds),
-          eq(cards.status, "available")
+          eq(cards.status, "available"),
+          saleableCardInventoryCondition
         )
       )
       .groupBy(cards.productId),
@@ -162,7 +199,9 @@ export async function getActiveProducts(options?: {
 
   return productList.map((product) => ({
     ...product,
-    stock: stockMap.get(product.id) || 0,
+    stock: isManualFulfillment(product.fulfillmentMode)
+      ? product.maxQuantity
+      : stockMap.get(product.id) || 0,
     restockRequestCount: restockSummary[product.id]?.count ?? 0,
     restockRequesters: restockSummary[product.id]?.requesters ?? [],
   }));
@@ -183,6 +222,7 @@ export async function getProductBySlug(slug: string) {
         slug: true,
         description: true,
         content: true,
+        translations: true,
         price: true,
         originalPrice: true,
         coverImage: true,
@@ -190,12 +230,17 @@ export async function getProductBySlug(slug: string) {
         isFeatured: true,
         minQuantity: true,
         maxQuantity: true,
+        fulfillmentMode: true,
         salesCount: true,
         createdAt: true,
         updatedAt: true,
       },
       with: {
         category: true,
+        variants: {
+          where: eq(productVariants.isActive, true),
+          orderBy: [asc(productVariants.sortOrder), asc(productVariants.createdAt)],
+        },
       },
     }),
   ]);
@@ -204,23 +249,37 @@ export async function getProductBySlug(slug: string) {
     return null;
   }
 
-  const [[stockCount], restockSummary] = await Promise.all([
+  const [[stockCount], variantStockCounts, restockSummary] = await Promise.all([
     db
       .select({
         count: sql<number>`count(*)`,
       })
       .from(cards)
-      .where(and(eq(cards.productId, product.id), eq(cards.status, "available"))),
+      .where(and(eq(cards.productId, product.id), eq(cards.status, "available"), saleableCardInventoryCondition)),
+    db
+      .select({ variantId: cards.variantId, count: sql<number>`count(*)` })
+      .from(cards)
+      .where(and(eq(cards.productId, product.id), eq(cards.status, "available")))
+      .groupBy(cards.variantId),
     getRestockSummaryForProducts({
       productIds: [product.id],
       maxRequesters: 8,
     }),
   ]);
 
-  const stock = stockCount?.count || 0;
+  const stock = isManualFulfillment(product.fulfillmentMode)
+    ? product.maxQuantity
+    : stockCount?.count || 0;
+  const variantStockMap = new Map(variantStockCounts.filter((row) => row.variantId).map((row) => [row.variantId!, row.count]));
 
   return {
     ...product,
+    variants: product.variants.map((variant) => ({
+      ...variant,
+      stock: isManualFulfillment(product.fulfillmentMode)
+        ? product.maxQuantity
+        : variantStockMap.get(variant.id) || 0,
+    })),
     stock,
     restockRequestCount: restockSummary[product.id]?.count ?? 0,
     restockRequesters: restockSummary[product.id]?.requesters ?? [],
@@ -241,6 +300,10 @@ export async function getProductById(id: string) {
     where: eq(products.id, id),
     with: {
       category: true,
+      variants: {
+        where: eq(productVariants.isActive, true),
+        orderBy: [asc(productVariants.sortOrder), asc(productVariants.createdAt)],
+      },
     },
   });
 
@@ -248,17 +311,31 @@ export async function getProductById(id: string) {
     return null;
   }
 
-  // 获取库存数量
-  const [stockCount] = await db
+  // 同时保留公共库存、各规格库存和旧模式遗留库存，供编辑页明确展示库存归属。
+  const stockRows = await db
     .select({
+      variantId: cards.variantId,
       count: sql<number>`count(*)`,
     })
     .from(cards)
-    .where(and(eq(cards.productId, product.id), eq(cards.status, "available")));
+    .where(and(eq(cards.productId, product.id), eq(cards.status, "available")))
+    .groupBy(cards.variantId);
+  const inventory = summarizeAvailableInventory(
+    stockRows,
+    product.variants.map((variant) => variant.id)
+  );
 
   return {
     ...product,
-    stock: stockCount?.count || 0,
+    variants: product.variants.map((variant) => ({
+      ...variant,
+      stock: inventory.variantStock[variant.id] ?? 0,
+    })),
+    stock: isManualFulfillment(product.fulfillmentMode)
+      ? product.maxQuantity
+      : inventory.saleableStock,
+    publicStock: inventory.publicStock,
+    inactiveStock: inventory.inactiveStock,
   };
 }
 
@@ -298,6 +375,7 @@ function mapDbProductToTemplateInput(row: {
   sortOrder: number;
   minQuantity: number;
   maxQuantity: number;
+  fulfillmentMode: ProductInput["fulfillmentMode"];
 }): ProductInput {
   const price = toDecimalNumber(row.price);
   const originalPrice =
@@ -318,6 +396,7 @@ function mapDbProductToTemplateInput(row: {
     sortOrder: row.sortOrder,
     minQuantity: row.minQuantity,
     maxQuantity: row.maxQuantity,
+    fulfillmentMode: row.fulfillmentMode,
   };
 }
 
@@ -358,6 +437,7 @@ export async function getProductTemplateById(
       sortOrder: true,
       minQuantity: true,
       maxQuantity: true,
+      fulfillmentMode: true,
     },
   });
 
@@ -487,7 +567,8 @@ export async function searchProducts(
   const matchCondition = or(
     like(products.name, pattern),
     like(products.description, pattern),
-    like(products.content, pattern)
+    like(products.content, pattern),
+    like(products.translations, pattern)
   )!;
 
   const conditions = [eq(products.isActive, true), matchCondition];
@@ -512,7 +593,8 @@ export async function searchProducts(
   const relevanceScore = sql<number>`
     (CASE WHEN ${products.name} LIKE ${pattern} THEN 3 ELSE 0 END) +
     (CASE WHEN ${products.description} LIKE ${pattern} THEN 2 ELSE 0 END) +
-    (CASE WHEN ${products.content} LIKE ${pattern} THEN 1 ELSE 0 END)
+    (CASE WHEN ${products.content} LIKE ${pattern} THEN 1 ELSE 0 END) +
+    (CASE WHEN ${products.translations} LIKE ${pattern} THEN 2 ELSE 0 END)
   `;
 
   const orderBy = (() => {
@@ -559,7 +641,7 @@ export async function searchProducts(
         count: sql<number>`count(*)`,
       })
       .from(cards)
-      .where(and(inArray(cards.productId, productIds), eq(cards.status, "available")))
+      .where(and(inArray(cards.productId, productIds), eq(cards.status, "available"), saleableCardInventoryCondition))
       .groupBy(cards.productId),
     getRestockSummaryForProducts({
       productIds,
@@ -572,7 +654,9 @@ export async function searchProducts(
   return {
     items: productList.map((product) => ({
       ...product,
-      stock: stockMap.get(product.id) || 0,
+      stock: isManualFulfillment(product.fulfillmentMode)
+        ? product.maxQuantity
+        : stockMap.get(product.id) || 0,
       restockRequestCount: restockSummary[product.id]?.count ?? 0,
       restockRequesters: restockSummary[product.id]?.requesters ?? [],
     })),
@@ -599,15 +683,45 @@ export async function createProduct(input: CreateProductInput) {
   }
 
   try {
+    const { autoTranslate, translationSourceLocale, variants, ...productData } =
+      validationResult.data;
+    const displayPrice = variants.length > 0 ? Math.min(...variants.map((variant) => variant.price)) : productData.price;
     const [product] = await db
       .insert(products)
       .values({
-        ...validationResult.data,
-        price: validationResult.data.price.toFixed(2),
-        originalPrice: validationResult.data.originalPrice?.toFixed(2),
-        coverImage: validationResult.data.coverImage || null,
+        ...productData,
+        price: displayPrice.toFixed(2),
+        originalPrice: variants.length > 0 ? null : productData.originalPrice?.toFixed(2),
+        coverImage: productData.coverImage || null,
       })
       .returning();
+
+    if (variants.length > 0) await syncProductVariants(product.id, variants);
+
+    let savedProduct = product;
+    let translationWarning: string | undefined;
+    if (autoTranslate) {
+      try {
+        const generated = await generateProductTranslations(
+          product,
+          translationSourceLocale
+        );
+        [savedProduct] = await db
+          .update(products)
+          .set({
+            translations: { ...product.translations, ...generated.translations },
+            updatedAt: new Date(),
+          })
+          .where(eq(products.id, product.id))
+          .returning();
+        if (generated.failedLocales.length > 0) {
+          translationWarning = `商品已创建；${generated.failedLocales.join(", ")} 翻译失败，可在编辑页重试`;
+        }
+      } catch (error) {
+        console.error("[createProduct] 自动翻译失败:", error);
+        translationWarning = "商品已创建，但自动翻译暂时失败，可在编辑页重新生成";
+      }
+    }
 
     // 获取分类 slug 用于清理分类页缓存
     let categorySlug: string | undefined;
@@ -621,7 +735,11 @@ export async function createProduct(input: CreateProductInput) {
 
     await revalidateProductAndRelatedCache(product.slug, categorySlug);
 
-    return { success: true, data: product };
+    return {
+      success: true,
+      data: savedProduct,
+      message: translationWarning ?? (autoTranslate ? "商品已创建并生成多语言描述" : undefined),
+    };
   } catch (error) {
     console.error("创建商品失败:", error);
     // 检查是否是唯一约束冲突
@@ -651,19 +769,29 @@ export async function updateProduct(id: string, input: UpdateProductInput) {
   }
 
   try {
+    const {
+      autoTranslate = false,
+      translationSourceLocale = "zh",
+      variants,
+      ...productFields
+    } = validationResult.data;
     const updateData: Record<string, unknown> = {
-      ...validationResult.data,
+      ...productFields,
       updatedAt: new Date(),
     };
 
-    if (validationResult.data.price !== undefined) {
-      updateData.price = validationResult.data.price.toFixed(2);
+    if (productFields.price !== undefined) {
+      updateData.price = productFields.price.toFixed(2);
     }
-    if (validationResult.data.originalPrice !== undefined) {
-      updateData.originalPrice = validationResult.data.originalPrice?.toFixed(2);
+    if (productFields.originalPrice !== undefined) {
+      updateData.originalPrice = productFields.originalPrice?.toFixed(2);
     }
-    if (validationResult.data.coverImage !== undefined) {
-      updateData.coverImage = validationResult.data.coverImage || null;
+    if (productFields.coverImage !== undefined) {
+      updateData.coverImage = productFields.coverImage || null;
+    }
+    if (variants && variants.length > 0) {
+      updateData.price = Math.min(...variants.map((variant) => variant.price)).toFixed(2);
+      updateData.originalPrice = null;
     }
 
     const [product] = await db
@@ -674,6 +802,33 @@ export async function updateProduct(id: string, input: UpdateProductInput) {
 
     if (!product) {
       return { success: false, message: "商品不存在" };
+    }
+
+    if (variants !== undefined) await syncProductVariants(product.id, variants);
+
+    let savedProduct = product;
+    let translationWarning: string | undefined;
+    if (autoTranslate) {
+      try {
+        const generated = await generateProductTranslations(
+          product,
+          translationSourceLocale
+        );
+        [savedProduct] = await db
+          .update(products)
+          .set({
+            translations: { ...product.translations, ...generated.translations },
+            updatedAt: new Date(),
+          })
+          .where(eq(products.id, product.id))
+          .returning();
+        if (generated.failedLocales.length > 0) {
+          translationWarning = `商品已保存；${generated.failedLocales.join(", ")} 翻译失败，请稍后重试`;
+        }
+      } catch (error) {
+        console.error("[updateProduct] 自动翻译失败:", error);
+        translationWarning = "商品已保存，但自动翻译暂时失败，请稍后重试";
+      }
     }
 
     // 获取分类 slug 用于清理分类页缓存
@@ -688,7 +843,11 @@ export async function updateProduct(id: string, input: UpdateProductInput) {
 
     await revalidateProductAndRelatedCache(product.slug, categorySlug);
 
-    return { success: true, data: product };
+    return {
+      success: true,
+      data: savedProduct,
+      message: translationWarning ?? (autoTranslate ? "商品已保存并重新生成多语言描述" : undefined),
+    };
   } catch (error) {
     console.error("更新商品失败:", error);
     if (error instanceof Error && error.message.includes("unique")) {
@@ -900,7 +1059,7 @@ export async function getAdminProductsPage(params: {
     })
     .from(cards)
     .where(
-      and(inArray(cards.productId, productIds), eq(cards.status, "available"))
+      and(inArray(cards.productId, productIds), eq(cards.status, "available"), saleableCardInventoryCondition)
     )
     .groupBy(cards.productId);
 
@@ -921,7 +1080,8 @@ export async function getAdminProductsPage(params: {
       .where(
         and(
           inArray(cards.productId, allProductIds.map((p) => p.id)),
-          eq(cards.status, "available")
+          eq(cards.status, "available"),
+          saleableCardInventoryCondition
         )
       )
       .groupBy(cards.productId);

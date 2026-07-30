@@ -20,6 +20,7 @@ export function CardsClient({
   q,
   status,
   orderNo,
+  variants,
 }: {
   productId: string;
   items: AdminCardListItem[];
@@ -30,6 +31,7 @@ export function CardsClient({
   q: string;
   status?: CardStatus;
   orderNo: string;
+  variants: Array<{ id: string; name: string }>;
 }) {
   const hasActiveFilters = Boolean(q || status || orderNo);
 
@@ -55,6 +57,7 @@ export function CardsClient({
           // 为什么这样做：分页/筛选切换后应清空“上一页的选中状态”，避免误操作到不在当前视图的数据。
           key={`${productId}:${page}:${pageSize}:${q}:${status ?? ""}:${orderNo}`}
           items={items}
+          variants={variants}
         />
       ) : (
         <div className="rounded-lg border py-12 text-center text-sm text-muted-foreground">
@@ -81,4 +84,3 @@ export function CardsClient({
     </div>
   );
 }
-

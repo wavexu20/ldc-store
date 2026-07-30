@@ -28,11 +28,13 @@ import { Loader2, Plus, Upload } from "lucide-react";
 
 interface ImportCardsDialogProps {
   productId: string;
+  variants?: Array<{ id: string; name: string }>;
   children?: React.ReactNode;
 }
 
 export function ImportCardsDialog({
   productId,
+  variants = [],
   children,
 }: ImportCardsDialogProps) {
   const router = useRouter();
@@ -40,6 +42,7 @@ export function ImportCardsDialog({
   const [content, setContent] = useState("");
   const [delimiter, setDelimiter] = useState<"newline" | "comma">("newline");
   const [deduplicate, setDeduplicate] = useState(true);
+  const [variantId, setVariantId] = useState("");
   const [isPending, startTransition] = useTransition();
 
   const handleImport = () => {
@@ -51,6 +54,7 @@ export function ImportCardsDialog({
     startTransition(async () => {
       const result = await importCards({
         productId,
+        variantId: variantId || null,
         content,
         delimiter,
         deduplicate,
@@ -101,6 +105,7 @@ export function ImportCardsDialog({
         </DialogHeader>
 
         <div className="space-y-4">
+          {variants.length > 0 ? <div className="space-y-2"><Label>归属规格</Label><Select value={variantId} onValueChange={setVariantId}><SelectTrigger><SelectValue placeholder="请选择规格" /></SelectTrigger><SelectContent>{variants.map((variant) => <SelectItem key={variant.id} value={variant.id}>{variant.name}</SelectItem>)}</SelectContent></Select></div> : null}
           <div className="flex items-center justify-between gap-4 rounded-md border border-zinc-200 p-3 dark:border-zinc-800">
             <div className="space-y-1">
               <Label htmlFor="import-cards-deduplicate">去重</Label>
@@ -159,7 +164,7 @@ export function ImportCardsDialog({
           <Button variant="outline" onClick={() => setOpen(false)}>
             取消
           </Button>
-          <Button onClick={handleImport} disabled={isPending || !content.trim()}>
+          <Button onClick={handleImport} disabled={isPending || !content.trim() || (variants.length > 0 && !variantId)}>
             {isPending ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />

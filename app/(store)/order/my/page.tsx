@@ -30,9 +30,15 @@ import {
   RotateCcw,
   Ban,
   ReceiptText,
+  ShieldCheck,
 } from "lucide-react";
 import Link from "next/link";
 import { formatShortTime } from "@/lib/time";
+import { useI18n } from "@/components/i18n-provider";
+import type { MessageKey } from "@/lib/i18n";
+import { getLocalizedFulfillmentLabel, type FulfillmentMode } from "@/lib/fulfillment";
+import { Money } from "@/components/store/money";
+import { PendingOrderActions } from "@/components/store/pending-order-actions";
 
 interface OrderData {
   orderNo: string;
@@ -44,52 +50,63 @@ interface OrderData {
   createdAt: Date;
   paidAt: Date | null;
   cards: string[];
+  deliveryLocked?: boolean;
+  fulfillmentMode: FulfillmentMode;
+  deliveryDueAt: Date | null;
+  fulfilledAt: Date | null;
+  expiredAt: Date | null;
 }
 
 const statusConfig: Record<
   string,
-  { label: string; variant: "default" | "secondary" | "destructive" | "outline"; icon: React.ReactNode; className?: string }
+  { label: MessageKey; variant: "default" | "secondary" | "destructive" | "outline"; icon: React.ReactNode; className?: string }
 > = {
   pending: {
-    label: "待支付",
+    label: "pending",
     variant: "outline",
     icon: <Clock className="h-3 w-3" />,
   },
   paid: {
-    label: "已支付",
+    label: "paid",
     variant: "default",
     icon: <CheckCircle2 className="h-3 w-3" />,
   },
   completed: {
-    label: "已完成",
+    label: "completed",
     variant: "default",
     icon: <CheckCircle2 className="h-3 w-3" />,
-    className: "bg-green-600 hover:bg-green-600/90",
+    className: "bg-success text-success-foreground hover:bg-success/90",
   },
   expired: {
-    label: "已过期",
+    label: "expired",
+    variant: "secondary",
+    icon: <XCircle className="h-3 w-3" />,
+  },
+  cancelled: {
+    label: "cancelled",
     variant: "secondary",
     icon: <XCircle className="h-3 w-3" />,
   },
   refund_pending: {
-    label: "退款审核中",
+    label: "refundPending",
     variant: "outline",
     icon: <RotateCcw className="h-3 w-3" />,
-    className: "border-amber-500 text-amber-600",
+    className: "border-warning text-warning-foreground dark:text-warning",
   },
   refund_rejected: {
-    label: "退款已拒绝",
+    label: "refundRejected",
     variant: "secondary",
     icon: <Ban className="h-3 w-3" />,
   },
   refunded: {
-    label: "已退款",
+    label: "refunded",
     variant: "destructive",
     icon: <AlertCircle className="h-3 w-3" />,
   },
 };
 
 export default function MyOrdersPage() {
+  const { t, locale } = useI18n();
   const { data: session, status: sessionStatus } = useSession();
   const router = useRouter();
   const [orders, setOrders] = useState<OrderData[] | null>(null);
@@ -127,15 +144,15 @@ export default function MyOrdersPage() {
       if (result.success) {
         setOrders(result.data as OrderData[]);
       } else {
-        toast.error(result.message || "获取订单失败");
+        toast.error(result.message || t("orderFailed"));
       }
     } catch {
-      toast.error("获取订单失败");
+      toast.error(t("orderFailed"));
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     if (sessionStatus === "loading") return;
@@ -152,19 +169,19 @@ export default function MyOrdersPage() {
     try {
       await navigator.clipboard.writeText(text);
       setCopiedCard(cardId);
-      toast.success("已复制");
+      toast.success(t("copied"));
       setTimeout(() => setCopiedCard(null), 2000);
     } catch {
-      toast.error("复制失败");
+      toast.error(t("copyFailed"));
     }
   };
 
   const copyAllCards = async (cards: string[]) => {
     try {
       await navigator.clipboard.writeText(cards.join("\n"));
-      toast.success(`已复制 ${cards.length} 张卡密`);
+      toast.success(`${t("copied")} ${cards.length}`);
     } catch {
-      toast.error("复制失败");
+      toast.error(t("copyFailed"));
     }
   };
 
@@ -192,6 +209,8 @@ export default function MyOrdersPage() {
         toast.success(result.message);
         setRefundDialogOpen(false);
         loadOrders(true);
+      } else if (result.requiresSecondFactor) {
+        router.push("/account/verify-2fa?callbackUrl=%2Forder%2Fmy");
       } else {
         toast.error(result.message);
       }
@@ -216,7 +235,7 @@ export default function MyOrdersPage() {
     <div className="container mx-auto max-w-2xl px-4 py-8">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-xl font-semibold">我的订单</h1>
+        <h1 className="text-xl font-semibold">{t("myOrders")}</h1>
         <Button
           variant="ghost"
           size="sm"
@@ -249,12 +268,12 @@ export default function MyOrdersPage() {
                     <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
                       <span>{formatShortTime(order.createdAt)}</span>
                       <span>×{order.quantity}</span>
-                      <span className="font-medium text-foreground">¥{order.totalAmount}</span>
+                      <Money amount={order.totalAmount} className="font-medium text-foreground" />
                     </div>
                   </div>
                   <Badge variant={status.variant} className={`shrink-0 text-xs ${status.className || ""}`}>
                     {status.icon}
-                    <span className="ml-1">{status.label}</span>
+                    <span className="ml-1">{t(status.label)}</span>
                   </Badge>
                   <ChevronRight
                     className={`h-4 w-4 text-muted-foreground shrink-0 transition-transform ${
@@ -268,12 +287,12 @@ export default function MyOrdersPage() {
                   <div className="px-4 pb-4 border-t bg-muted/30">
                     <div className="py-3 space-y-2 text-sm">
                       <div className="flex justify-between">
-                        <span className="text-muted-foreground">订单号</span>
+                        <span className="text-muted-foreground">{t("orderNo")}</span>
                         <span className="font-mono text-xs">{order.orderNo}</span>
                       </div>
                       {order.paidAt && (
                         <div className="flex justify-between">
-                          <span className="text-muted-foreground">支付时间</span>
+                          <span className="text-muted-foreground">{t("paidAt")}</span>
                           <span>{new Date(order.paidAt).toLocaleString("zh-CN")}</span>
                         </div>
                       )}
@@ -287,7 +306,7 @@ export default function MyOrdersPage() {
                             onClick={(e) => e.stopPropagation()}
                           >
                             <ReceiptText className="h-3 w-3 mr-1" />
-                            支付成功凭证
+                            {t("paymentReceipt")}
                           </Link>
                         </Button>
                       </div>
@@ -299,7 +318,7 @@ export default function MyOrdersPage() {
                         <div className="flex items-center justify-between mb-2">
                           <span className="text-sm font-medium flex items-center gap-1.5">
                             <Package className="h-4 w-4" />
-                            卡密 ({order.cards.length})
+                            {t("deliveryInfo")} ({order.cards.length})
                           </span>
                           <Button
                             variant="ghost"
@@ -311,7 +330,7 @@ export default function MyOrdersPage() {
                             }}
                           >
                             <Copy className="h-3 w-3 mr-1" />
-                            复制全部
+                            {t("copyAll")}
                           </Button>
                         </div>
                         <div className="space-y-1">
@@ -347,10 +366,27 @@ export default function MyOrdersPage() {
                       </div>
                     )}
 
+                    {order.deliveryLocked && (
+                      <div className="mt-3 flex flex-col gap-3 rounded-lg border border-warning/30 bg-warning/10 p-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+                        <div className="flex items-center gap-2 text-warning-foreground dark:text-warning"><ShieldCheck className="size-4 shrink-0" />{t("deliveryProtected")}</div>
+                        <Button asChild size="sm"><Link href="/account/verify-2fa?callbackUrl=%2Forder%2Fmy">{t("verifyToView")}</Link></Button>
+                      </div>
+                    )}
+
                     {/* Pending Notice */}
                     {order.status === "pending" && (
-                      <div className="mt-3 p-2 rounded bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 text-xs">
-                        订单待支付，请尽快完成支付
+                      <div className="mt-3 space-y-3 rounded-lg border border-warning/25 bg-warning/10 p-3">
+                        <div className="text-xs text-warning-foreground dark:text-warning">
+                          {t("orderPendingHint")}
+                          {order.expiredAt ? ` · ${new Date(order.expiredAt).toLocaleString()}` : ""}
+                        </div>
+                        <PendingOrderActions orderNo={order.orderNo} onChanged={() => loadOrders(true)} />
+                      </div>
+                    )}
+                    {order.status === "paid" && order.fulfillmentMode !== "auto" && (
+                      <div className="mt-3 rounded border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-200">
+                        {getLocalizedFulfillmentLabel(order.fulfillmentMode, locale)}
+                        {order.deliveryDueAt ? ` · ${new Date(order.deliveryDueAt).toLocaleString()}` : ""}
                       </div>
                     )}
 
@@ -367,22 +403,22 @@ export default function MyOrdersPage() {
                           }}
                         >
                           <RotateCcw className="h-3 w-3 mr-1" />
-                          申请退款
+                          {t("requestRefund")}
                         </Button>
                       </div>
                     )}
 
                     {/* Refund Pending Notice */}
                     {order.status === "refund_pending" && (
-                      <div className="mt-3 p-2 rounded bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 text-xs">
-                        退款申请已提交，正在等待审核
+                      <div className="mt-3 rounded bg-warning/10 p-2 text-xs text-warning-foreground dark:text-warning">
+                        {t("refundSubmitted")}
                       </div>
                     )}
 
                     {/* Refund Rejected Notice */}
                     {order.status === "refund_rejected" && (
-                      <div className="mt-3 p-2 rounded bg-red-50 dark:bg-red-950/50 text-red-700 dark:text-red-300 text-xs">
-                        退款申请已被拒绝
+                      <div className="mt-3 rounded bg-destructive/10 p-2 text-xs text-destructive">
+                        {t("refundRejected")}
                       </div>
                     )}
                   </div>
@@ -394,9 +430,9 @@ export default function MyOrdersPage() {
       ) : (
         <div className="text-center py-16 border rounded-lg bg-card">
           <Package className="h-10 w-10 mx-auto text-muted-foreground/50" />
-          <p className="mt-3 text-muted-foreground">暂无订单</p>
+          <p className="mt-3 text-muted-foreground">{t("noOrders")}</p>
           <Button asChild variant="outline" className="mt-4" size="sm">
-            <Link href="/">去购物</Link>
+            <Link href="/">{t("backHome")}</Link>
           </Button>
         </div>
       )}
@@ -405,17 +441,17 @@ export default function MyOrdersPage() {
       <Dialog open={refundDialogOpen} onOpenChange={setRefundDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>申请退款</DialogTitle>
+            <DialogTitle>{t("requestRefund")}</DialogTitle>
             <DialogDescription>
-              请填写退款原因，提交后将由管理员审核
+              {t("refundDialogHint")}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="refund-reason">退款原因</Label>
+              <Label htmlFor="refund-reason">{t("refundReason")}</Label>
               <Textarea
                 id="refund-reason"
-                placeholder="请详细描述退款原因（至少5个字符）"
+                placeholder={t("refundReasonPlaceholder")}
                 value={refundReason}
                 onChange={(e) => setRefundReason(e.target.value)}
                 rows={4}
@@ -428,14 +464,14 @@ export default function MyOrdersPage() {
               onClick={() => setRefundDialogOpen(false)}
               disabled={isPending}
             >
-              取消
+              {t("cancel")}
             </Button>
             <Button
               onClick={handleRefundSubmit}
               disabled={isPending || refundReason.trim().length < 5}
             >
               {isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              提交申请
+              {t("submitRequest")}
             </Button>
           </DialogFooter>
         </DialogContent>

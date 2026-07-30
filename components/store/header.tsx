@@ -16,6 +16,8 @@ import {
   Shield,
   Zap,
   TrendingUp,
+  UserRoundPen,
+  Ticket,
   type LucideIcon,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -31,6 +33,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useSession, signOut } from "next-auth/react";
 import { SearchBar } from "@/components/store/search-bar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { useI18n } from "@/components/i18n-provider";
+import { LanguageSwitcher } from "@/components/language-switcher";
 
 interface HeaderProps {
   siteName?: string;
@@ -87,7 +91,8 @@ const SITE_ICON_MAP: Record<string, LucideIcon> = {
   Zap,
 };
 
-export function Header({ siteName = "LDC Store", siteIcon, siteIconUrl }: HeaderProps) {
+export function Header({ siteName = "Game3DTech", siteIcon, siteIconUrl = "/brand/game3dtech-icon.png" }: HeaderProps) {
+  const { t } = useI18n();
   const { data: session, status } = useSession();
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [storeIconEasterEggKey, setStoreIconEasterEggKey] = useState(0);
@@ -171,12 +176,12 @@ export function Header({ siteName = "LDC Store", siteIcon, siteIconUrl }: Header
             ]
               .filter(Boolean)
               .join(" ")}
-            title="点我一下"
+            title={t("clickMe")}
           >
             {hasCustomIconUrl ? (
               <img
                 src={trimmedIconUrl}
-                alt="网站图标"
+                alt={t("websiteIcon")}
                 className="h-full w-full object-contain"
                 referrerPolicy="no-referrer"
                 onError={() => setIconLoadFailed(true)}
@@ -202,7 +207,7 @@ export function Header({ siteName = "LDC Store", siteIcon, siteIconUrl }: Header
           {/* 移动端搜索入口 */}
           <Popover open={mobileSearchOpen} onOpenChange={setMobileSearchOpen}>
             <PopoverTrigger asChild>
-              <Button variant="ghost" size="icon-sm" className="md:hidden" aria-label="搜索">
+              <Button variant="ghost" size="icon-sm" className="md:hidden" aria-label={t("search")}>
                 <Search className="h-4 w-4" />
               </Button>
             </PopoverTrigger>
@@ -222,12 +227,14 @@ export function Header({ siteName = "LDC Store", siteIcon, siteIconUrl }: Header
             asChild
             variant="ghost"
             size="icon-sm"
-            aria-label="顾客消费榜"
+            aria-label={t("leaderboard")}
           >
             <Link href="/leaderboard">
               <TrendingUp className="h-4 w-4" />
             </Link>
           </Button>
+
+          <LanguageSwitcher placement="header" />
           
           {/* 用户状态 */}
           {status === "loading" ? (
@@ -250,30 +257,48 @@ export function Header({ siteName = "LDC Store", siteIcon, siteIconUrl }: Header
                   <p className="text-xs text-muted-foreground">@{user?.username}</p>
                 </div>
                 <DropdownMenuSeparator />
+                {user?.id !== "admin" && <DropdownMenuItem asChild>
+                  <Link href="/account/profile" className="cursor-pointer">
+                    <UserRoundPen className="mr-2 h-4 w-4" />
+                    {t("profile")}
+                  </Link>
+                </DropdownMenuItem>}
                 <DropdownMenuItem asChild>
                   <Link href="/order/my" className="cursor-pointer">
                     <Package className="mr-2 h-4 w-4" />
-                    我的订单
+                    {t("myOrders")}
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
                   <Link href="/account/wallet" className="cursor-pointer">
                     <CreditCard className="mr-2 h-4 w-4" />
-                    余额与充值
+                    {t("wallet")}
                   </Link>
                 </DropdownMenuItem>
+                {user?.id !== "admin" && <DropdownMenuItem asChild>
+                  <Link href="/account/vouchers" className="cursor-pointer">
+                    <Ticket className="mr-2 h-4 w-4" />
+                    {t("voucherRedeem")}
+                  </Link>
+                </DropdownMenuItem>}
+                {user?.id !== "admin" && <DropdownMenuItem asChild>
+                  <Link href="/account/security" className="cursor-pointer">
+                    <Shield className="mr-2 h-4 w-4" />
+                    {t("accountSecurity")}
+                  </Link>
+                </DropdownMenuItem>}
                 {isAdmin && (
                   <DropdownMenuItem asChild>
                     <Link href="/admin" className="cursor-pointer">
                       <User className="mr-2 h-4 w-4" />
-                      管理后台
+                      {t("admin")}
                     </Link>
                   </DropdownMenuItem>
                 )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleLogout} className="cursor-pointer text-destructive">
                   <LogOut className="mr-2 h-4 w-4" />
-                  退出登录
+                  {t("logout")}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -285,7 +310,7 @@ export function Header({ siteName = "LDC Store", siteIcon, siteIconUrl }: Header
                 size="icon-sm"
                 className="sm:hidden rounded-full"
                 onClick={handleLogin}
-                aria-label="登录或注册"
+                aria-label={`${t("login")} / ${t("register")}`}
               >
                 <User className="h-4 w-4" />
               </Button>
@@ -296,7 +321,7 @@ export function Header({ siteName = "LDC Store", siteIcon, siteIconUrl }: Header
                 onClick={handleLogin}
               >
                 <User className="mr-2 h-4 w-4" />
-                登录 / 注册
+                {t("login")} / {t("register")}
               </Button>
             </>
           )}

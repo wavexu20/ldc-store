@@ -1,11 +1,17 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
+import Discord from "next-auth/providers/discord";
 import GitHub from "next-auth/providers/github";
 import Google from "next-auth/providers/google";
+import HuggingFace from "next-auth/providers/huggingface";
 import { compare } from "bcryptjs";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db, oauthAccounts, users } from "@/lib/db";
+import { verifySteamTicket } from "@/lib/auth/steam";
+import { createMemberNo } from "@/lib/membership";
+import { isPlaceholderEmail } from "@/lib/email-address";
+import { beginSecondFactorLogin } from "@/lib/security/two-factor-session";
 
 const adminLoginSchema = z.object({ password: z.string().min(1) });
 const emailLoginSchema = z.object({
@@ -45,7 +51,7 @@ const LinuxDoProvider = {
     return {
       id: String(profile.id),
       name: profile.name || profile.username,
-      email: `${username}@linux.do`,
+      email: null,
       image: profile.avatar_template?.replace("{size}", "120"),
       username: profile.username,
       trustLevel: profile.trust_level,
@@ -68,7 +74,7 @@ type AuthUser = {
   silenced?: boolean;
 };
 
-async function resolveOAuthUser(
+export async function resolveOAuthUser(
   user: AuthUser,
   provider: string,
   providerAccountId: string
@@ -82,23 +88,39 @@ async function resolveOAuthUser(
   });
 
   if (existingAccount) {
+    const providerEmail = user.email && !isPlaceholderEmail(user.email) ? user.email.toLowerCase() : null;
+    const emailOwner = providerEmail
+      ? await db.query.users.findFirst({ where: eq(users.email, providerEmail), columns: { id: true } })
+      : null;
+    const mayAdoptEmail = Boolean(providerEmail && isPlaceholderEmail(existingAccount.user.email) && (!emailOwner || emailOwner.id === existingAccount.user.id));
+    const shouldSyncName = existingAccount.user.nameSource !== "custom";
+    const shouldSyncAvatar = existingAccount.user.avatarSource !== "custom";
     await db.update(users).set({
-      name: user.name || existingAccount.user.name,
-      image: user.image || existingAccount.user.image,
+      name: shouldSyncName ? user.name || existingAccount.user.name : existingAccount.user.name,
+      image: shouldSyncAvatar ? user.image || existingAccount.user.image : existingAccount.user.image,
+      nameSource: shouldSyncName && user.name ? "oauth" : existingAccount.user.nameSource,
+      avatarSource: shouldSyncAvatar && user.image ? "oauth" : existingAccount.user.avatarSource,
+      ...(mayAdoptEmail ? { email: providerEmail!, emailVerifiedAt: new Date() } : {}),
       updatedAt: new Date(),
     }).where(eq(users.id, existingAccount.user.id));
-    return existingAccount.user;
+    return { ...existingAccount.user, ...(mayAdoptEmail ? { email: providerEmail!, emailVerifiedAt: new Date() } : {}) };
   }
 
-  const email = (user.email || `${provider}-${providerAccountId}@oauth.local`).toLowerCase();
+  const providerEmail = user.email && !isPlaceholderEmail(user.email) ? user.email.toLowerCase() : null;
+  const email = providerEmail || `${provider}-${providerAccountId}@oauth.local`;
   let localUser = await db.query.users.findFirst({ where: eq(users.email, email) });
 
   if (!localUser) {
+    const id = crypto.randomUUID();
     const [created] = await db.insert(users).values({
+      id,
       email,
       name: user.name,
       image: user.image,
-      emailVerifiedAt: new Date(),
+      nameSource: "oauth",
+      avatarSource: "oauth",
+      memberNo: createMemberNo(id),
+      emailVerifiedAt: providerEmail ? new Date() : null,
     }).onConflictDoNothing({ target: users.email }).returning();
     localUser = created || await db.query.users.findFirst({ where: eq(users.email, email) });
   }
@@ -117,13 +139,50 @@ async function resolveOAuthUser(
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   providers: [
+    ...(process.env.DISCORD_CLIENT_ID && process.env.DISCORD_CLIENT_SECRET
+      ? [Discord({ clientId: process.env.DISCORD_CLIENT_ID, clientSecret: process.env.DISCORD_CLIENT_SECRET })]
+      : []),
     ...(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
       ? [Google({ clientId: process.env.GOOGLE_CLIENT_ID, clientSecret: process.env.GOOGLE_CLIENT_SECRET })]
       : []),
     ...(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET
       ? [GitHub({ clientId: process.env.GITHUB_CLIENT_ID, clientSecret: process.env.GITHUB_CLIENT_SECRET })]
       : []),
+    ...(process.env.HUGGINGFACE_CLIENT_ID && process.env.HUGGINGFACE_CLIENT_SECRET
+      ? [HuggingFace({
+          clientId: process.env.HUGGINGFACE_CLIENT_ID,
+          clientSecret: process.env.HUGGINGFACE_CLIENT_SECRET,
+          authorization: { params: { scope: "openid profile email" } },
+        })]
+      : []),
     ...(process.env.LINUXDO_CLIENT_ID && process.env.LINUXDO_CLIENT_SECRET ? [LinuxDoProvider] : []),
+    ...(process.env.STEAM_WEB_API_KEY && process.env.AUTH_SECRET
+      ? [Credentials({
+          id: "steam",
+          name: "Steam",
+          credentials: { ticket: { label: "Steam ticket", type: "text" } },
+          async authorize(credentials) {
+            const ticket = typeof credentials.ticket === "string"
+              ? await verifySteamTicket(credentials.ticket, process.env.AUTH_SECRET || "")
+              : null;
+            if (!ticket) return null;
+            const localUser = await resolveOAuthUser({
+              name: ticket.name,
+              image: ticket.image,
+              username: ticket.name,
+            }, "steam", ticket.steamId);
+            if (localUser.status !== "active") return null;
+            return {
+              id: localUser.id,
+              email: localUser.email,
+              name: localUser.name,
+              image: localUser.image,
+              role: localUser.role,
+              provider: "steam",
+            };
+          },
+        })]
+      : []),
     Credentials({
       id: "email-password",
       name: "Email",
@@ -182,7 +241,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       }
       return localUser.status === "active";
     },
-    async jwt({ token, user, account }) {
+    async jwt({ token, user, account, trigger }) {
       if (user) {
         const authUser = user as AuthUser;
         token.id = authUser.id;
@@ -194,11 +253,20 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         token.active = authUser.active;
         token.silenced = authUser.silenced;
       }
+      if (trigger === "update" && token.id && token.id !== "admin") {
+        const current = await db.query.users.findFirst({ where: eq(users.id, token.id as string) });
+      if (current) {
+        token.email = current.email;
+        token.name = current.name;
+        token.picture = current.image;
+        }
+      }
       return token;
     },
     async session({ session, token }) {
       if (session.user) {
         session.user.id = (token.id || token.sub) as string;
+        session.user.email = (token.email || "") as string;
         const sessionUser = session.user as AuthUser;
         sessionUser.role = token.role as "user" | "admin";
         sessionUser.provider = token.provider as string;
@@ -208,6 +276,16 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         sessionUser.silenced = token.silenced as boolean;
       }
       return session;
+    },
+  },
+  events: {
+    async signIn({ user }) {
+      if (!user.id || user.id === "admin") return;
+      const localUser = await db.query.users.findFirst({
+        where: eq(users.id, user.id),
+        columns: { twoFactorEnabledAt: true },
+      });
+      if (localUser?.twoFactorEnabledAt) await beginSecondFactorLogin(user.id);
     },
   },
   pages: { signIn: "/login" },

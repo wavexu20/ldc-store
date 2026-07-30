@@ -3,6 +3,7 @@ import { z } from "zod";
 // 批量导入卡密验证
 export const importCardsSchema = z.object({
   productId: z.string().uuid("无效的商品ID"),
+  variantId: z.string().uuid("无效的商品规格").nullable().optional(),
   content: z.string().min(1, "卡密内容不能为空"),
   delimiter: z.enum(["newline", "comma"]).default("newline"),
   deduplicate: z.boolean().default(true),
@@ -11,6 +12,7 @@ export const importCardsSchema = z.object({
 // 新增单条卡密验证
 export const createCardSchema = z.object({
   productId: z.string().uuid("无效的商品ID"),
+  variantId: z.string().uuid("无效的商品规格").nullable().optional(),
   content: z.string().trim().min(1, "卡密内容不能为空").max(1000, "卡密内容过长"),
   deduplicate: z.boolean().default(true),
 });
@@ -24,6 +26,7 @@ export const cardOperationSchema = z.object({
 export const updateCardSchema = z.object({
   cardId: z.string().uuid("无效的卡密ID"),
   content: z.string().trim().min(1, "卡密内容不能为空").max(1000, "卡密内容过长"),
+  variantId: z.string().uuid("无效的商品规格").nullable().optional(),
 });
 
 // 批量卡密操作验证

@@ -9,7 +9,10 @@ import {
   type AdminCategoryOption,
 } from "@/lib/actions/categories";
 import { type ProductInput } from "@/lib/validations/product";
-import { ProductForm } from "@/components/admin/products/product-form";
+import {
+  ProductForm,
+  type ProductFormInventory,
+} from "@/components/admin/products/product-form";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 
@@ -24,6 +27,7 @@ export default function EditProductPage({ params }: EditProductPageProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [categories, setCategories] = useState<AdminCategoryOption[]>([]);
   const [initialData, setInitialData] = useState<Partial<ProductInput>>({});
+  const [inventory, setInventory] = useState<ProductFormInventory>();
 
   useEffect(() => {
     let isMounted = true;
@@ -46,6 +50,13 @@ export default function EditProductPage({ params }: EditProductPageProps) {
         }
 
         setCategories(categoriesResult);
+        setInventory({
+          publicStock: product.publicStock,
+          inactiveStock: product.inactiveStock,
+          variantStock: Object.fromEntries(
+            product.variants.map((variant) => [variant.id, variant.stock])
+          ),
+        });
         setInitialData({
           name: product.name,
           slug: product.slug,
@@ -57,11 +68,16 @@ export default function EditProductPage({ params }: EditProductPageProps) {
             ? parseFloat(product.originalPrice)
             : undefined,
           coverImage: product.coverImage || "",
+          images: Array.from(new Set([product.coverImage, ...(product.images ?? [])].filter((image): image is string => Boolean(image)))),
+          variants: product.variants.map((variant) => ({ id: variant.id, name: variant.name, price: Number(variant.price), originalPrice: variant.originalPrice ? Number(variant.originalPrice) : undefined, sortOrder: variant.sortOrder })),
           isActive: product.isActive,
           isFeatured: product.isFeatured,
           sortOrder: product.sortOrder,
           minQuantity: product.minQuantity,
           maxQuantity: product.maxQuantity,
+          fulfillmentMode: product.fulfillmentMode,
+          autoTranslate: false,
+          translationSourceLocale: "zh",
         });
       } catch (error) {
         if (!isMounted) return;
@@ -112,6 +128,8 @@ export default function EditProductPage({ params }: EditProductPageProps) {
       categories={categories}
       onSubmit={handleSubmit}
       isEdit={true}
+      productId={id}
+      inventory={inventory}
     />
   );
 }

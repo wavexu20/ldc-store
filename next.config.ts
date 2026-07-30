@@ -7,6 +7,11 @@ if (process.env.NODE_ENV === "development") {
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  experimental: {
+    serverActions: {
+      bodySizeLimit: "15mb",
+    },
+  },
   images: {
     remotePatterns: [
       {

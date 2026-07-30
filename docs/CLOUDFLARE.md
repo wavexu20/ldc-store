@@ -54,7 +54,21 @@ pnpm wrangler secret put ADMIN_PASSWORD
 pnpm wrangler secret put TURNSTILE_SECRET_KEY
 ```
 
-自有支付网关启用时配置 `PAYMENT_GATEWAY_API_KEY`；OAuth 按需配置 `GOOGLE_*`、`GITHUB_*`、`LINUXDO_*`。所有 Secret 只能放在 Worker Secrets，不能在后台页面或 Git 仓库中保存。
+自有支付网关启用时配置 `PAYMENT_GATEWAY_API_KEY`；OAuth 按需配置 `GOOGLE_*`、`GITHUB_*`、`LINUXDO_*`、`DISCORD_*`、`HUGGINGFACE_*`。所有 Secret 只能放在 Worker Secrets，不能在后台页面或 Git 仓库中保存。
+
+Discord Developer Portal 的 OAuth2 Redirect URI：
+
+```text
+https://game3dtech.com/api/auth/callback/discord
+```
+
+Hugging Face OAuth 应用使用最小权限 `openid profile email`，Redirect URI：
+
+```text
+https://game3dtech.com/api/auth/callback/huggingface
+```
+
+Steam 登录使用 OpenID 2.0 Provider Discovery（`https://steamcommunity.com/openid`）。Web API Key 仅在 OpenID 验签通过后读取玩家公开资料，配置为 `STEAM_WEB_API_KEY`。
 
 ```bash
 pnpm wrangler secret put PAYMENT_GATEWAY_API_KEY

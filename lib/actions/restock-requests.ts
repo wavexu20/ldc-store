@@ -6,6 +6,7 @@ import { db, restockRequests, products, cards } from "@/lib/db";
 import { desc, inArray, lte, sql, eq, and } from "drizzle-orm";
 import { getTelegramConfig } from "@/lib/actions/system-settings";
 import { sendRestockNotification } from "@/lib/notifications/telegram";
+import { saleableCardInventoryCondition } from "@/lib/inventory";
 
 export interface RestockRequester {
   userId: string;
@@ -222,7 +223,7 @@ async function triggerTelegramNotification(
         count: sql<number>`count(*)`,
       })
       .from(cards)
-      .where(and(eq(cards.productId, productId), eq(cards.status, "available")));
+      .where(and(eq(cards.productId, productId), eq(cards.status, "available"), saleableCardInventoryCondition));
 
     const availableStock = stockInfo?.count ?? 0;
 

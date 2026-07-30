@@ -140,7 +140,7 @@ export function SystemConfigForm({ initialValues }: SystemConfigFormProps) {
         body: JSON.stringify({ botToken, chatId }),
       });
 
-      const result = await response.json();
+      const result = await response.json() as { success?: boolean; message?: string };
       if (result.success) {
         toast.success("测试消息发送成功！请检查 Telegram");
       } else {
@@ -174,6 +174,32 @@ export function SystemConfigForm({ initialValues }: SystemConfigFormProps) {
                 <Card>
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2 text-base">
+                      <CreditCard className="h-5 w-5" />
+                      货币与汇率
+                    </CardTitle>
+                    <CardDescription>前台支持多种显示货币；账户余额和订单始终按 CNY 结算。</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <FormField
+                      control={form.control}
+                      name="usdCnyRate"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>美元显示汇率（1 USD = CNY）</FormLabel>
+                          <FormControl>
+                            <Input type="number" inputMode="decimal" min={1} max={20} step="0.0001" {...field} onChange={(event) => field.onChange(Number(event.target.value))} />
+                          </FormControl>
+                          <FormDescription>只影响 USD 展示价格，不改变 CNY 账本和实际结算金额。</FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-base">
                       <Globe className="h-5 w-5" />
                       站点信息
                     </CardTitle>
@@ -189,7 +215,7 @@ export function SystemConfigForm({ initialValues }: SystemConfigFormProps) {
                         <FormItem>
                           <FormLabel>网站名称 *</FormLabel>
                           <FormControl>
-                            <Input placeholder="例如：LDC Store" {...field} />
+                            <Input placeholder="例如：Game3DTech" {...field} />
                           </FormControl>
                           <FormDescription>用于前台标题、Footer 版权等。</FormDescription>
                           <FormMessage />

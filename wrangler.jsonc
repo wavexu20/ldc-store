@@ -2,18 +2,23 @@
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "ldc-store",
   "account_id": "b519eb90d2148fbe9655af86640e392a",
-  "main": ".open-next/worker.js",
+  "main": "custom-worker.ts",
   "compatibility_date": "2026-07-11",
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   "routes": [
     {
       "pattern": "game3dtech.com",
       "custom_domain": true
+    },
+    {
+      "pattern": "www.game3dtech.com",
+      "custom_domain": true
     }
   ],
   "vars": {
     "AUTH_URL": "https://game3dtech.com",
     "EMAIL_FROM": "noreply@game3dtech.com",
+    "EMAIL_BRAND_NAME": "Game3DTech",
     "NEXT_PUBLIC_TURNSTILE_SITE_KEY": "0x4AAAAAADzuo3ZhBpLFfnJ1",
     "PAYMENT_GATEWAY_URL": "https://pay.game3dtech.com",
     "PAYMENT_GATEWAY_APP_ID": "game3dtech"
@@ -24,6 +29,29 @@
       "database_name": "ldc-store-production",
       "database_id": "160f8693-d6e5-42b6-a3fa-16727cb8b427",
       "migrations_dir": "lib/db/d1-migrations"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "AVATARS",
+      "bucket_name": "ldc-store-avatars"
+    }
+  ],
+  "ai": {
+    "binding": "AI"
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "SUPPORT_CHAT",
+        "class_name": "SupportChatRoom"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "support-chat-v1",
+      "new_sqlite_classes": ["SupportChatRoom"]
     }
   ],
   "assets": {

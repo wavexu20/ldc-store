@@ -18,20 +18,24 @@ import {
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 import { createCard } from "@/lib/actions/cards";
 
 export function CreateCardDialog({
   productId,
+  variants = [],
   children,
 }: {
   productId: string;
+  variants?: Array<{ id: string; name: string }>;
   children?: React.ReactNode;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [content, setContent] = useState("");
   const [deduplicate, setDeduplicate] = useState(true);
+  const [variantId, setVariantId] = useState("");
   const [isPending, startTransition] = useTransition();
 
   const handleCreate = () => {
@@ -49,6 +53,7 @@ export function CreateCardDialog({
     startTransition(async () => {
       const result = await createCard({
         productId,
+        variantId: variantId || null,
         content: trimmed,
         deduplicate,
       });
@@ -87,6 +92,7 @@ export function CreateCardDialog({
         </DialogHeader>
 
         <div className="space-y-4">
+          {variants.length > 0 ? <div className="space-y-2"><Label>归属规格</Label><Select value={variantId} onValueChange={setVariantId}><SelectTrigger><SelectValue placeholder="请选择规格" /></SelectTrigger><SelectContent>{variants.map((variant) => <SelectItem key={variant.id} value={variant.id}>{variant.name}</SelectItem>)}</SelectContent></Select></div> : null}
           <div className="flex items-center justify-between gap-4 rounded-md border border-zinc-200 p-3 dark:border-zinc-800">
             <div className="space-y-1">
               <Label htmlFor="create-card-deduplicate">去重</Label>
@@ -118,7 +124,7 @@ export function CreateCardDialog({
           <Button variant="outline" onClick={() => setOpen(false)} disabled={isPending}>
             取消
           </Button>
-          <Button onClick={handleCreate} disabled={isPending || !content.trim()}>
+          <Button onClick={handleCreate} disabled={isPending || !content.trim() || (variants.length > 0 && !variantId)}>
             {isPending ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
